@@ -1,40 +1,77 @@
-# JSONViewerEditor (SwiftUI, macOS)
+# JSON Viewer/Editor
 
-Ziele:
-- Große JSON-Dateien (>100 MB) laden, anzeigen und bearbeiten.
-- Baumansicht + Flatten-Ansicht, Volltextsuche, Editieren von Werten.
-- Markierte Inhalte als PDF exportieren.LRLRRRhsajhfjhdsafhAJDSHlrkshdghslhfslfjsadhfjhadshfjahsdjfhjkasfhjahdsgdasgadsddddd
-- Installer-Paket bereitstellen.
+Ein moderner JSON Viewer und Editor für macOS (und Windows), gebaut mit [Tauri](https://tauri.app/).
 
-Aktueller Stand (Gerüst):
-- SwiftPM-basiertes SwiftUI-macOS-App-Gerüst (macOS 13+).
-- JSON-Loader via `NSOpenPanel`, Baum- und Flat-Ansicht, Volltextsuche (gefiltert), einfache Wert-Editierung (String/Zahl/Bool/Null) und Markieren mit PDF-Export.
+## Features
 
-Nächste Schritte (geplant):
-- Streaming-Parser für große Dateien (line-basiert / JSONDecoder mit InputStream) und inkrementelles Laden.
-- Erweiterter Streaming-Parser / Speicher-optimierte Struktur für sehr große Dateien (>500 MB).
-- Installer (pkg) bauen.
-- Performance-Optimierungen (Virtualized List, Lazy Trees, Hintergrund-Parsing).
+- 📂 **JSON-Dateien öffnen** - Per Menü, Drag & Drop oder "Öffnen mit"
+- 🌳 **Baumansicht** - Hierarchische Darstellung mit auf-/zuklappbaren Knoten
+- 🔍 **Volltextsuche** - Durchsuchen von Keys und Values
+- ✏️ **Bearbeiten** - Werte direkt im Baum editieren
+- 💾 **Speichern** - Geänderte JSON-Dateien speichern
+- 🌙 **Hell/Dunkel-Theme** - Automatisch oder manuell umschaltbar
+- 🌍 **Mehrsprachig** - Deutsch und Englisch
+- 📐 **Fenster-Position** - Größe und Position werden gespeichert
 
-## Nutzung (aktuell)
+## Installation
 
-1) App starten (`swift run` oder Xcode).  
-2) In der Toolbar auf „Datei öffnen“ klicken und eine JSON-Datei wählen (InputStream-basiert).  
-3) Zwischen Baum- und Flat-Ansicht per Segmented Control wechseln.  
-4) Mit der Suchleiste filtern (Volltext in Key + Value).  
-5) In der Detail-Ansicht primitive Werte (String/Zahl/Bool/Null) bearbeiten und speichern.  
-6) Knoten markieren und per Toolbar „Markiertes als PDF“ exportieren.
+### macOS
 
-Build & Run (SwiftPM):
+1. DMG-Datei herunterladen
+2. `JSON Viewer.app` in den Programme-Ordner ziehen
+3. App starten
+
+### Windows
+
+Siehe [INSTALL-WINDOWS.md](tauri-app/INSTALL-WINDOWS.md) für Build-Anleitung.
+
+## Entwicklung
+
+### Voraussetzungen
+
+- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://rustup.rs/)
+- [Tauri CLI](https://tauri.app/v1/guides/getting-started/prerequisites)
+
+### Build
+
 ```bash
-cd json-viewer-editor
-swift build
-swift run
+cd tauri-app
+npm install
+npm run tauri build
 ```
 
-Öffnen in Xcode:
+### Entwicklungsmodus
+
 ```bash
-open Package.swift
+cd tauri-app
+npm run tauri dev
 ```
 
-Lizenz: TBD
+## Projektstruktur
+
+```
+json-viewer-editor/
+├── tauri-app/
+│   ├── web/
+│   │   └── index.html      # Frontend (HTML/JS/CSS)
+│   ├── src-tauri/
+│   │   ├── src/
+│   │   │   └── lib.rs      # Rust Backend
+│   │   ├── icons/          # App Icons
+│   │   └── tauri.conf.json # Tauri Konfiguration
+│   └── package.json
+└── README.md
+```
+
+## Technologie
+
+- **Frontend:** HTML, CSS, JavaScript (Vanilla)
+- **Backend:** Rust mit Tauri 2.x
+- **Plugins:** tauri-plugin-dialog, tauri-plugin-fs, tauri-plugin-cli
+
+## Lizenz
+
+MIT License - Frei verwendbar, auch kommerziell.
+
+Das App-Icon ist eigen erstellt und lizenzfrei.
