@@ -1,48 +1,19 @@
-# Xcode
-build/
-DerivedData/
-xcuserdata/
-*.xcworkspace/xcuserdata/
-*.xcuserstate
-*.moved-aside
-*.xcuserdatad
-*.xcscmblueprint
+# Dependencies
+node_modules/
+package-lock.json
 
-# SwiftPM
-.swiftpm/
-.build/
-Packages/
+# Build outputs
+target/
+dist/
+*.dmg
 
-# CocoaPods
-Pods/
-*.xcworkspace
+# OS files
+.DS_Store
+*.swp
 
-# Carthage
-Carthage/Build/
-
-# Fastlane
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/**/*.png
-fastlane/test_output
-
-# Archives
-*.ipa
-*.dSYM.zip
-*.dSYM
+# IDE
+.idea/
+.vscode/
 
 # Logs
 *.log
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon?
-._*
-.Spotlight-V100
-.Trashes
-
-# Editor
-.vscode/
-.idea/

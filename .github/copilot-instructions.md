@@ -4,13 +4,14 @@
   - SwiftUI macOS JSON Viewer/Editor, large files (>100 MB), flatten, full-text search, edit, export marked parts to PDF, installer.
 
 ☑ Scaffold the Project
-  - Manual SwiftUI macOS app scaffold (SwiftPM) planned.
+  - SwiftPM SwiftUI macOS app scaffold created.
 
 □ Customize the Project
 
 ☐ Install Required Extensions
 
-☐ Compile the Project
+☑ Compile the Project
+  - swift build (warning: empty Resources folder; ok for now)
 
 ☐ Create and Run Task
 
