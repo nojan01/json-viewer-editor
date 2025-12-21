@@ -31,10 +31,12 @@ Ein moderner JSON Viewer und Editor für macOS und Windows, gebaut mit [Tauri](h
 2. Installer ausführen
 3. App starten
 
-**Option 2: Portable Version (keine Installation)**
+**Option 2: Portable Version (keine Installation)** ⭐
 1. `app.exe` herunterladen
 2. Direkt ausführen - keine Installation erforderlich!
 3. Perfekt für USB-Sticks oder wenn keine Admin-Rechte vorhanden sind
+
+⚠️ **Wichtig:** Für normale Windows-PCs (Intel/AMD) benötigen Sie die **x64-Version**!
 
 📖 **Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details zur portablen Version**
 
@@ -53,12 +55,28 @@ Siehe Build-Anleitung unten.
 **Windows zusätzlich:**
 - [Microsoft Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/downloads/)
 - [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (meist bereits installiert)
+- Rust Target für x64: `rustup target add x86_64-pc-windows-msvc`
 
 **macOS zusätzlich:**
 - Xcode Command Line Tools: `xcode-select --install`
 
 ### Build
 
+**Windows (x64 - für normale PCs):**
+```bash
+cd tauri-app
+npm install
+npm run tauri build -- --target x86_64-pc-windows-msvc
+```
+
+**Windows (ARM64 - für Surface Pro X, etc.):**
+```bash
+cd tauri-app
+npm install
+npm run tauri build -- --target aarch64-pc-windows-msvc
+```
+
+**macOS:**
 ```bash
 cd tauri-app
 npm install
@@ -71,10 +89,15 @@ npm run tauri build
 - DMG: `src-tauri/target/release/bundle/dmg/JSON Viewer_1.0.0_aarch64.dmg`
 - App: `src-tauri/target/release/bundle/macos/JSON Viewer.app`
 
-**Windows:**
-- MSI Installer: `src-tauri/target/release/bundle/msi/JSON Viewer_1.0.0_x64_en-US.msi`
-- NSIS Installer: `src-tauri/target/release/bundle/nsis/JSON Viewer_1.0.0_x64-setup.exe`
-- **Portable EXE**: `src-tauri/target/release/app.exe` ⭐ (keine Installation erforderlich!)
+**Windows (x64):**
+- MSI Installer: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/JSON Viewer_1.0.0_x64_en-US.msi`
+- NSIS Installer: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/JSON Viewer_1.0.0_x64-setup.exe`
+- **Portable EXE**: `src-tauri/target/x86_64-pc-windows-msvc/release/app.exe` ⭐ (keine Installation erforderlich!)
+
+**Windows (ARM64):**
+- MSI Installer: `src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/JSON Viewer_1.0.0_arm64_en-US.msi`
+- NSIS Installer: `src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/JSON Viewer_1.0.0_arm64-setup.exe`
+- Portable EXE: `src-tauri/target/aarch64-pc-windows-msvc/release/app.exe`
 
 ### Entwicklungsmodus
 
@@ -87,9 +110,11 @@ npm run tauri dev
 
 Die portable Version benötigt **keine Installation** und **keine Admin-Rechte**:
 
-1. Nach dem Build die Datei `src-tauri/target/release/app.exe` kopieren
+1. Nach dem Build die Datei `src-tauri/target/x86_64-pc-windows-msvc/release/app.exe` kopieren
 2. Auf USB-Stick, in einen Ordner oder direkt ausführen
 3. Keine Registry-Einträge, komplett eigenständig
+
+**Wichtig:** Verwenden Sie die **x64-Version** für normale Windows-PCs (Intel/AMD)!
 
 **Vorteile:**
 - ✅ Keine Installation erforderlich
@@ -99,6 +124,13 @@ Die portable Version benötigt **keine Installation** und **keine Admin-Rechte**
 - ✅ Funktioniert auf Windows 10/11
 
 Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details.
+
+## Windows-Architekturen
+
+| Architektur | Für welche PCs? | Build-Command |
+|-------------|----------------|---------------|
+| **x64** | Normale Windows-PCs (Intel/AMD) - **99% der Nutzer** | `--target x86_64-pc-windows-msvc` |
+| ARM64 | Windows on ARM (Surface Pro X, etc.) - ~1% | `--target aarch64-pc-windows-msvc` |
 
 ## Projektstruktur
 
@@ -130,6 +162,7 @@ json-viewer-editor/
 - Window State gespeichert in: `%APPDATA%\com.jsonviewer.app\`
 - MSI und NSIS Installer verfügbar
 - **Portable EXE** ohne Installation verfügbar
+- Unterstützt x64 und ARM64
 
 ## Technologie
 
@@ -162,7 +195,7 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ### Version 1.0.0
 - ✨ Initiales Release
-- 🖥️ Windows-Support hinzugefügt
+- 🖥️ Windows-Support (x64 und ARM64)
 - 🍎 macOS-Support
 - 📦 Portable Windows-Version (keine Installation erforderlich)
 - 🔍 Volltextsuche mit RegEx

@@ -41,7 +41,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -57,13 +57,6 @@
         "role": "Editor"
       }
     ],
-    "windows": {
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "installMode": "both",
-        "allowDowngrades": true
-      }
-    },
     "macOS": {
       "minimumSystemVersion": "10.15",
       "dmg": {
