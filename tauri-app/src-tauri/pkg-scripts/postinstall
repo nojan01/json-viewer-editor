@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Post-Installation Script für JSON Viewer
+# Entfernt das Quarantäne-Attribut automatisch nach der Installation
+
+APP_PATH="/Applications/JSON Viewer.app"
+
+if [ -d "$APP_PATH" ]; then
+    xattr -cr "$APP_PATH"
+fi
+
+exit 0

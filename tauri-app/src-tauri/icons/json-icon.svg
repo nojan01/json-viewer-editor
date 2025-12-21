@@ -1,27 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4A90D9"/>
-      <stop offset="100%" style="stop-color:#2E5A8B"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#5BA3F5"/>
+      <stop offset="100%" stop-color="#2968C8"/>
     </linearGradient>
-    <linearGradient id="shine" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.3"/>
-      <stop offset="50%" style="stop-color:#FFFFFF;stop-opacity:0"/>
-    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
   </defs>
   
-  <!-- Background rounded square -->
-  <rect x="32" y="32" width="448" height="448" rx="80" ry="80" fill="url(#bg)"/>
+  <!-- Outer light gray background (the "base" of the icon) -->
+  <rect x="60" y="60" width="904" height="904" rx="200" ry="200" fill="#E8E8ED"/>
   
-  <!-- Shine overlay -->
-  <rect x="32" y="32" width="448" height="448" rx="80" ry="80" fill="url(#shine)"/>
+  <!-- Subtle border on the gray background -->
+  <rect x="60" y="60" width="904" height="904" rx="200" ry="200" fill="none" stroke="#C7C7CC" stroke-width="2"/>
   
-  <!-- Left curly brace { -->
-  <text x="120" y="360" font-family="SF Pro Display, -apple-system, Helvetica Neue, Arial" font-size="280" font-weight="600" fill="#FFFFFF" opacity="0.95">{</text>
+  <!-- Inner blue icon (smaller, floating on top with shadow) -->
+  <g filter="url(#shadow)">
+    <rect x="140" y="140" width="744" height="744" rx="165" ry="165" fill="url(#bg)"/>
+  </g>
   
-  <!-- Right curly brace } -->
-  <text x="280" y="360" font-family="SF Pro Display, -apple-system, Helvetica Neue, Arial" font-size="280" font-weight="600" fill="#FFFFFF" opacity="0.95">}</text>
+  <!-- White shine at top of blue area -->
+  <rect x="140" y="140" width="744" height="250" rx="165" ry="165" fill="#FFFFFF" fill-opacity="0.12"/>
   
-  <!-- Subtle shadow at bottom -->
-  <rect x="32" y="400" width="448" height="80" rx="0" ry="0" fill="#000000" opacity="0.1" clip-path="inset(0 0 0 0 round 0 0 80px 80px)"/>
+  <!-- JSON Braces - adjusted position for smaller icon -->
+  <text x="270" y="640" font-family="Helvetica, Arial, sans-serif" font-size="440" font-weight="300" fill="#FFFFFF">{</text>
+  <text x="520" y="640" font-family="Helvetica, Arial, sans-serif" font-size="440" font-weight="300" fill="#FFFFFF">}</text>
 </svg>

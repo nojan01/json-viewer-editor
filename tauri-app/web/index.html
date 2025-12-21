@@ -208,6 +208,105 @@
             text-align: right;
         }
         
+        /* Replace bar */
+        .replace-bar {
+            display: none;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+        
+        .replace-bar.visible {
+            display: flex;
+        }
+        
+        .replace-container {
+            display: flex;
+            flex: 1;
+            align-items: center;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 0 8px;
+        }
+        
+        .replace-container:focus-within {
+            border-color: var(--accent);
+        }
+        
+        .replace-container .icon {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        
+        .replace-container input {
+            flex: 1;
+            min-width: 200px;
+            padding: 5px 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 12px;
+            outline: none;
+        }
+        
+        .replace-container input::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .replace-actions {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .replace-actions button {
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        
+        .replace-actions button:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--accent);
+        }
+        
+        .replace-actions button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .replace-info {
+            color: var(--text-secondary);
+            font-size: 11px;
+            min-width: 100px;
+        }
+        
+        .search-toggle-replace {
+            padding: 2px 6px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-right: 4px;
+        }
+        
+        .search-toggle-replace:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .search-toggle-replace.active {
+            color: var(--accent);
+        }
+        
         .status {
             margin-left: auto;
             font-size: 11px;
@@ -1225,6 +1324,7 @@
     
     <div class="search-bar">
         <div class="search-container">
+            <button class="search-toggle-replace" id="btnToggleReplace" title="Suchen und Ersetzen (⌘H)">▶</button>
             <span class="icon">🔍</span>
             <input type="text" id="searchInput" placeholder="Suchen... (⌘F)">
             <div class="search-options">
@@ -1239,6 +1339,18 @@
                 <button id="btnMatchList" disabled title="Alle Treffer anzeigen (⌘L)">☰</button>
             </div>
         </div>
+    </div>
+    
+    <div class="replace-bar" id="replaceBar">
+        <div class="replace-container">
+            <span class="icon">↔️</span>
+            <input type="text" id="replaceInput" placeholder="Ersetzen durch...">
+        </div>
+        <div class="replace-actions">
+            <button id="btnReplace" disabled title="Aktuellen Treffer ersetzen">Ersetzen</button>
+            <button id="btnReplaceAll" disabled title="Alle Treffer ersetzen (⇧⌘H)">Alle ersetzen</button>
+        </div>
+        <span class="replace-info" id="replaceInfo"></span>
     </div>
     
     <div class="breadcrumb-bar" id="breadcrumbBar">
@@ -1322,6 +1434,14 @@
                         <span>Suche öffnen</span>
                     </div>
                     <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘H</span>
+                        <span>Suchen und Ersetzen</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⇧⌘H</span>
+                        <span>Alle ersetzen</span>
+                    </div>
+                    <div class="help-shortcut">
                         <span class="help-shortcut-key">⌘G</span>
                         <span>Nächster Treffer</span>
                     </div>
@@ -1402,6 +1522,10 @@
                     <div class="help-feature">
                         <strong>RegEx</strong>
                         <p>Mit dem .* Button kann die reguläre Ausdrücke-Suche aktiviert werden.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Suchen und Ersetzen</strong>
+                        <p>Mit ⌘H oder dem ▶-Button öffnet sich die Ersetzen-Leiste. Ersetzt werden nur String-Werte. Mit Enter wird der aktuelle Treffer ersetzt, mit ⇧Enter oder ⇧⌘H alle Treffer.</p>
                     </div>
                 </div>
             </div>
@@ -1527,6 +1651,16 @@
                 searchResults: 'Suchergebnisse',
                 matchOf: 'von',
                 noMatches: 'Keine Treffer',
+                // Replace
+                replacePlaceholder: 'Ersetzen durch...',
+                replace: 'Ersetzen',
+                replaceAll: 'Alle ersetzen',
+                replaceTooltip: 'Aktuellen Treffer ersetzen',
+                replaceAllTooltip: 'Alle Treffer ersetzen (⇧⌘H)',
+                toggleReplaceTooltip: 'Suchen und Ersetzen (⌘H)',
+                replaced: 'ersetzt',
+                replacedCount: 'Treffer ersetzt',
+                onlyStringsReplaced: 'Nur String-Werte werden ersetzt',
                 // Goto line
                 gotoLinePlaceholder: 'Zeilennummer eingeben',
                 // Drop zone
@@ -1578,6 +1712,16 @@
                 searchResults: 'Search Results',
                 matchOf: 'of',
                 noMatches: 'No matches',
+                // Replace
+                replacePlaceholder: 'Replace with...',
+                replace: 'Replace',
+                replaceAll: 'Replace All',
+                replaceTooltip: 'Replace current match',
+                replaceAllTooltip: 'Replace all matches (⇧⌘H)',
+                toggleReplaceTooltip: 'Find and Replace (⌘H)',
+                replaced: 'replaced',
+                replacedCount: 'matches replaced',
+                onlyStringsReplaced: 'Only string values are replaced',
                 // Goto line
                 gotoLinePlaceholder: 'Enter line number',
                 // Drop zone
@@ -1695,6 +1839,25 @@
                 
                 const matchListTitle = document.getElementById('matchListTitle');
                 if (matchListTitle) matchListTitle.textContent = t('searchResults');
+                
+                // Replace
+                const replaceInputEl = document.getElementById('replaceInput');
+                if (replaceInputEl) replaceInputEl.placeholder = t('replacePlaceholder');
+                
+                const btnReplaceEl = document.getElementById('btnReplace');
+                if (btnReplaceEl) {
+                    btnReplaceEl.textContent = t('replace');
+                    btnReplaceEl.title = t('replaceTooltip');
+                }
+                
+                const btnReplaceAllEl = document.getElementById('btnReplaceAll');
+                if (btnReplaceAllEl) {
+                    btnReplaceAllEl.textContent = t('replaceAll');
+                    btnReplaceAllEl.title = t('replaceAllTooltip');
+                }
+                
+                const btnToggleReplaceEl = document.getElementById('btnToggleReplace');
+                if (btnToggleReplaceEl) btnToggleReplaceEl.title = t('toggleReplaceTooltip');
                 
                 // Goto line
                 const gotoLineInput = document.getElementById('gotoLineInput');
@@ -3643,6 +3806,147 @@
             renderVisibleItems();
         }
         
+        // === REPLACE FUNCTIONS ===
+        
+        let replaceBarVisible = false;
+        const replaceInput = document.getElementById('replaceInput');
+        const replaceBar = document.getElementById('replaceBar');
+        const btnToggleReplace = document.getElementById('btnToggleReplace');
+        const btnReplace = document.getElementById('btnReplace');
+        const btnReplaceAll = document.getElementById('btnReplaceAll');
+        const replaceInfo = document.getElementById('replaceInfo');
+        
+        function toggleReplaceBar() {
+            replaceBarVisible = !replaceBarVisible;
+            replaceBar.classList.toggle('visible', replaceBarVisible);
+            btnToggleReplace.textContent = replaceBarVisible ? '▼' : '▶';
+            btnToggleReplace.classList.toggle('active', replaceBarVisible);
+            if (replaceBarVisible) {
+                replaceInput.focus();
+            }
+            updateReplaceButtons();
+        }
+        
+        function showReplaceBar() {
+            if (!replaceBarVisible) {
+                toggleReplaceBar();
+            }
+            searchInput.focus();
+            searchInput.select();
+        }
+        
+        function updateReplaceButtons() {
+            const hasMatches = searchMatches.length > 0;
+            const hasReplaceText = replaceInput.value.length >= 0; // Allow empty replacement
+            btnReplace.disabled = !hasMatches || !replaceBarVisible;
+            btnReplaceAll.disabled = !hasMatches || !replaceBarVisible;
+        }
+        
+        function replaceCurrentMatch() {
+            if (searchMatches.length === 0 || currentMatchIndex < 0) return;
+            
+            const path = searchMatches[currentMatchIndex];
+            const currentValue = getValueAtPath(path);
+            
+            // Only replace string values
+            if (typeof currentValue !== 'string') {
+                showNotification(t('onlyStringsReplaced'), 'warning');
+                return;
+            }
+            
+            const searchTerm = searchInput.value;
+            const replaceTerm = replaceInput.value;
+            
+            // Save state for undo
+            saveUndoState();
+            
+            // Replace the value
+            let newValue;
+            if (searchRegex) {
+                try {
+                    const regex = new RegExp(searchTerm, 'gi');
+                    newValue = currentValue.replace(regex, replaceTerm);
+                } catch (e) {
+                    showNotification('RegEx Fehler: ' + e.message, 'error');
+                    return;
+                }
+            } else {
+                // Replace all occurrences in this string (case-insensitive)
+                const regex = new RegExp(escapeRegex(searchTerm), 'gi');
+                newValue = currentValue.replace(regex, replaceTerm);
+            }
+            
+            setValueAtPath(path, newValue);
+            
+            // Re-run search to update matches
+            search();
+            
+            showNotification(`1 ${t('replaced')}`);
+        }
+        
+        function replaceAllMatches() {
+            if (searchMatches.length === 0) return;
+            
+            const searchTerm = searchInput.value;
+            const replaceTerm = replaceInput.value;
+            
+            // Save state for undo
+            saveUndoState();
+            
+            let replacedCount = 0;
+            const pathsToReplace = [...searchMatches]; // Copy array as it will change
+            
+            for (const path of pathsToReplace) {
+                const currentValue = getValueAtPath(path);
+                
+                // Only replace string values
+                if (typeof currentValue !== 'string') continue;
+                
+                let newValue;
+                if (searchRegex) {
+                    try {
+                        const regex = new RegExp(searchTerm, 'gi');
+                        newValue = currentValue.replace(regex, replaceTerm);
+                    } catch (e) {
+                        continue;
+                    }
+                } else {
+                    const regex = new RegExp(escapeRegex(searchTerm), 'gi');
+                    newValue = currentValue.replace(regex, replaceTerm);
+                }
+                
+                setValueAtPath(path, newValue);
+                replacedCount++;
+            }
+            
+            // Re-run search to update matches
+            search();
+            
+            showNotification(`${replacedCount} ${t('replacedCount')}`);
+        }
+        
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        
+        // Setup replace event listeners
+        btnToggleReplace?.addEventListener('click', toggleReplaceBar);
+        btnReplace?.addEventListener('click', replaceCurrentMatch);
+        btnReplaceAll?.addEventListener('click', replaceAllMatches);
+        replaceInput?.addEventListener('input', updateReplaceButtons);
+        replaceInput?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    replaceAllMatches();
+                } else {
+                    replaceCurrentMatch();
+                }
+            } else if (e.key === 'Escape') {
+                toggleReplaceBar();
+            }
+        });
+        
         function scrollToMatch() {
             if (currentMatchIndex < 0) return;
             const rowIndex = visibleRows.findIndex(r => r.path === searchMatches[currentMatchIndex]);
@@ -3670,7 +3974,7 @@
                 btnNext.disabled = false;
                 btnMatchList.disabled = false;
             } else if (searchInput.value.trim()) {
-                searchInfo.textContent = 'Keine Treffer';
+                searchInfo.textContent = t('noMatches');
                 btnPrev.disabled = true;
                 btnNext.disabled = true;
                 btnMatchList.disabled = true;
@@ -3680,6 +3984,9 @@
                 btnNext.disabled = true;
                 btnMatchList.disabled = true;
             }
+            
+            // Update replace buttons
+            updateReplaceButtons();
         }
         
         function showMatchList() {
@@ -4176,8 +4483,15 @@
             const isMac = navigator.platform.includes('Mac');
             const mod = isMac ? e.metaKey : e.ctrlKey;
             
-            // Don't trigger shortcuts when typing in input
-            if (e.target.tagName === 'INPUT') return;
+            // Don't trigger shortcuts when typing in input (except for specific shortcuts)
+            if (e.target.tagName === 'INPUT') {
+                // Allow Cmd+H to open replace bar even from search input
+                if (mod && e.key === 'h') {
+                    e.preventDefault();
+                    showReplaceBar();
+                }
+                return;
+            }
             
             // F1 shows help
             if (e.key === 'F1') {
@@ -4199,6 +4513,8 @@
                 if (e.key === 'o') { e.preventDefault(); openFile(); }
                 else if (e.key === 's') { e.preventDefault(); saveFile(); }
                 else if (e.key === 'f') { e.preventDefault(); searchInput.focus(); searchInput.select(); }
+                else if (e.key === 'h' && !e.shiftKey) { e.preventDefault(); showReplaceBar(); }
+                else if (e.key === 'h' && e.shiftKey) { e.preventDefault(); replaceAllMatches(); }
                 else if (e.key === 'g' && !e.shiftKey) { e.preventDefault(); nextMatch(); }
                 else if (e.key === 'g' && e.shiftKey) { e.preventDefault(); prevMatch(); }
                 else if (e.key === 'l' && e.shiftKey) { e.preventDefault(); showGotoLineDialog(); }
