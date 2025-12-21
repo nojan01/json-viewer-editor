@@ -6,9 +6,11 @@ Ein moderner JSON Viewer und Editor für macOS (und Windows), gebaut mit [Tauri]
 
 - 📂 **JSON-Dateien öffnen** - Per Menü, Drag & Drop oder "Öffnen mit"
 - 🌳 **Baumansicht** - Hierarchische Darstellung mit auf-/zuklappbaren Knoten
-- 🔍 **Volltextsuche** - Durchsuchen von Keys und Values
-- ✏️ **Bearbeiten** - Werte direkt im Baum editieren
+- 🔍 **Volltextsuche** - Durchsuchen von Keys und Values mit RegEx-Unterstützung
+- 🔄 **Suchen & Ersetzen** - Werte im gesamten Dokument finden und ersetzen (⌘H)
+- ✏️ **Bearbeiten** - Werte direkt im Baum editieren mit Undo/Redo
 - 💾 **Speichern** - Geänderte JSON-Dateien speichern
+- 📤 **Export** - CSV-Export und Suchergebnisse exportieren
 - 🌙 **Hell/Dunkel-Theme** - Automatisch oder manuell umschaltbar
 - 🌍 **Mehrsprachig** - Deutsch und Englisch
 - 📐 **Fenster-Position** - Größe und Position werden gespeichert
