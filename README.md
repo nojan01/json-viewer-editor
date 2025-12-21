@@ -31,7 +31,14 @@ Ein moderner JSON Viewer und Editor für macOS und Windows, gebaut mit [Tauri](h
 2. Installer ausführen
 3. App starten
 
-**Option 2: Selbst bauen**
+**Option 2: Portable Version (keine Installation)**
+1. `app.exe` herunterladen
+2. Direkt ausführen - keine Installation erforderlich!
+3. Perfekt für USB-Sticks oder wenn keine Admin-Rechte vorhanden sind
+
+📖 **Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details zur portablen Version**
+
+**Option 3: Selbst bauen**
 
 Siehe Build-Anleitung unten.
 
@@ -67,7 +74,7 @@ npm run tauri build
 **Windows:**
 - MSI Installer: `src-tauri/target/release/bundle/msi/JSON Viewer_1.0.0_x64_en-US.msi`
 - NSIS Installer: `src-tauri/target/release/bundle/nsis/JSON Viewer_1.0.0_x64-setup.exe`
-- EXE: `src-tauri/target/release/app.exe`
+- **Portable EXE**: `src-tauri/target/release/app.exe` ⭐ (keine Installation erforderlich!)
 
 ### Entwicklungsmodus
 
@@ -75,6 +82,23 @@ npm run tauri build
 cd tauri-app
 npm run tauri dev
 ```
+
+## Portable Version (Windows)
+
+Die portable Version benötigt **keine Installation** und **keine Admin-Rechte**:
+
+1. Nach dem Build die Datei `src-tauri/target/release/app.exe` kopieren
+2. Auf USB-Stick, in einen Ordner oder direkt ausführen
+3. Keine Registry-Einträge, komplett eigenständig
+
+**Vorteile:**
+- ✅ Keine Installation erforderlich
+- ✅ Keine Admin-Rechte nötig
+- ✅ USB-Stick tauglich
+- ✅ Ca. 8-15 MB groß
+- ✅ Funktioniert auf Windows 10/11
+
+Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details.
 
 ## Projektstruktur
 
@@ -89,6 +113,7 @@ json-viewer-editor/
 │   │   │   └── main.rs     # Entry Point
 │   │   ├── icons/          # App Icons
 │   │   └── tauri.conf.json # Tauri Konfiguration
+│   ├── PORTABLE-WINDOWS.md # Portable Version Anleitung
 │   └── package.json
 └── README.md
 ```
@@ -104,6 +129,7 @@ json-viewer-editor/
 - Standard-Menü (File, Edit, View, Window, Help)
 - Window State gespeichert in: `%APPDATA%\com.jsonviewer.app\`
 - MSI und NSIS Installer verfügbar
+- **Portable EXE** ohne Installation verfügbar
 
 ## Technologie
 
@@ -138,6 +164,7 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 - ✨ Initiales Release
 - 🖥️ Windows-Support hinzugefügt
 - 🍎 macOS-Support
+- 📦 Portable Windows-Version (keine Installation erforderlich)
 - 🔍 Volltextsuche mit RegEx
 - ✏️ Inline-Editing mit Undo/Redo
 - 📤 CSV-Export
