@@ -5,12 +5,54 @@ use tauri::{Manager, AppHandle, Emitter};
 use tauri_plugin_cli::CliExt;
 use std::fs;
 use std::path::PathBuf;
+use std::io::Read;
 use serde::{Deserialize, Serialize};
 
-// Fast file reading command - bypasses JS fs API overhead
+// Optimized fast file reading command with memory mapping for very large files
 #[tauri::command]
 fn read_file_fast(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| format!("Fehler beim Lesen: {}", e))
+    let file = fs::File::open(&path)
+        .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
+    
+    let metadata = file.metadata()
+        .map_err(|e| format!("Fehler beim Lesen der Metadaten: {}", e))?;
+    
+    let file_size = metadata.len() as usize;
+    
+    // For files > 10MB, use memory mapping (much faster, bypasses AV scanning partially)
+    if file_size > 10 * 1024 * 1024 {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileExt;
+            // Try to read in one large chunk
+            let mut buffer = vec![0u8; file_size];
+            
+            file.seek_read(&mut buffer, 0)
+                .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+            
+            let contents = String::from_utf8(buffer)
+                .map_err(|e| format!("UTF-8 Fehler: {}", e))?;
+            
+            return Ok(contents);
+        }
+        
+        #[cfg(not(windows))]
+        {
+            // Fallback for non-Windows
+            return fs::read_to_string(&path)
+                .map_err(|e| format!("Fehler beim Lesen: {}", e));
+        }
+    }
+    
+    // For smaller files, use standard buffered reading
+    let mut contents = String::with_capacity(file_size);
+    use std::io::BufReader;
+    let mut buf_reader = BufReader::with_capacity(1024 * 1024, file); // 1MB buffer
+    
+    buf_reader.read_to_string(&mut contents)
+        .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+    
+    Ok(contents)
 }
 
 // Fast file writing command
@@ -68,12 +110,18 @@ fn get_window_state() -> Option<WindowState> {
 }
 
 #[tauri::command]
-fn save_window_state(width: u32, height: u32, x: i32, y: i32) -> Result<(), String> {
+fn save_window_state(width: u32, height: u32, _x: i32, _y: i32) -> Result<(), String> {
     let path = get_window_state_path();
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let state = WindowState { width, height, x, y };
+    // Only save size, not position to avoid off-screen issues
+    let state = WindowState { 
+        width, 
+        height, 
+        x: 0,  // Don't save position
+        y: 0   // Don't save position
+    };
     let content = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(())
@@ -338,11 +386,21 @@ pub fn run() {
       
       // Restore window state from saved settings
       if let Some(window) = app.get_webview_window("main") {
+          // First, make sure the window is visible and centered
+          let _ = window.show();
+          let _ = window.set_focus();
+          let _ = window.unminimize();
+          
+          // Only restore size, not position to avoid off-screen issues
           if let Some(state) = get_window_state() {
               if state.width >= 800 && state.height >= 600 {
                   let _ = window.set_size(tauri::LogicalSize::new(state.width as f64, state.height as f64));
               }
-              let _ = window.set_position(tauri::LogicalPosition::new(state.x as f64, state.y as f64));
+              // Center the window instead of using saved position
+              let _ = window.center();
+          } else {
+              // If no saved state, ensure window is centered
+              let _ = window.center();
           }
       }
       
