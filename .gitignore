@@ -6,6 +6,8 @@ package-lock.json
 target/
 dist/
 *.dmg
+*.msi
+*.exe
 
 # OS files
 .DS_Store
@@ -14,6 +16,7 @@ dist/
 # IDE
 .idea/
 .vscode/
+.vs/
 
 # Logs
 *.log

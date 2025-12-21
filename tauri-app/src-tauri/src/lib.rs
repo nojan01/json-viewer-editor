@@ -1,4 +1,6 @@
-use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem, AboutMetadata};
+use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
+#[cfg(target_os = "macos")]
+use tauri::menu::AboutMetadata;
 use tauri::{Manager, AppHandle, Emitter};
 use tauri_plugin_cli::CliExt;
 use std::fs;
@@ -27,10 +29,29 @@ struct WindowState {
 }
 
 fn get_window_state_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    PathBuf::from(home)
-        .join("Library/Application Support/com.jsonviewer.app")
-        .join("window_state.json")
+    #[cfg(target_os = "windows")]
+    {
+        let app_data = std::env::var("APPDATA").unwrap_or_else(|_| String::from("C:\\"));
+        PathBuf::from(app_data)
+            .join("com.jsonviewer.app")
+            .join("window_state.json")
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+        PathBuf::from(home)
+            .join("Library/Application Support/com.jsonviewer.app")
+            .join("window_state.json")
+    }
+    
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+        PathBuf::from(home)
+            .join(".config/com.jsonviewer.app")
+            .join("window_state.json")
+    }
 }
 
 #[tauri::command]
@@ -67,49 +88,52 @@ fn set_menu_language(app: AppHandle, lang: String) -> Result<(), String> {
 fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::error::Error>> {
     let is_en = lang == "en";
     
-    // App menu (macOS)
-    let about_metadata = AboutMetadata {
-        name: Some("JSON Viewer/Editor".to_string()),
-        version: Some("1.0.0".to_string()),
-        copyright: Some("© 2025 Norbert Jander".to_string()),
-        authors: Some(vec!["Norbert Jander".to_string()]),
-        comments: Some(if is_en { 
-            "A powerful JSON viewer and editor for macOS".to_string() 
-        } else { 
-            "Ein leistungsstarker JSON Viewer und Editor für macOS".to_string() 
-        }),
-        ..Default::default()
-    };
-    
-    let about = PredefinedMenuItem::about(
-        app_handle, 
-        Some(if is_en { "About JSON Viewer" } else { "Über JSON Viewer" }), 
-        Some(about_metadata)
-    )?;
-    let separator = PredefinedMenuItem::separator(app_handle)?;
-    let hide = PredefinedMenuItem::hide(
-        app_handle, 
-        Some(if is_en { "Hide JSON Viewer" } else { "JSON Viewer ausblenden" })
-    )?;
-    let hide_others = PredefinedMenuItem::hide_others(
-        app_handle, 
-        Some(if is_en { "Hide Others" } else { "Andere ausblenden" })
-    )?;
-    let show_all = PredefinedMenuItem::show_all(
-        app_handle, 
-        Some(if is_en { "Show All" } else { "Alle einblenden" })
-    )?;
-    let quit = PredefinedMenuItem::quit(
-        app_handle, 
-        Some(if is_en { "Quit JSON Viewer" } else { "JSON Viewer beenden" })
-    )?;
-    
-    let app_menu = Submenu::with_items(
-        app_handle,
-        "JSON Viewer",
-        true,
-        &[&about, &separator, &hide, &hide_others, &show_all, &PredefinedMenuItem::separator(app_handle)?, &quit],
-    )?;
+    // App menu (macOS-specific, but kept for compatibility)
+    #[cfg(target_os = "macos")]
+    {
+        let about_metadata = AboutMetadata {
+            name: Some("JSON Viewer/Editor".to_string()),
+            version: Some("1.0.0".to_string()),
+            copyright: Some("© 2025 Norbert Jander".to_string()),
+            authors: Some(vec!["Norbert Jander".to_string()]),
+            comments: Some(if is_en { 
+                "A powerful JSON viewer and editor".to_string() 
+            } else { 
+                "Ein leistungsstarker JSON Viewer und Editor".to_string() 
+            }),
+            ..Default::default()
+        };
+        
+        let about = PredefinedMenuItem::about(
+            app_handle, 
+            Some(if is_en { "About JSON Viewer" } else { "Über JSON Viewer" }), 
+            Some(about_metadata)
+        )?;
+        let separator = PredefinedMenuItem::separator(app_handle)?;
+        let hide = PredefinedMenuItem::hide(
+            app_handle, 
+            Some(if is_en { "Hide JSON Viewer" } else { "JSON Viewer ausblenden" })
+        )?;
+        let hide_others = PredefinedMenuItem::hide_others(
+            app_handle, 
+            Some(if is_en { "Hide Others" } else { "Andere ausblenden" })
+        )?;
+        let show_all = PredefinedMenuItem::show_all(
+            app_handle, 
+            Some(if is_en { "Show All" } else { "Alle einblenden" })
+        )?;
+        let quit = PredefinedMenuItem::quit(
+            app_handle, 
+            Some(if is_en { "Quit JSON Viewer" } else { "JSON Viewer beenden" })
+        )?;
+        
+        let app_menu = Submenu::with_items(
+            app_handle,
+            "JSON Viewer",
+            true,
+            &[&about, &separator, &hide, &hide_others, &show_all, &PredefinedMenuItem::separator(app_handle)?, &quit],
+        )?;
+    }
     
     // File menu
     let open_item = MenuItem::with_id(
@@ -133,7 +157,7 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
     
     let file_menu = Submenu::with_items(
         app_handle,
-        if is_en { "File" } else { "Ablage" },
+        if is_en { "File" } else { "Datei" },
         true,
         &[&open_item, &save_item, &PredefinedMenuItem::separator(app_handle)?, &close],
     )?;
@@ -142,7 +166,7 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
     let undo = MenuItem::with_id(
         app_handle, 
         "undo", 
-        if is_en { "Undo" } else { "Widerrufen" }, 
+        if is_en { "Undo" } else { "Rückgängig" }, 
         true, 
         Some("CmdOrCtrl+Z")
     )?;
@@ -212,6 +236,8 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         true, 
         Some("CmdOrCtrl+Shift+L")
     )?;
+    
+    #[cfg(target_os = "macos")]
     let fullscreen = PredefinedMenuItem::fullscreen(
         app_handle, 
         Some(if is_en { "Fullscreen" } else { "Vollbild" })
@@ -237,6 +263,7 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         &[&lang_de, &lang_en],
     )?;
     
+    #[cfg(target_os = "macos")]
     let view_menu = Submenu::with_items(
         app_handle,
         if is_en { "View" } else { "Darstellung" },
@@ -244,10 +271,18 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         &[&expand_all, &collapse_all, &PredefinedMenuItem::separator(app_handle)?, &goto_line, &PredefinedMenuItem::separator(app_handle)?, &theme_menu, &lang_menu, &PredefinedMenuItem::separator(app_handle)?, &fullscreen],
     )?;
     
+    #[cfg(not(target_os = "macos"))]
+    let view_menu = Submenu::with_items(
+        app_handle,
+        if is_en { "View" } else { "Ansicht" },
+        true,
+        &[&expand_all, &collapse_all, &PredefinedMenuItem::separator(app_handle)?, &goto_line, &PredefinedMenuItem::separator(app_handle)?, &theme_menu, &lang_menu],
+    )?;
+    
     // Window menu
     let minimize = PredefinedMenuItem::minimize(
         app_handle, 
-        Some(if is_en { "Minimize" } else { "Im Dock ablegen" })
+        Some(if is_en { "Minimize" } else { "Minimieren" })
     )?;
     
     let window_menu = Submenu::with_items(
@@ -273,10 +308,17 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         &[&help_item],
     )?;
     
-    // Build menu
+    // Build menu - macOS has app menu, Windows/Linux don't
+    #[cfg(target_os = "macos")]
     let menu = Menu::with_items(
         app_handle,
         &[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu, &help_menu],
+    )?;
+    
+    #[cfg(not(target_os = "macos"))]
+    let menu = Menu::with_items(
+        app_handle,
+        &[&file_menu, &edit_menu, &view_menu, &window_menu, &help_menu],
     )?;
     
     app_handle.set_menu(menu)?;
@@ -383,7 +425,7 @@ pub fn run() {
       Ok(())
     })
     .on_window_event(|window, event| {
-      // Handle file drop events (drag & drop from Finder)
+      // Handle file drop events (drag & drop from File Explorer)
       if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
         if let Some(path) = paths.first() {
           if let Some(ext) = path.extension() {
@@ -399,50 +441,11 @@ pub fn run() {
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|app_handle, event| {
-      // Debug: log all events
-      match &event {
-        tauri::RunEvent::Opened { urls } => {
-          println!("DEBUG: RunEvent::Opened received with {} urls", urls.len());
-          for url in urls {
-            println!("DEBUG: URL = {}", url);
-            let path = url.to_string();
-            // Remove file:// prefix if present
-            let file_path = if path.starts_with("file://") {
-              urlencoding::decode(&path[7..]).unwrap_or_default().to_string()
-            } else {
-              path.clone()
-            };
-            println!("DEBUG: file_path = {}", file_path);
-            
-            if file_path.ends_with(".json") {
-              let app_handle_clone = app_handle.clone();
-              let file_path_clone = file_path.clone();
-              // Use thread with delay to ensure window is ready
-              std::thread::spawn(move || {
-                // Wait for window to be ready
-                for i in 0..20 {
-                  std::thread::sleep(std::time::Duration::from_millis(100));
-                  println!("DEBUG: Attempt {} to load file", i + 1);
-                  if let Some(window) = app_handle_clone.get_webview_window("main") {
-                    let escaped = file_path_clone.replace("\\", "\\\\").replace("'", "\\'");
-                    let js = format!("loadFileFromPath('{}')", escaped);
-                    println!("DEBUG: Executing JS: {}", js);
-                    if window.eval(&js).is_ok() {
-                      println!("DEBUG: eval succeeded");
-                      break;
-                    } else {
-                      println!("DEBUG: eval failed");
-                    }
-                  } else {
-                    println!("DEBUG: Window not found");
-                  }
-                }
-              });
-            }
-          }
-        }
-        _ => {}
+    .run(|_app_handle, event| {
+      // Handle run events - RunEvent::Opened doesn't exist in Tauri v2
+      // File associations are handled via CLI args and drag & drop events
+      if let tauri::RunEvent::ExitRequested { .. } = event {
+        // Application exit event
       }
     });
 }
