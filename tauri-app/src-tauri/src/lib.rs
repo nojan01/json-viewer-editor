@@ -136,9 +136,9 @@ fn set_menu_language(app: AppHandle, lang: String) -> Result<(), String> {
 fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::error::Error>> {
     let is_en = lang == "en";
     
-    // App menu (macOS-specific, but kept for compatibility)
+    // App menu (macOS-specific)
     #[cfg(target_os = "macos")]
-    {
+    let app_menu = {
         let about_metadata = AboutMetadata {
             name: Some("JSON Viewer/Editor".to_string()),
             version: Some("1.0.0".to_string()),
@@ -175,13 +175,13 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
             Some(if is_en { "Quit JSON Viewer" } else { "JSON Viewer beenden" })
         )?;
         
-        let app_menu = Submenu::with_items(
+        Submenu::with_items(
             app_handle,
             "JSON Viewer",
             true,
             &[&about, &separator, &hide, &hide_others, &show_all, &PredefinedMenuItem::separator(app_handle)?, &quit],
-        )?;
-    }
+        )?
+    };
     
     // File menu
     let open_item = MenuItem::with_id(
