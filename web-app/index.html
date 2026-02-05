@@ -2,7 +2,26 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="JSON Viewer und Editor - Öffnen, bearbeiten und durchsuchen Sie große JSON-Dateien direkt im Browser.">
+    <meta name="theme-color" content="#0e639c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JSON Viewer">
+    
+    <!-- PWA Manifest - only loaded when served via HTTP (not file://) -->
+    <script>
+        if (window.location.protocol !== 'file:') {
+            var link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = 'manifest.json';
+            document.head.appendChild(link);
+        }
+    </script>
+    
+    <!-- Favicon (inline base64 to avoid file:// issues) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='15' fill='%231e1e1e'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='%23ffd700'>{ }</text></svg>">
+    
     <title>JSON Viewer/Editor</title>
     <style>
         * {
@@ -899,46 +918,6 @@
             opacity: 0.5;
         }
         
-        /* Focus Mode Indicator */
-        .focus-indicator {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 12px;
-            background: var(--accent);
-            color: white;
-            font-size: 11px;
-        }
-        
-        .focus-indicator.visible {
-            display: flex;
-        }
-        
-        .focus-indicator button {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 11px;
-        }
-        
-        .focus-indicator button:hover {
-            background: rgba(255,255,255,0.3);
-        }
-        
-        /* Compact Mode Styles */
-        .compact-mode .tree-node {
-            height: 18px;
-            line-height: 18px;
-            font-size: 11px;
-        }
-        
-        .compact-mode .count {
-            display: none;
-        }
-        
         /* Minimap */
         .minimap {
             width: 100px;
@@ -1332,9 +1311,6 @@
             <button id="btnMinimap" disabled title="Minimap ein/aus">
                 <span class="icon">▐</span>
             </button>
-            <button id="btnCompact" disabled title="Kompaktansicht ein/aus">
-                <span class="icon">≡</span>
-            </button>
             <button id="btnGotoLine" disabled title="Gehe zu Zeile (⇧⌘L)">
                 <span class="icon">↓</span>
                 <span>Zeile</span>
@@ -1398,12 +1374,6 @@
     
     <div class="breadcrumb-bar" id="breadcrumbBar">
         <span class="breadcrumb-item" data-path="root">root</span>
-    </div>
-    
-    <div class="focus-indicator" id="focusIndicator">
-        <span>🔍 Fokus-Modus:</span>
-        <span id="focusPathDisplay">root</span>
-        <button id="btnExitFocus" title="Fokus-Modus beenden (Escape)">✕ Beenden</button>
     </div>
     
     <div class="goto-container" id="gotoContainer">
@@ -1471,59 +1441,59 @@
                 <h3>⌨️ Tastaturkürzel</h3>
                 <div class="help-shortcuts">
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘O</span>
+                        <span class="help-shortcut-key">Strg+O</span>
                         <span>Datei öffnen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘S</span>
+                        <span class="help-shortcut-key">Strg+S</span>
                         <span>Datei speichern</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘F</span>
+                        <span class="help-shortcut-key">Strg+F</span>
                         <span>Suche öffnen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘H</span>
+                        <span class="help-shortcut-key">Strg+H</span>
                         <span>Suchen und Ersetzen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⇧⌘H</span>
+                        <span class="help-shortcut-key">Strg+Shift+H</span>
                         <span>Alle ersetzen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘G</span>
+                        <span class="help-shortcut-key">Strg+G</span>
                         <span>Nächster Treffer</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⇧⌘G</span>
+                        <span class="help-shortcut-key">Strg+Shift+G</span>
                         <span>Vorheriger Treffer</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘L</span>
+                        <span class="help-shortcut-key">Strg+L</span>
                         <span>Alle Treffer anzeigen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⇧⌘L</span>
+                        <span class="help-shortcut-key">Strg+Shift+L</span>
                         <span>Gehe zu Zeile</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘P</span>
+                        <span class="help-shortcut-key">Strg+P</span>
                         <span>Pfad-Navigation</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘E</span>
+                        <span class="help-shortcut-key">Strg+E</span>
                         <span>Alle aufklappen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘W</span>
+                        <span class="help-shortcut-key">Strg+W</span>
                         <span>Alle zuklappen</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⌘Z</span>
+                        <span class="help-shortcut-key">Strg+Z</span>
                         <span>Rückgängig</span>
                     </div>
                     <div class="help-shortcut">
-                        <span class="help-shortcut-key">⇧⌘Z</span>
+                        <span class="help-shortcut-key">Strg+Y</span>
                         <span>Wiederholen</span>
                     </div>
                     <div class="help-shortcut">
@@ -1626,18 +1596,6 @@
                         <strong>Minimap</strong>
                         <p>Zeigt eine Übersicht des gesamten Dokuments am rechten Rand.</p>
                     </div>
-                    <div class="help-feature">
-                        <strong>Kompaktansicht</strong>
-                        <p>Zeigt mehr Zeilen auf dem Bildschirm durch kleinere Zeilenhöhe.</p>
-                    </div>
-                    <div class="help-feature">
-                        <strong>Fokus-Modus</strong>
-                        <p>Rechtsklick → "Fokus auf Element" um nur einen Teilbaum anzuzeigen. Escape zum Beenden.</p>
-                    </div>
-                    <div class="help-feature">
-                        <strong>Breadcrumb-Navigation</strong>
-                        <p>Klicken Sie auf Pfadelemente in der Breadcrumb-Leiste um schnell zu navigieren.</p>
-                    </div>
                 </div>
             </div>
             
@@ -1655,8 +1613,26 @@
                 </div>
             </div>
             
+            <div class="help-section">
+                <h3>📲 Progressive Web App</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Installierbar</strong>
+                        <p>Diese App kann als PWA installiert werden - ohne App Store, ohne EXE-Datei.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Offline-fähig</strong>
+                        <p>Nach der Installation funktioniert die App auch ohne Internetverbindung.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Datenschutz</strong>
+                        <p>Alle Daten werden lokal im Browser verarbeitet - nichts wird hochgeladen.</p>
+                    </div>
+                </div>
+            </div>
+            
             <div class="help-version">
-                JSON Viewer/Editor v1.0.0 • Erstellt mit Tauri
+                JSON Viewer/Editor v1.0.0 • Progressive Web App
             </div>
         </div>
     </div>
@@ -1680,10 +1656,6 @@
         let showMinimap = false;
         let currentExpandLevel = 1;
         let maxDepth = 0;
-        let focusMode = false;
-        let focusPath = null;
-        let focusData = null;
-        let compactMode = false;
         
         // Current language and theme
         let currentLang = localStorage.getItem('json-viewer-lang') || 'de';
@@ -1983,13 +1955,12 @@
         let searchKeysOnly = false;
         let searchValuesOnly = false;
         let searchRegex = false;
-        let lastSearchQuery = '';
         
         // Drag & Drop
         let draggedPath = null;
         
         // Virtual scroll
-        let ROW_HEIGHT = 22;
+        const ROW_HEIGHT = 22;
         const INDENT_WIDTH = 20;
         const MAX_SCROLL_HEIGHT = 30000000; // Browser limit ~33M pixels, use 30M for safety
         let scrollScale = 1; // Scale factor when content exceeds browser limit
@@ -2441,7 +2412,6 @@
             document.getElementById('btnGuides').disabled = false;
             document.getElementById('btnLineNum').disabled = false;
             document.getElementById('btnMinimap').disabled = false;
-            document.getElementById('btnCompact').disabled = false;
             document.getElementById('btnGotoLine').disabled = false;
             document.getElementById('btnUndo').disabled = true;
             document.getElementById('btnRedo').disabled = true;
@@ -2470,78 +2440,6 @@
             minimap.style.display = showMinimap ? 'block' : 'none';
             btn.style.opacity = showMinimap ? '1' : '0.5';
             if (showMinimap) updateMinimap();
-        }
-        
-        // Compact Mode - smaller row height, hide element counts
-        function toggleCompactMode() {
-            compactMode = !compactMode;
-            const btn = document.getElementById('btnCompact');
-            const container = document.getElementById('treeContainer');
-            btn.style.opacity = compactMode ? '1' : '0.5';
-            
-            if (compactMode) {
-                container.classList.add('compact-mode');
-                ROW_HEIGHT = 18;
-            } else {
-                container.classList.remove('compact-mode');
-                ROW_HEIGHT = 22;
-            }
-            
-            renderTree();
-            showNotification(compactMode ? 'Kompaktansicht aktiviert' : 'Normale Ansicht');
-        }
-        
-        // Focus Mode - show only a subtree
-        function enterFocusMode(path) {
-            if (!jsonData || path === 'root') return;
-            
-            const value = getValueAtPath(path);
-            if (value === undefined || value === null || typeof value !== 'object') {
-                showNotification('Fokus nur für Objekte/Arrays möglich');
-                return;
-            }
-            
-            focusMode = true;
-            focusPath = path;
-            focusData = JSON.parse(JSON.stringify(value));
-            
-            // Update UI
-            const indicator = document.getElementById('focusIndicator');
-            const pathDisplay = document.getElementById('focusPathDisplay');
-            indicator.classList.add('visible');
-            pathDisplay.textContent = path;
-            
-            // Reset view state
-            expandedPaths = new Set(['root']);
-            selectedIndex = -1;
-            selectedPath = null;
-            
-            renderTree();
-            showNotification(`Fokus auf: ${path}`);
-        }
-        
-        function exitFocusMode() {
-            if (!focusMode) return;
-            
-            focusMode = false;
-            focusPath = null;
-            focusData = null;
-            
-            // Update UI
-            const indicator = document.getElementById('focusIndicator');
-            indicator.classList.remove('visible');
-            
-            // Reset view state
-            expandedPaths = new Set(['root']);
-            selectedIndex = -1;
-            selectedPath = null;
-            
-            renderTree();
-            showNotification('Fokus-Modus beendet');
-        }
-        
-        function getDataForRendering() {
-            return focusMode && focusData ? focusData : jsonData;
         }
         
         let minimapCanvas = null;
@@ -2732,9 +2630,7 @@
             document.getElementById('btnGuides')?.addEventListener('click', toggleIndentGuides);
             document.getElementById('btnLineNum')?.addEventListener('click', toggleLineNumbers);
             document.getElementById('btnMinimap')?.addEventListener('click', toggleMinimap);
-            document.getElementById('btnCompact')?.addEventListener('click', toggleCompactMode);
             document.getElementById('btnGotoLine')?.addEventListener('click', showGotoLineDialog);
-            document.getElementById('btnExitFocus')?.addEventListener('click', exitFocusMode);
             document.getElementById('btnExportFiltered')?.addEventListener('click', exportSearchResults);
             document.getElementById('btnExportCSV')?.addEventListener('click', (e) => toggleCSVDropdown(e));
             document.getElementById('csvExportFull')?.addEventListener('click', () => exportCSV('full'));
@@ -3119,13 +3015,6 @@
         function handleKeyDown(e) {
             if (editingPath || e.target.tagName === 'INPUT') return;
             
-            // Exit focus mode with Escape
-            if (e.key === 'Escape' && focusMode) {
-                e.preventDefault();
-                exitFocusMode();
-                return;
-            }
-            
             switch(e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
@@ -3485,15 +3374,11 @@
         function buildVisibleRows() {
             visibleRows = [];
             minimapNeedsRedraw = true;
-            
-            const dataToRender = getDataForRendering();
-            if (!dataToRender) return;
-            
-            const rootLabel = focusMode ? focusPath.split('.').pop() || 'fokus' : (fileName || 'root');
+            if (!jsonData) return;
             
             // Use iterative approach with limit to prevent stack overflow and UI blocking
-            const stack = [{ key: rootLabel, value: dataToRender, path: 'root', depth: 0 }];
-            const MAX_VISIBLE_ROWS = 500000; // Limit to prevent UI freeze
+            const stack = [{ key: fileName || 'root', value: jsonData, path: 'root', depth: 0 }];
+            const MAX_VISIBLE_ROWS = 100000; // Limit to prevent UI freeze
             
             while (stack.length > 0 && visibleRows.length < MAX_VISIBLE_ROWS) {
                 const { key, value, path, depth } = stack.pop();
@@ -3870,27 +3755,11 @@
         
         function handleSearchKey(e) {
             if (e.key === 'Enter') {
-                const query = searchInput.value.trim();
-                if (e.shiftKey) {
-                    // Shift+Enter: vorheriger Treffer
-                    if (query !== lastSearchQuery || searchMatches.length === 0) {
-                        search();
-                    } else {
-                        prevMatch();
-                    }
-                } else {
-                    // Enter: Suche durchführen oder zum nächsten Treffer
-                    if (query !== lastSearchQuery || searchMatches.length === 0) {
-                        search();
-                    } else {
-                        nextMatch();
-                    }
-                }
+                e.shiftKey ? prevMatch() : search();
             } else if (e.key === 'Escape') {
                 searchInput.blur();
                 searchMatches = [];
                 currentMatchIndex = -1;
-                lastSearchQuery = '';
                 updateSearchInfo();
                 renderTree();
             }
@@ -3901,48 +3770,20 @@
             if (!query || !jsonData) {
                 searchMatches = [];
                 currentMatchIndex = -1;
-                lastSearchQuery = '';
                 updateSearchInfo();
                 renderTree();
                 return;
             }
             
-            // Always collapse all first to avoid row limit issues with large files
-            expandedPaths.clear();
-            expandedPaths.add('root');
-            
             searchMatches = [];
             searchInObject(jsonData, 'root', query);
             currentMatchIndex = searchMatches.length > 0 ? 0 : -1;
-            lastSearchQuery = query;
             
-            // Expand only to current match
-            if (currentMatchIndex >= 0) {
-                goToSearchMatch(currentMatchIndex);
-            } else {
-                updateSearchInfo();
-                renderTree();
-            }
-        }
-        
-        // Navigate to a specific search match by index
-        function goToSearchMatch(index) {
-            if (index < 0 || index >= searchMatches.length) return;
-            currentMatchIndex = index;
-            const targetPath = searchMatches[index];
-            
-            // Expand all parent paths to this match
-            expandPathTo(targetPath);
-            
-            // Update UI
+            searchMatches.forEach(expandPathTo);
             updateSearchInfo();
             renderTree();
             
-            // Scroll to match after render
-            requestAnimationFrame(() => {
-                scrollToMatch();
-                renderVisibleItems();
-            });
+            if (currentMatchIndex >= 0) scrollToMatch();
         }
         
         function searchInObject(obj, path, query) {
@@ -3988,14 +3829,18 @@
         
         function nextMatch() {
             if (searchMatches.length === 0) return;
-            const newIndex = (currentMatchIndex + 1) % searchMatches.length;
-            goToSearchMatch(newIndex);
+            currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
+            updateSearchInfo();
+            scrollToMatch();
+            renderVisibleItems();
         }
         
         function prevMatch() {
             if (searchMatches.length === 0) return;
-            const newIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
-            goToSearchMatch(newIndex);
+            currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+            updateSearchInfo();
+            scrollToMatch();
+            renderVisibleItems();
         }
         
         // === REPLACE FUNCTIONS ===
@@ -4140,9 +3985,8 @@
         });
         
         function scrollToMatch() {
-            if (currentMatchIndex < 0 || currentMatchIndex >= searchMatches.length) return;
-            const targetPath = searchMatches[currentMatchIndex];
-            const rowIndex = visibleRows.findIndex(r => r.path === targetPath);
+            if (currentMatchIndex < 0) return;
+            const rowIndex = visibleRows.findIndex(r => r.path === searchMatches[currentMatchIndex]);
             if (rowIndex >= 0) {
                 const list = document.getElementById('virtualList');
                 if (list) {
@@ -4637,15 +4481,6 @@
                 }));
             }
             
-            // Focus Mode (for objects/arrays, not root)
-            if (isObject && row.path !== 'root' && !focusMode) {
-                menu.appendChild(createSeparator());
-                menu.appendChild(createMenuItem('🔍 Fokus auf Element', () => {
-                    enterFocusMode(row.path);
-                    hideContextMenu();
-                }));
-            }
-            
             // Position menu
             menu.style.left = `${x}px`;
             menu.style.top = `${y}px`;
@@ -4739,6 +4574,85 @@
         window.addEventListener('resize', () => {
             containerHeight = treeContainer.clientHeight;
             renderVisibleItems();
+        });
+        
+        // Check if running from file:// protocol (local file)
+        const isLocalFile = window.location.protocol === 'file:';
+        
+        // PWA Service Worker Registration - only when served via http(s)
+        if ('serviceWorker' in navigator && !isLocalFile) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('./sw.js');
+                    console.log('Service Worker registered:', registration.scope);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // New version available
+                                showUpdateNotification();
+                            }
+                        });
+                    });
+                } catch (error) {
+                    // Silently ignore - expected when running from file://
+                }
+            });
+        }
+        
+        // Show update notification
+        function showUpdateNotification() {
+            const notif = document.createElement('div');
+            notif.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#0e639c;color:#fff;padding:12px 20px;border-radius:8px;z-index:10000;display:flex;gap:12px;align-items:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+            notif.innerHTML = `
+                <span>Neue Version verfügbar!</span>
+                <button style="background:#fff;color:#0e639c;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:500;" onclick="location.reload()">Aktualisieren</button>
+                <button style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:6px 12px;border-radius:4px;cursor:pointer;" onclick="this.parentElement.remove()">Später</button>
+            `;
+            document.body.appendChild(notif);
+        }
+        
+        // PWA Install Prompt
+        let deferredPrompt = null;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            showInstallButton();
+        });
+        
+        function showInstallButton() {
+            // Add install button to toolbar if not already there
+            const toolbar = document.querySelector('.toolbar');
+            if (!toolbar || document.getElementById('btnInstall')) return;
+            
+            const installGroup = document.createElement('div');
+            installGroup.className = 'toolbar-group';
+            installGroup.innerHTML = `
+                <button id="btnInstall" title="App installieren">
+                    <span class="icon">📲</span>
+                    <span>Installieren</span>
+                </button>
+            `;
+            toolbar.insertBefore(installGroup, toolbar.querySelector('.status'));
+            
+            document.getElementById('btnInstall').addEventListener('click', async () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log('Install prompt outcome:', outcome);
+                deferredPrompt = null;
+                installGroup.remove();
+            });
+        }
+        
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA installed');
+            deferredPrompt = null;
+            const installBtn = document.getElementById('btnInstall');
+            if (installBtn) installBtn.parentElement.remove();
         });
     </script>
 </body>

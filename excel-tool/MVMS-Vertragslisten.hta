@@ -1,0 +1,1075 @@
+<html>
+<head>
+<title>MVMS-Vertragslisten aktualisieren</title>
+<HTA:APPLICATION 
+    ID="MVMSVertragslisten"
+    APPLICATIONNAME="MVMS-Vertragslisten"
+    BORDER="thick"
+    BORDERSTYLE="normal"
+    CAPTION="yes"
+    CONTEXTMENU="yes"
+    INNERBORDER="no"
+    MAXIMIZEBUTTON="yes"
+    MINIMIZEBUTTON="yes"
+    NAVIGABLE="yes"
+    SCROLL="yes"
+    SCROLLFLAT="no"
+    SELECTION="yes"
+    SHOWINTASKBAR="yes"
+    SINGLEINSTANCE="no"
+    SYSMENU="yes"
+    VERSION="1.0"
+    WINDOWSTATE="maximize"
+/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: auto;
+    font-family: Segoe UI, Tahoma, Arial, sans-serif;
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+.container {
+    padding: 20px;
+}
+
+h1 {
+    color: #1E88E5;
+    margin-bottom: 20px;
+    font-size: 22px;
+}
+
+h2 {
+    color: #888;
+    font-size: 14px;
+    margin-top: 25px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.panel {
+    background-color: #252526;
+    border: 1px solid #404040;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    margin-right: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-primary {
+    background-color: #1565C0;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #1E88E5;
+}
+
+.btn-secondary {
+    background-color: #3c3c3c;
+    color: #e0e0e0;
+    border: 1px solid #404040;
+}
+
+.btn-success {
+    background-color: #4caf50;
+    color: white;
+}
+
+.btn-warning {
+    background-color: #ff9800;
+    color: #1e1e1e;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.file-info {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #1e1e1e;
+    font-size: 12px;
+    color: #888;
+}
+
+.file-info.loaded {
+    color: #4caf50;
+    border-left: 3px solid #4caf50;
+}
+
+select, input[type="text"] {
+    padding: 8px;
+    background-color: #1e1e1e;
+    border: 1px solid #404040;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-family: inherit;
+    margin-right: 10px;
+}
+
+select {
+    min-width: 200px;
+}
+
+input[type="text"] {
+    width: 300px;
+}
+
+label {
+    display: inline-block;
+    margin-right: 10px;
+    color: #888;
+}
+
+.row {
+    margin-bottom: 15px;
+}
+
+table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 10px;
+}
+
+table.data-table th,
+table.data-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid #404040;
+}
+
+table.data-table th {
+    background-color: #2d2d30;
+    font-weight: bold;
+}
+
+table.data-table tr:hover {
+    background-color: #2d2d30;
+}
+
+table.data-table tr.selected {
+    background-color: #1b4332;
+}
+
+.highlight {
+    background-color: #ff9800;
+    color: black;
+    padding: 1px 3px;
+}
+
+.status-box {
+    padding: 12px;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.status-success {
+    background-color: #1b4332;
+    border: 1px solid #4caf50;
+    color: #4caf50;
+}
+
+.status-error {
+    background-color: #4a1515;
+    border: 1px solid #f44336;
+    color: #f44336;
+}
+
+.status-info {
+    background-color: #0d3a5c;
+    border: 1px solid #2196f3;
+    color: #2196f3;
+}
+
+.queue-item {
+    padding: 8px 12px;
+    background-color: #1e1e1e;
+    margin-bottom: 5px;
+    font-size: 12px;
+}
+
+.queue-item .flag {
+    display: inline-block;
+    background-color: #1565C0;
+    color: white;
+    padding: 2px 8px;
+    margin-right: 10px;
+    font-weight: bold;
+}
+
+.queue-item .remove-btn {
+    float: right;
+    background: none;
+    border: none;
+    color: #f44336;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#debugLog {
+    background-color: #0a0a0a;
+    border: 1px solid #333;
+    padding: 10px;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    max-height: 150px;
+    overflow-y: auto;
+    color: #888;
+    margin-top: 10px;
+}
+
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MVMS-Vertragslisten aktualisieren</h1>
+    <p style="color: #888; margin-bottom: 20px;">HTA-Version fuer Windows ARM64 - Direkter Excel-Zugriff via COM</p>
+    
+    <!-- Datei 1 -->
+    <div class="panel">
+        <h2>Schritt 1: Quelldatei (Datei 1)</h2>
+        <div class="row">
+            <button class="btn btn-primary" id="btnFile1">Quelldatei oeffnen...</button>
+            <span>Arbeitsblatt: </span>
+            <select id="sheet1Select" disabled><option>-- Erst Datei laden --</option></select>
+            <button class="btn btn-secondary" id="btnSheet1" disabled>Blatt laden</button>
+        </div>
+        <div class="file-info" id="file1Status">Keine Datei geladen</div>
+    </div>
+    
+    <!-- Datei 2 -->
+    <div class="panel">
+        <h2>Schritt 2: Zieldatei (Datei 2)</h2>
+        <div class="row">
+            <button class="btn btn-primary" id="btnFile2">Zieldatei oeffnen...</button>
+            <span>Arbeitsblatt: </span>
+            <select id="sheet2Select" disabled><option>-- Erst Datei laden --</option></select>
+            <button class="btn btn-secondary" id="btnSheet2" disabled>Blatt laden</button>
+        </div>
+        <div class="file-info" id="file2Status">Keine Datei geladen</div>
+    </div>
+    
+    <!-- Suche -->
+    <div class="panel">
+        <h2>Schritt 3: Suchen</h2>
+        <div class="row">
+            <input type="text" id="searchText" placeholder="Suchbegriff eingeben... (* = beliebig, ? = ein Zeichen)" style="width: 400px;">
+            <button class="btn btn-primary" id="btnSearch" disabled>Suchen</button>
+            <button class="btn btn-success" id="btnNewRow" disabled>+ Neue Zeile</button>
+        </div>
+        <div id="searchInfo" style="color: #888; margin-top: 10px;"></div>
+    </div>
+    
+    <!-- Neue Zeile Panel -->
+    <div class="panel hidden" id="newRowPanel">
+        <h2>Neue Zeile erstellen</h2>
+        <div id="newRowFields"></div>
+        <div class="row" style="margin-top: 15px;">
+            <label>Flag:</label>
+            <select id="newRowFlag">
+                <option value="A">A (Add)</option>
+                <option value="D">D (Delete)</option>
+                <option value="C">C (Change)</option>
+            </select>
+            <label>Kommentar:</label>
+            <input type="text" id="newRowComment" placeholder="Kommentar...">
+            <button class="btn btn-primary" id="btnAddNewToQueue">+ Zur Warteschlange</button>
+            <button class="btn btn-success" id="btnTransferNewDirect">> Direkt uebertragen</button>
+            <button class="btn btn-secondary" id="btnCloseNewRow">Schliessen</button>
+        </div>
+    </div>
+    
+    <!-- Ergebnisse -->
+    <div class="panel hidden" id="resultsPanel">
+        <h2>Suchergebnisse</h2>
+        <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
+            <table class="data-table" id="resultsTable">
+                <thead id="resultsHead"></thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+        <div class="row" style="margin-top: 15px;">
+            <label>Flag:</label>
+            <select id="transferFlag">
+                <option value="A">A (Add)</option>
+                <option value="D">D (Delete)</option>
+                <option value="C">C (Change)</option>
+            </select>
+            <label>Kommentar:</label>
+            <input type="text" id="transferComment" placeholder="Kommentar...">
+            <button class="btn btn-primary" id="btnAddToQueue">+ Markierte zur Warteschlange</button>
+            <button class="btn btn-success" id="btnTransferDirect">> Markierte direkt uebertragen</button>
+        </div>
+        <div id="transferStatus"></div>
+    </div>
+    
+    <!-- Warteschlange -->
+    <div class="panel" id="queuePanel">
+        <h2>Warteschlange (<span id="queueCount">0</span> Zeilen)</h2>
+        <div id="queueList" style="max-height: 200px; overflow-y: auto;">
+            <div style="color: #888; text-align: center; padding: 20px;">Warteschlange leer</div>
+        </div>
+        <div class="row" style="margin-top: 15px;">
+            <button class="btn btn-warning" id="btnTransferAll" disabled>ALLE UEBERTRAGEN UND SPEICHERN</button>
+            <button class="btn btn-secondary" id="btnClearQueue" disabled>Warteschlange leeren</button>
+        </div>
+    </div>
+    
+    <!-- Debug -->
+    <div class="panel">
+        <h2>Debug-Protokoll</h2>
+        <div id="debugLog">Bereit...</div>
+    </div>
+</div>
+
+<script language="VBScript">
+Option Explicit
+
+Dim oExcel1, oWorkbook1, oWorksheet1
+Dim oExcel2, oWorkbook2, oWorksheet2
+Dim sFile1Path, sFile2Path
+Dim aHeaders(), aData()
+Dim nRowCount, nColCount
+
+Sub Log(sMsg)
+    Dim oDiv
+    Set oDiv = document.getElementById("debugLog")
+    oDiv.innerHTML = oDiv.innerHTML & "<br>" & Now() & " - " & sMsg
+    oDiv.scrollTop = oDiv.scrollHeight
+End Sub
+
+Sub OpenFile1()
+    On Error Resume Next
+    Err.Clear
+    
+    Call Log("Oeffne Datei-Dialog fuer Quelldatei...")
+    
+    Dim sPath
+    sPath = BrowseForFile()
+    
+    If sPath = "" Then
+        Call Log("Abgebrochen")
+        Exit Sub
+    End If
+    
+    Call Log("Gewaehlte Datei: " & sPath)
+    sFile1Path = sPath
+    
+    ' Excel starten
+    If oExcel1 Is Nothing Then
+        Call Log("Starte Excel...")
+        Set oExcel1 = CreateObject("Excel.Application")
+        oExcel1.Visible = False
+        oExcel1.DisplayAlerts = False
+    End If
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER Excel starten: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    ' Alte Datei schliessen
+    If Not oWorkbook1 Is Nothing Then
+        oWorkbook1.Close False
+        Set oWorkbook1 = Nothing
+    End If
+    
+    ' Datei oeffnen
+    Call Log("Oeffne Arbeitsmappe...")
+    Set oWorkbook1 = oExcel1.Workbooks.Open(sPath, 0, True)
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER Datei oeffnen: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    Call Log("Datei geoeffnet. Blaetter: " & oWorkbook1.Sheets.Count)
+    
+    ' UI aktualisieren
+    Dim oFSO, sName
+    Set oFSO = CreateObject("Scripting.FileSystemObject")
+    sName = oFSO.GetFileName(sPath)
+    Set oFSO = Nothing
+    
+    document.getElementById("file1Status").innerHTML = sName
+    document.getElementById("file1Status").className = "file-info loaded"
+    
+    ' Sheet-Dropdown fuellen
+    Call FillSheetDropdown1()
+End Sub
+
+Sub OpenFile2()
+    On Error Resume Next
+    Err.Clear
+    
+    Call Log("Oeffne Datei-Dialog fuer Zieldatei...")
+    
+    Dim sPath
+    sPath = BrowseForFile()
+    
+    If sPath = "" Then
+        Call Log("Abgebrochen")
+        Exit Sub
+    End If
+    
+    Call Log("Gewaehlte Datei: " & sPath)
+    sFile2Path = sPath
+    
+    ' Excel starten
+    If oExcel2 Is Nothing Then
+        Call Log("Starte Excel fuer Zieldatei...")
+        Set oExcel2 = CreateObject("Excel.Application")
+        oExcel2.Visible = False
+        oExcel2.DisplayAlerts = False
+    End If
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER Excel starten: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    ' Alte Datei schliessen
+    If Not oWorkbook2 Is Nothing Then
+        oWorkbook2.Close False
+        Set oWorkbook2 = Nothing
+    End If
+    
+    ' Datei oeffnen (mit Schreibzugriff)
+    Call Log("Oeffne Arbeitsmappe mit Schreibzugriff...")
+    Set oWorkbook2 = oExcel2.Workbooks.Open(sPath)
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER Datei oeffnen: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    Call Log("Zieldatei geoeffnet. Blaetter: " & oWorkbook2.Sheets.Count)
+    
+    ' UI aktualisieren
+    Dim oFSO, sName
+    Set oFSO = CreateObject("Scripting.FileSystemObject")
+    sName = oFSO.GetFileName(sPath)
+    Set oFSO = Nothing
+    
+    document.getElementById("file2Status").innerHTML = sName
+    document.getElementById("file2Status").className = "file-info loaded"
+    
+    ' Sheet-Dropdown fuellen
+    Call FillSheetDropdown2()
+End Sub
+
+Function BrowseForFile()
+    On Error Resume Next
+    
+    Dim oDialog
+    Set oDialog = CreateObject("SAFRCFileDlg.FileOpen")
+    
+    If Err.Number <> 0 Then
+        Err.Clear
+        ' Fallback: InputBox
+        Call Log("SAFRCFileDlg nicht verfuegbar, nutze InputBox")
+        BrowseForFile = InputBox("Bitte den vollstaendigen Pfad zur Excel-Datei eingeben:", "Datei auswaehlen", "C:\")
+        Exit Function
+    End If
+    
+    oDialog.FileName = ""
+    oDialog.FileType = "Excel-Dateien (*.xlsx;*.xls)|*.xlsx;*.xls"
+    
+    If oDialog.OpenFileOpenDlg Then
+        BrowseForFile = oDialog.FileName
+    Else
+        BrowseForFile = ""
+    End If
+    
+    Set oDialog = Nothing
+End Function
+
+Sub FillSheetDropdown1()
+    Dim oSelect, i, oSheet, sHTML
+    Set oSelect = document.getElementById("sheet1Select")
+    
+    sHTML = ""
+    For i = 1 To oWorkbook1.Sheets.Count
+        Set oSheet = oWorkbook1.Sheets(i)
+        sHTML = sHTML & "<option value=""" & oSheet.Name & """>" & oSheet.Name & "</option>"
+    Next
+    
+    oSelect.innerHTML = sHTML
+    oSelect.disabled = False
+    document.getElementById("btnSheet1").disabled = False
+    
+    Call Log("Sheet-Dropdown 1 gefuellt")
+End Sub
+
+Sub FillSheetDropdown2()
+    Dim oSelect, i, oSheet, sHTML
+    Set oSelect = document.getElementById("sheet2Select")
+    
+    sHTML = ""
+    For i = 1 To oWorkbook2.Sheets.Count
+        Set oSheet = oWorkbook2.Sheets(i)
+        sHTML = sHTML & "<option value=""" & oSheet.Name & """>" & oSheet.Name & "</option>"
+    Next
+    
+    oSelect.innerHTML = sHTML
+    oSelect.disabled = False
+    document.getElementById("btnSheet2").disabled = False
+    
+    Call Log("Sheet-Dropdown 2 gefuellt")
+End Sub
+
+Sub LoadSheet1()
+    On Error Resume Next
+    
+    Dim sSheetName
+    sSheetName = document.getElementById("sheet1Select").value
+    
+    If sSheetName = "" Then Exit Sub
+    
+    Call Log("Lade Arbeitsblatt: " & sSheetName)
+    
+    Set oWorksheet1 = oWorkbook1.Sheets(sSheetName)
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    ' Daten einlesen
+    Dim oRange, nLastRow, nLastCol, r, c
+    Set oRange = oWorksheet1.UsedRange
+    nLastRow = oRange.Rows.Count
+    nLastCol = oRange.Columns.Count
+    
+    nRowCount = nLastRow - 1
+    nColCount = nLastCol
+    
+    Call Log("Gefunden: " & nRowCount & " Zeilen, " & nColCount & " Spalten")
+    
+    ' Header lesen
+    ReDim aHeaders(nColCount - 1)
+    For c = 1 To nColCount
+        aHeaders(c - 1) = CStr(oWorksheet1.Cells(1, c).Value & "")
+    Next
+    
+    ' Daten lesen
+    If nRowCount > 0 Then
+        ReDim aData(nRowCount - 1, nColCount - 1)
+        For r = 2 To nLastRow
+            For c = 1 To nColCount
+                aData(r - 2, c - 1) = CStr(oWorksheet1.Cells(r, c).Value & "")
+            Next
+        Next
+    End If
+    
+    Call Log("Daten geladen!")
+    
+    ' UI aktualisieren
+    document.getElementById("file1Status").innerHTML = document.getElementById("file1Status").innerHTML & " - Blatt: " & sSheetName & " (" & nRowCount & " Zeilen)"
+    document.getElementById("btnSearch").disabled = False
+    document.getElementById("btnNewRow").disabled = False
+    
+    ' Neue-Zeile-Formular generieren
+    Call window.generateNewRowFields()
+End Sub
+
+Sub LoadSheet2()
+    On Error Resume Next
+    
+    Dim sSheetName
+    sSheetName = document.getElementById("sheet2Select").value
+    
+    If sSheetName = "" Then Exit Sub
+    
+    Call Log("Lade Ziel-Arbeitsblatt: " & sSheetName)
+    
+    Set oWorksheet2 = oWorkbook2.Sheets(sSheetName)
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER: " & Err.Description)
+        Err.Clear
+        Exit Sub
+    End If
+    
+    document.getElementById("file2Status").innerHTML = document.getElementById("file2Status").innerHTML & " - Blatt: " & sSheetName
+    Call Log("Ziel-Blatt geladen!")
+End Sub
+
+Function GetHeaderCount()
+    GetHeaderCount = nColCount
+End Function
+
+Function GetHeader(idx)
+    On Error Resume Next
+    If idx >= 0 And idx <= UBound(aHeaders) Then
+        GetHeader = aHeaders(idx)
+    Else
+        GetHeader = ""
+    End If
+End Function
+
+Function GetRowCount()
+    GetRowCount = nRowCount
+End Function
+
+Function GetCellData(row, col)
+    On Error Resume Next
+    If row >= 0 And row <= UBound(aData, 1) And col >= 0 And col <= UBound(aData, 2) Then
+        GetCellData = aData(row, col)
+    Else
+        GetCellData = ""
+    End If
+End Function
+
+Sub WriteRow(sFlag, sComment, sDataCSV)
+    On Error Resume Next
+    
+    If oWorksheet2 Is Nothing Then
+        Call Log("FEHLER: Kein Ziel-Arbeitsblatt geladen!")
+        Exit Sub
+    End If
+    
+    ' Letzte Zeile finden
+    Dim nLastRow
+    nLastRow = oWorksheet2.UsedRange.Rows.Count + oWorksheet2.UsedRange.Row
+    
+    Call Log("Schreibe in Zeile " & nLastRow)
+    
+    ' Flag und Kommentar
+    oWorksheet2.Cells(nLastRow, 1).Value = sFlag
+    oWorksheet2.Cells(nLastRow, 2).Value = sComment
+    
+    ' Daten parsen (CSV-Format)
+    Dim aParts, i
+    aParts = Split(sDataCSV, Chr(1))
+    
+    For i = 0 To UBound(aParts)
+        oWorksheet2.Cells(nLastRow, 3 + i).Value = aParts(i)
+    Next
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER beim Schreiben: " & Err.Description)
+        Err.Clear
+    Else
+        Call Log("Zeile geschrieben!")
+    End If
+End Sub
+
+Sub SaveFile2()
+    On Error Resume Next
+    
+    If oWorkbook2 Is Nothing Then Exit Sub
+    
+    Call Log("Speichere Zieldatei...")
+    oWorkbook2.Save
+    
+    If Err.Number <> 0 Then
+        Call Log("FEHLER beim Speichern: " & Err.Description)
+        Err.Clear
+    Else
+        Call Log("Datei gespeichert!")
+    End If
+End Sub
+
+Sub CleanupExcel()
+    On Error Resume Next
+    
+    If Not oWorkbook1 Is Nothing Then
+        oWorkbook1.Close False
+        Set oWorkbook1 = Nothing
+    End If
+    If Not oExcel1 Is Nothing Then
+        oExcel1.Quit
+        Set oExcel1 = Nothing
+    End If
+    
+    If Not oWorkbook2 Is Nothing Then
+        oWorkbook2.Close False
+        Set oWorkbook2 = Nothing
+    End If
+    If Not oExcel2 Is Nothing Then
+        oExcel2.Quit
+        Set oExcel2 = Nothing
+    End If
+End Sub
+
+Sub Window_OnUnload()
+    Call CleanupExcel()
+End Sub
+</script>
+
+<script language="JavaScript">
+// JavaScript UI Logic
+
+var queue = [];
+var searchResults = [];
+var selectedRows = [];
+
+// Event-Listener beim Laden
+window.onload = function() {
+    log("HTA geladen. Initialisiere...");
+    
+    document.getElementById("btnFile1").onclick = function() { OpenFile1(); };
+    document.getElementById("btnFile2").onclick = function() { OpenFile2(); };
+    document.getElementById("btnSheet1").onclick = function() { LoadSheet1(); };
+    document.getElementById("btnSheet2").onclick = function() { LoadSheet2(); };
+    document.getElementById("btnSearch").onclick = doSearch;
+    document.getElementById("btnNewRow").onclick = showNewRowPanel;
+    document.getElementById("btnCloseNewRow").onclick = hideNewRowPanel;
+    document.getElementById("btnAddNewToQueue").onclick = addNewRowToQueue;
+    document.getElementById("btnTransferNewDirect").onclick = transferNewRowDirect;
+    document.getElementById("btnAddToQueue").onclick = addSelectedToQueue;
+    document.getElementById("btnTransferDirect").onclick = transferSelectedDirect;
+    document.getElementById("btnTransferAll").onclick = transferAllFromQueue;
+    document.getElementById("btnClearQueue").onclick = clearQueue;
+    
+    document.getElementById("searchText").onkeypress = function(e) {
+        if (e.keyCode === 13) doSearch();
+    };
+    
+    log("Bereit!");
+};
+
+function log(msg) {
+    var div = document.getElementById("debugLog");
+    div.innerHTML = div.innerHTML + "<br>" + new Date().toLocaleTimeString() + " [JS] " + msg;
+    div.scrollTop = div.scrollHeight;
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function generateNewRowFields() {
+    var count = GetHeaderCount();
+    log("Generiere " + count + " Felder fuer neue Zeile");
+    
+    var html = "";
+    for (var i = 0; i < count; i++) {
+        var header = GetHeader(i) || ("Spalte " + (i + 1));
+        html += "<div style='display: inline-block; margin: 5px;'>";
+        html += "<label style='display: block; font-size: 11px; color: #888;'>" + escapeHtml(header) + "</label>";
+        html += "<input type='text' id='newField_" + i + "' style='width: 120px;'>";
+        html += "</div>";
+    }
+    document.getElementById("newRowFields").innerHTML = html;
+}
+
+function showNewRowPanel() {
+    document.getElementById("newRowPanel").className = "panel";
+}
+
+function hideNewRowPanel() {
+    document.getElementById("newRowPanel").className = "panel hidden";
+}
+
+function getNewRowData() {
+    var count = GetHeaderCount();
+    var data = [];
+    for (var i = 0; i < count; i++) {
+        var field = document.getElementById("newField_" + i);
+        data.push(field ? field.value : "");
+    }
+    return data;
+}
+
+function doSearch() {
+    var query = document.getElementById("searchText").value;
+    if (!query) return;
+    
+    log("Suche: " + query);
+    
+    var rowCount = GetRowCount();
+    var colCount = GetHeaderCount();
+    
+    if (rowCount === 0) {
+        log("Keine Daten geladen");
+        return;
+    }
+    
+    searchResults = [];
+    selectedRows = [];
+    
+    var hasWildcard = query.indexOf("*") >= 0 || query.indexOf("?") >= 0;
+    var regex = null;
+    
+    if (hasWildcard) {
+        var pattern = query.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+        pattern = pattern.replace(/\*/g, ".*").replace(/\?/g, ".");
+        regex = new RegExp("^" + pattern + "$", "i");
+    }
+    
+    var lowerQuery = query.toLowerCase();
+    
+    for (var r = 0; r < rowCount; r++) {
+        var found = false;
+        var rowData = [];
+        
+        for (var c = 0; c < colCount; c++) {
+            var val = GetCellData(r, c);
+            rowData.push(val);
+            
+            if (!found) {
+                if (hasWildcard) {
+                    if (regex.test(val)) found = true;
+                } else {
+                    if (val.toLowerCase().indexOf(lowerQuery) >= 0) found = true;
+                }
+            }
+        }
+        
+        if (found) {
+            searchResults.push({ rowIndex: r, data: rowData });
+        }
+    }
+    
+    log("Gefunden: " + searchResults.length + " Treffer");
+    displayResults(query);
+}
+
+function displayResults(query) {
+    var info = document.getElementById("searchInfo");
+    var panel = document.getElementById("resultsPanel");
+    
+    if (searchResults.length === 0) {
+        info.innerHTML = "Keine Treffer fuer <b>" + escapeHtml(query) + "</b>";
+        panel.className = "panel hidden";
+        return;
+    }
+    
+    info.innerHTML = "<b>" + searchResults.length + "</b> Treffer fuer <b>" + escapeHtml(query) + "</b>";
+    panel.className = "panel";
+    
+    // Header
+    var colCount = GetHeaderCount();
+    var headHtml = "<tr><th style='width:30px;'><input type='checkbox' onclick='selectAll(this.checked)'></th>";
+    for (var h = 0; h < colCount; h++) {
+        headHtml += "<th>" + escapeHtml(GetHeader(h) || ("Sp." + (h + 1))) + "</th>";
+    }
+    headHtml += "</tr>";
+    document.getElementById("resultsHead").innerHTML = headHtml;
+    
+    // Body
+    var bodyHtml = "";
+    for (var i = 0; i < searchResults.length; i++) {
+        var res = searchResults[i];
+        bodyHtml += "<tr id='row_" + i + "' onclick='toggleRow(" + i + ")'>";
+        bodyHtml += "<td><input type='checkbox' id='cb_" + i + "' onclick='event.cancelBubble=true; toggleRow(" + i + ",this.checked)'></td>";
+        for (var c = 0; c < res.data.length; c++) {
+            bodyHtml += "<td>" + highlightMatch(res.data[c], query) + "</td>";
+        }
+        bodyHtml += "</tr>";
+    }
+    document.getElementById("resultsBody").innerHTML = bodyHtml;
+}
+
+function highlightMatch(text, query) {
+    if (!text || !query) return escapeHtml(text);
+    var escaped = escapeHtml(text);
+    try {
+        var re = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+        return escaped.replace(re, "<span class='highlight'>$1</span>");
+    } catch(e) {
+        return escaped;
+    }
+}
+
+function toggleRow(idx, forceState) {
+    var cb = document.getElementById("cb_" + idx);
+    var tr = document.getElementById("row_" + idx);
+    if (!cb || !tr) return;
+    
+    var sel = (typeof forceState !== "undefined") ? forceState : !cb.checked;
+    cb.checked = sel;
+    tr.className = sel ? "selected" : "";
+    
+    var pos = -1;
+    for (var i = 0; i < selectedRows.length; i++) {
+        if (selectedRows[i] === idx) { pos = i; break; }
+    }
+    
+    if (sel && pos < 0) selectedRows.push(idx);
+    if (!sel && pos >= 0) selectedRows.splice(pos, 1);
+}
+
+function selectAll(checked) {
+    for (var i = 0; i < searchResults.length; i++) {
+        toggleRow(i, checked);
+    }
+}
+
+function addToQueueInternal(data, flag, comment) {
+    queue.push({ data: data, flag: flag, comment: comment });
+    updateQueueDisplay();
+}
+
+function addSelectedToQueue() {
+    if (selectedRows.length === 0) {
+        showStatus("Bitte mindestens eine Zeile auswaehlen", "error");
+        return;
+    }
+    
+    var flag = document.getElementById("transferFlag").value;
+    var comment = document.getElementById("transferComment").value;
+    
+    for (var i = 0; i < selectedRows.length; i++) {
+        var idx = selectedRows[i];
+        var res = searchResults[idx];
+        addToQueueInternal(res.data.slice(), flag, comment);
+    }
+    
+    showStatus(selectedRows.length + " Zeile(n) zur Warteschlange hinzugefuegt", "success");
+    selectAll(false);
+}
+
+function addNewRowToQueue() {
+    var data = getNewRowData();
+    var flag = document.getElementById("newRowFlag").value;
+    var comment = document.getElementById("newRowComment").value;
+    
+    addToQueueInternal(data, flag, comment);
+    showStatus("Neue Zeile zur Warteschlange hinzugefuegt", "success");
+    
+    // Felder leeren
+    var count = GetHeaderCount();
+    for (var i = 0; i < count; i++) {
+        var f = document.getElementById("newField_" + i);
+        if (f) f.value = "";
+    }
+    document.getElementById("newRowComment").value = "";
+}
+
+function transferSelectedDirect() {
+    if (selectedRows.length === 0) {
+        showStatus("Bitte mindestens eine Zeile auswaehlen", "error");
+        return;
+    }
+    
+    var flag = document.getElementById("transferFlag").value;
+    var comment = document.getElementById("transferComment").value;
+    
+    for (var i = 0; i < selectedRows.length; i++) {
+        var idx = selectedRows[i];
+        var res = searchResults[idx];
+        var csv = res.data.join(String.fromCharCode(1));
+        WriteRow(flag, comment, csv);
+    }
+    
+    SaveFile2();
+    showStatus(selectedRows.length + " Zeile(n) uebertragen und gespeichert!", "success");
+    selectAll(false);
+}
+
+function transferNewRowDirect() {
+    var data = getNewRowData();
+    var flag = document.getElementById("newRowFlag").value;
+    var comment = document.getElementById("newRowComment").value;
+    var csv = data.join(String.fromCharCode(1));
+    
+    WriteRow(flag, comment, csv);
+    SaveFile2();
+    
+    showStatus("Neue Zeile uebertragen und gespeichert!", "success");
+    
+    // Felder leeren
+    var count = GetHeaderCount();
+    for (var i = 0; i < count; i++) {
+        var f = document.getElementById("newField_" + i);
+        if (f) f.value = "";
+    }
+    document.getElementById("newRowComment").value = "";
+}
+
+function transferAllFromQueue() {
+    if (queue.length === 0) {
+        showStatus("Warteschlange ist leer", "error");
+        return;
+    }
+    
+    log("Uebertrage " + queue.length + " Zeilen aus Warteschlange...");
+    
+    for (var i = 0; i < queue.length; i++) {
+        var item = queue[i];
+        var csv = item.data.join(String.fromCharCode(1));
+        WriteRow(item.flag, item.comment, csv);
+    }
+    
+    SaveFile2();
+    
+    var count = queue.length;
+    queue = [];
+    updateQueueDisplay();
+    
+    showStatus(count + " Zeile(n) uebertragen und gespeichert!", "success");
+}
+
+function clearQueue() {
+    queue = [];
+    updateQueueDisplay();
+}
+
+function removeFromQueue(idx) {
+    queue.splice(idx, 1);
+    updateQueueDisplay();
+}
+
+function updateQueueDisplay() {
+    document.getElementById("queueCount").innerHTML = queue.length;
+    document.getElementById("btnTransferAll").disabled = (queue.length === 0);
+    document.getElementById("btnClearQueue").disabled = (queue.length === 0);
+    
+    var list = document.getElementById("queueList");
+    
+    if (queue.length === 0) {
+        list.innerHTML = "<div style='color: #888; text-align: center; padding: 20px;'>Warteschlange leer</div>";
+        return;
+    }
+    
+    var html = "";
+    for (var i = 0; i < queue.length; i++) {
+        var item = queue[i];
+        var preview = String(item.data[0] || "").substring(0, 40);
+        html += "<div class='queue-item'>";
+        html += "<span class='flag'>" + item.flag + "</span>";
+        html += escapeHtml(preview);
+        if (item.comment) html += " <span style='color:#888;'>(" + escapeHtml(item.comment.substring(0, 20)) + ")</span>";
+        html += "<button class='remove-btn' onclick='removeFromQueue(" + i + ")'>X</button>";
+        html += "</div>";
+    }
+    list.innerHTML = html;
+}
+
+function showStatus(msg, type) {
+    var div = document.getElementById("transferStatus");
+    div.innerHTML = "<div class='status-box status-" + type + "'>" + msg + "</div>";
+    log(type.toUpperCase() + ": " + msg);
+}
+</script>
+
+</body>
+</html>

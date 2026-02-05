@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Hintergrund -->
+  <rect width="100" height="100" rx="12" fill="#1565C0"/>
+  
+  <!-- MVMS Text -->
+  <text x="50" y="32" font-size="18" font-weight="bold" text-anchor="middle" fill="white" font-family="Arial, sans-serif">MVMS</text>
+  
+  <!-- Eurofighter von oben - klare Silhouette -->
+  <g transform="translate(50,62) scale(0.9)">
+    <!-- Rumpf -->
+    <path d="M0,-30 L3,-25 L3,20 L0,28 L-3,20 L-3,-25 Z" fill="white"/>
+    
+    <!-- Cockpit -->
+    <ellipse cx="0" cy="-22" rx="2" ry="5" fill="#1565C0" opacity="0.5"/>
+    
+    <!-- Delta-Hauptflügel -->
+    <path d="M3,0 L38,15 L35,18 L3,8 Z" fill="white"/>
+    <path d="M-3,0 L-38,15 L-35,18 L-3,8 Z" fill="white"/>
+    
+    <!-- Canard-Flügel (vorne) -->
+    <path d="M3,-18 L18,-12 L16,-10 L3,-14 Z" fill="white"/>
+    <path d="M-3,-18 L-18,-12 L-16,-10 L-3,-14 Z" fill="white"/>
+    
+    <!-- Seitenleitwerke -->
+    <path d="M2,18 L5,10 L5,20 L2,24 Z" fill="white" opacity="0.9"/>
+    <path d="M-2,18 L-5,10 L-5,20 L-2,24 Z" fill="white" opacity="0.9"/>
+    
+    <!-- Triebwerksdüsen -->
+    <ellipse cx="2" cy="26" rx="2" ry="2" fill="#0D47A1" opacity="0.4"/>
+    <ellipse cx="-2" cy="26" rx="2" ry="2" fill="#0D47A1" opacity="0.4"/>
+  </g>
+</svg>
