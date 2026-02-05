@@ -70,18 +70,28 @@ jobs:
   release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        
+      - name: List downloaded files
+        run: find . -type f -name "*.msi" -o -name "*.exe" -o -name "*.dmg"
         
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', steps.date.outputs.date) }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Build {0}', steps.date.outputs.date) }}
           files: |
             windows-installer/*.msi
             windows-nsis-installer/*.exe
             macos-dmg/*.dmg
           generate_release_notes: true
+          draft: false
+          prerelease: ${{ github.ref_type != 'tag' }}
