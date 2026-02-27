@@ -4042,13 +4042,6 @@
         }
         
         function expandAll() {
-            // Guard: prevent UI freeze on very large files
-            const MAX_EXPAND_SIZE = 50 * 1024 * 1024; // 50 MB
-            if (fileSize > MAX_EXPAND_SIZE) {
-                if (!confirm(`Die Datei ist ${formatSize(fileSize)} groß. Alle Knoten aufklappen kann den Browser einfrieren. Fortfahren?`)) {
-                    return;
-                }
-            }
             // Compute subtree sizes if not already done
             if (jsonData && (!jsonData.__size || jsonData.__size <= 0)) {
                 status.textContent = 'Berechne Baumgrößen...';
