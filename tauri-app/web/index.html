@@ -2169,6 +2169,30 @@
                         <span>Wert bearbeiten</span>
                     </div>
                     <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘I</span>
+                        <span>Statistik-Panel</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘B</span>
+                        <span>Lesezeichen setzen / anzeigen</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘T</span>
+                        <span>Tabellenansicht</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘R</span>
+                        <span>Raw JSON Ansicht</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘J</span>
+                        <span>JSONPath Abfrage</span>
+                    </div>
+                    <div class="help-shortcut">
+                        <span class="help-shortcut-key">⌘D</span>
+                        <span>Diff-Vergleich</span>
+                    </div>
+                    <div class="help-shortcut">
                         <span class="help-shortcut-key">F1</span>
                         <span>Diese Hilfe anzeigen</span>
                     </div>
@@ -2261,6 +2285,261 @@
                     <div class="help-feature">
                         <strong>Große Dateien</strong>
                         <p>Optimiert für große JSON-Dateien (>100 MB) durch virtuelle Scrolling-Technologie.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>📊 Statistik-Panel (⌘I)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Übersicht</strong>
+                        <p>Zeigt eine umfassende Analyse des geladenen JSON-Dokuments. Enthält die Gesamtanzahl der Knoten, maximale Verschachtelungstiefe, Anzahl der Schlüssel und die Verteilung der Datentypen (Objects, Arrays, Strings, Numbers, Booleans, Null).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Top-10-Schlüssel</strong>
+                        <p>Visualisiert die am häufigsten vorkommenden Schlüsselnamen als Balkendiagramm. Nützlich um wiederkehrende Strukturen und Schemata in großen Dateien zu erkennen.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Öffnen</strong>
+                        <p>Klick auf den 📊 Button in der Toolbar oder Tastaturkürzel ⌘I. Die Statistik wird bei jedem Öffnen neu berechnet.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>🔖 Lesezeichen (⌘B)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Lesezeichen setzen</strong>
+                        <p>Wähle einen Knoten im Baum aus und drücke ⌘B oder nutze das Kontextmenü (Rechtsklick → „Lesezeichen setzen"). Bereits gesetzte Lesezeichen können auf gleichem Weg wieder entfernt werden.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Lesezeichen-Liste</strong>
+                        <p>Klick auf den 🔖 Button öffnet eine Liste aller gesetzten Lesezeichen. Klick auf einen Eintrag navigiert direkt zum jeweiligen Pfad im Baum.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Persistenz</strong>
+                        <p>Lesezeichen werden automatisch im Browser-Speicher (localStorage) gesichert und bleiben auch nach dem Neuladen der Anwendung erhalten.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>▦ Tabellenansicht (⌘T)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Array-als-Tabelle</strong>
+                        <p>Arrays, die Objekte mit gleicher Struktur enthalten, werden als übersichtliche HTML-Tabelle dargestellt. Die Spalten entsprechen den Schlüsseln der Objekte, die Zeilen den einzelnen Array-Elementen.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Sortierung</strong>
+                        <p>Klick auf einen Spaltenheader sortiert die Tabelle nach dieser Spalte. Erneuter Klick kehrt die Sortierrichtung um (aufsteigend/absteigend).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Filterung</strong>
+                        <p>Über das Filterfeld oberhalb der Tabelle können Zeilen nach Text durchsucht und gefiltert werden.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Kontextmenü-Zugang</strong>
+                        <p>Rechtsklick auf ein Array im Baum bietet direkt die Option „Tabellenansicht" an.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Hinweis</strong>
+                        <p>Zur Performance-Optimierung werden maximal 5.000 Zeilen angezeigt. Bei größeren Arrays wird eine entsprechende Meldung eingeblendet.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>{} Raw JSON Ansicht (⌘R)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Syntax-Highlighting</strong>
+                        <p>Zeigt das gesamte JSON-Dokument als formatierten Quelltext mit farblicher Hervorhebung: Schlüssel (blau), Strings (orange), Zahlen (grün), Booleans/Null (blau), Klammern (gelb).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Großer Viewport</strong>
+                        <p>Die Ansicht nutzt den gesamten verfügbaren Platz für komfortables Lesen. Zur Performance-Sicherung werden maximal 500.000 Zeichen dargestellt.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Öffnen</strong>
+                        <p>Klick auf den {} Button oder Tastaturkürzel ⌘R. Interne __size-Metadaten werden automatisch ausgeblendet.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>🔍² Duplikaterkennung</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Funktionsweise</strong>
+                        <p>Durchsucht das gesamte Dokument nach identischen Objekten. Objekte werden per JSON-Hash verglichen – zwei Objekte gelten als Duplikat, wenn ihr gesamter Inhalt (alle Schlüssel und Werte) identisch ist.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Ergebnisanzeige</strong>
+                        <p>Gefundene Duplikatgruppen werden mit Pfadangabe aufgelistet. Klick auf einen Pfad navigiert direkt zum entsprechenden Knoten im Baum.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Performance-Limits</strong>
+                        <p>Maximal 100.000 Objekte werden geprüft, Objekte über 10 KB werden übersprungen, und es werden höchstens 50 Duplikatgruppen angezeigt.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>$. JSONPath Abfragen (⌘J)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>JSONPath-Syntax</strong>
+                        <p>Ermöglicht das gezielte Abfragen von Daten mittels JSONPath-Ausdrücken. Die Abfrageleiste erscheint unterhalb der Suchleiste.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Unterstützte Operatoren</strong>
+                        <p>
+                            <code>$</code> – Wurzel des Dokuments<br>
+                            <code>.key</code> – Zugriff auf einen Schlüssel<br>
+                            <code>..</code> – Rekursive Suche (descendant)<br>
+                            <code>.*</code> – Alle Kinder eines Objekts<br>
+                            <code>[0]</code> – Array-Index (0-basiert)<br>
+                            <code>[*]</code> – Alle Array-Elemente
+                        </p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Beispiele</strong>
+                        <p>
+                            <code>$.store.books[0].title</code> – Titel des ersten Buches<br>
+                            <code>$..name</code> – Alle „name"-Werte rekursiv<br>
+                            <code>$.users[*].email</code> – Alle E-Mail-Adressen<br>
+                            <code>$..*</code> – Alle Werte im Dokument
+                        </p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Ergebnis-Export</strong>
+                        <p>Gefundene Ergebnisse können mit dem Export-Button als JSON-Datei gespeichert werden.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>⇔ Diff-Vergleich (⌘D)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Zwei Dateien vergleichen</strong>
+                        <p>Vergleicht die aktuell geladene JSON-Datei mit einer zweiten Datei. Öffne den Diff-Dialog mit ⌘D oder dem ⇔ Button und lade dann über „Zweite Datei laden..." die Vergleichsdatei.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Side-by-Side Ansicht</strong>
+                        <p>Beide Dateien werden nebeneinander dargestellt. Unterschiede sind farblich markiert:</p>
+                        <p>
+                            <span style="color:#4ec9b0;">■ Grün</span> – Hinzugefügte Zeilen (nur in der rechten Datei)<br>
+                            <span style="color:#f48771;">■ Rot</span> – Entfernte Zeilen (nur in der linken Datei)<br>
+                            <span style="color:#dcdcaa;">■ Gelb</span> – Geänderte Zeilen
+                        </p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Zusammenfassung</strong>
+                        <p>Am unteren Rand wird eine Zusammenfassung der Änderungen angezeigt: Anzahl hinzugefügter, entfernter und geänderter Zeilen.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Algorithmus</strong>
+                        <p>Verwendet einen LCS-basierten (Longest Common Subsequence) Zeilenvergleich für präzise Ergebnisse. Bei sehr großen Dateien (>5.000 Zeilen pro Seite) wird der Vergleich aus Performance-Gründen vereinfacht.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>📐 Schema-Validierung</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Schema-Erkennung</strong>
+                        <p>Analysiert die Struktur des JSON-Dokuments und leitet automatisch ein Schema ab. Zeigt den Datentyp jedes Feldes an: string, number, boolean, null, object, array oder mixed (gemischte Typen).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Pflicht- und Optionale Felder</strong>
+                        <p>Bei Arrays mit Objekten werden die Felder analysiert: Ein <span style="color:#f44336;">*</span> markiert Pflichtfelder (in allen Objekten vorhanden), ein <span style="color:var(--text-secondary);">?</span> markiert optionale Felder (nicht in allen Objekten).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Typ-Baum</strong>
+                        <p>Das Schema wird als eingerückter Baum dargestellt – analog zur JSON-Struktur, aber statt konkreter Werte werden die Datentypen angezeigt. Verschachtelte Objekte und Arrays werden rekursiv aufgelöst.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Gemischte Typen</strong>
+                        <p>Wenn ein Feld in verschiedenen Objekten unterschiedliche Typen hat (z.B. manchmal String, manchmal Number), wird dies als „mixed" mit Auflistung der Typen angezeigt.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>⚡ Bulk-Operationen</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Key umbenennen</strong>
+                        <p>Benennt einen Schlüssel im gesamten Dokument um. Gib den alten Schlüsselnamen und den neuen Namen ein – alle Vorkommen werden ersetzt.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Key löschen</strong>
+                        <p>Entfernt einen Schlüssel und seinen Wert aus allen Objekten im Dokument. Nützlich zum Bereinigen von Metadaten oder sensiblen Feldern.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Wert ersetzen</strong>
+                        <p>Ersetzt den Wert eines bestimmten Schlüssels in allen Objekten. Der neue Wert wird als JSON eingegeben (z.B. <code>"text"</code>, <code>42</code>, <code>true</code>, <code>null</code>, <code>{"key": "value"}</code>).</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Key hinzufügen</strong>
+                        <p>Fügt einen neuen Schlüssel mit dem angegebenen Wert zu allen Objekten hinzu, die diesen Schlüssel noch nicht enthalten.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Vorschau</strong>
+                        <p>Der „Vorschau"-Button zeigt an, wie viele Stellen von der Operation betroffen wären, bevor die Änderung tatsächlich angewendet wird.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Rückgängig</strong>
+                        <p>Bulk-Operationen können wie alle anderen Änderungen mit ⌘Z rückgängig gemacht werden.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>🌐 REST-Client (URL laden)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>JSON von URL laden</strong>
+                        <p>Lädt JSON-Daten direkt von einer URL (z.B. einer REST-API). Klick auf den 🌐 Button und gib die URL ein. Die Daten werden per HTTP GET abgerufen und wie eine lokale Datei geöffnet.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Unterstützte Formate</strong>
+                        <p>Jedes gültige JSON, das von einem HTTP-Endpunkt zurückgegeben wird. Der Content-Type sollte application/json sein, andere Formate werden aber ebenfalls versucht zu parsen.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Beispiel-APIs</strong>
+                        <p>
+                            <code>https://jsonplaceholder.typicode.com/posts</code><br>
+                            <code>https://api.github.com/repos/owner/repo</code><br>
+                            <code>https://dummyjson.com/products</code>
+                        </p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Immer verfügbar</strong>
+                        <p>Der 🌐 Button ist immer aktiv – auch ohne geladene Datei. Damit eignet sich der REST-Client auch als Einstiegspunkt zum schnellen Inspizieren von API-Antworten.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>📋 JSON Patch Export (RFC 6902)</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Änderungsverfolgung</strong>
+                        <p>Alle Bearbeitungen am Dokument (Werte ändern, Keys hinzufügen/löschen) werden intern als JSON Patch Operationen nach RFC 6902 aufgezeichnet.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Export</strong>
+                        <p>Die gesammelten Patch-Operationen können als <code>patch.json</code> exportiert und auf andere JSON-Dateien angewendet werden.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Operationen</strong>
+                        <p>Unterstützte Patch-Operationen: <code>add</code> (Hinzufügen), <code>remove</code> (Entfernen), <code>replace</code> (Ersetzen). Jede Operation enthält den JSON Pointer Pfad und den neuen Wert.</p>
                     </div>
                 </div>
             </div>
