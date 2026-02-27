@@ -7033,6 +7033,28 @@
             containerHeight = treeContainer.clientHeight;
             renderVisibleItems();
         });
+
+        // Platform-aware shortcut labels: replace ⌘/⇧ with Ctrl/Shift on Windows/Linux
+        (function fixShortcutLabels() {
+            const isMac = navigator.platform.includes('Mac');
+            if (isMac) return;
+            // Fix button titles
+            document.querySelectorAll('[title]').forEach(el => {
+                el.title = el.title.replace(/⇧⌘/g, 'Ctrl+Shift+').replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘/g, 'Ctrl+').replace(/⇧/g, 'Shift+');
+            });
+            // Fix help shortcut keys
+            document.querySelectorAll('.help-shortcut-key').forEach(el => {
+                el.textContent = el.textContent.replace(/⇧⌘/g, 'Ctrl+Shift+').replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘/g, 'Ctrl+').replace(/⇧/g, 'Shift+');
+            });
+            // Fix help section headers
+            document.querySelectorAll('.help-section h3').forEach(el => {
+                el.textContent = el.textContent.replace(/⇧⌘/g, 'Ctrl+Shift+').replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘/g, 'Ctrl+').replace(/⇧/g, 'Shift+');
+            });
+            // Fix help feature text containing ⌘
+            document.querySelectorAll('.help-feature p').forEach(el => {
+                el.innerHTML = el.innerHTML.replace(/⇧⌘/g, 'Ctrl+Shift+').replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘/g, 'Ctrl+').replace(/⇧/g, 'Shift+');
+            });
+        })();
     </script>
 </body>
 </html>
