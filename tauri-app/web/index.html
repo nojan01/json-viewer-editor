@@ -1240,6 +1240,619 @@
             color: var(--text-secondary);
         }
         
+        /* ============ STATISTICS PANEL ============ */
+        .stats-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+        }
+        .stats-overlay.visible { display: block; }
+        .stats-modal {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2001;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 520px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .stats-modal.visible { display: block; }
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        .stats-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+        .stats-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); font-size: 18px;
+            cursor: pointer; padding: 4px 8px; border-radius: 4px;
+        }
+        .stats-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .stats-content {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(80vh - 60px);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .stats-card {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .stats-card-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .stats-card-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .stats-card-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .stats-bar-chart {
+            margin-top: 16px;
+        }
+        .stats-bar-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+        .stats-bar-label {
+            width: 80px;
+            color: var(--text-secondary);
+        }
+        .stats-bar-track {
+            flex: 1;
+            height: 16px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0 8px;
+        }
+        .stats-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .stats-bar-count {
+            width: 60px;
+            text-align: right;
+            color: var(--text-primary);
+            font-family: 'SF Mono', monospace;
+            font-size: 11px;
+        }
+        .stats-top-keys {
+            margin-top: 16px;
+        }
+        .stats-top-keys h4 {
+            font-size: 12px;
+            color: var(--accent);
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stats-key-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        .stats-key-item:nth-child(even) {
+            background: var(--bg-tertiary);
+        }
+        .stats-key-name {
+            font-family: 'SF Mono', monospace;
+            color: #9cdcfe;
+        }
+        .light .stats-key-name { color: #0066cc; }
+        .stats-key-count {
+            color: var(--text-secondary);
+            font-family: 'SF Mono', monospace;
+        }
+
+        /* ============ BOOKMARKS ============ */
+        .bookmarks-panel {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2001;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 450px;
+            max-width: 90vw;
+            max-height: 70vh;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .bookmarks-panel.visible { display: block; }
+        .bookmarks-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        .bookmarks-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
+        .bookmarks-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); font-size: 16px;
+            cursor: pointer; padding: 2px 6px; border-radius: 4px;
+        }
+        .bookmarks-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .bookmarks-list {
+            padding: 8px;
+            overflow-y: auto;
+            max-height: calc(70vh - 50px);
+        }
+        .bookmark-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            gap: 8px;
+        }
+        .bookmark-item:hover { background: var(--bg-hover); }
+        .bookmark-path {
+            flex: 1;
+            font-family: 'SF Mono', monospace;
+            color: #9cdcfe;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .light .bookmark-path { color: #0066cc; }
+        .bookmark-value {
+            color: var(--text-secondary);
+            font-size: 11px;
+            max-width: 120px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bookmark-remove {
+            background: transparent; border: none;
+            color: var(--text-secondary); cursor: pointer;
+            font-size: 14px; padding: 0 4px; border-radius: 3px;
+        }
+        .bookmark-remove:hover { background: #f44336; color: white; }
+        .bookmarks-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* ============ TABLE VIEW ============ */
+        .table-view-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+        }
+        .table-view-overlay.visible { display: block; }
+        .table-view-modal {
+            display: none;
+            position: fixed;
+            top: 5%; left: 5%;
+            width: 90%; height: 90%;
+            z-index: 2001;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .table-view-modal.visible { display: flex; flex-direction: column; }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            gap: 12px;
+        }
+        .table-header h3 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; }
+        .table-filter-input {
+            flex: 1;
+            max-width: 300px;
+            padding: 5px 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text-primary);
+            font-size: 12px;
+            outline: none;
+        }
+        .table-filter-input:focus { border-color: var(--accent); }
+        .table-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); font-size: 18px;
+            cursor: pointer; padding: 4px 8px; border-radius: 4px;
+        }
+        .table-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .table-scroll {
+            flex: 1;
+            overflow: auto;
+        }
+        .table-scroll table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            font-family: 'SF Mono', monospace;
+        }
+        .table-scroll th {
+            position: sticky;
+            top: 0;
+            background: var(--bg-tertiary);
+            border-bottom: 2px solid var(--border);
+            padding: 8px 10px;
+            text-align: left;
+            color: var(--text-primary);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .table-scroll th:hover { background: var(--bg-hover); }
+        .table-scroll th .sort-arrow { margin-left: 4px; font-size: 10px; color: var(--accent); }
+        .table-scroll td {
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .table-scroll tr:hover td { background: var(--bg-hover); }
+        .table-scroll td.string { color: #ce9178; }
+        .table-scroll td.number { color: #b5cea8; }
+        .table-scroll td.boolean { color: #569cd6; }
+        .table-scroll td.null-val { color: #569cd6; font-style: italic; }
+        .light .table-scroll td.string { color: #a31515; }
+        .light .table-scroll td.number { color: #098658; }
+        .light .table-scroll td.boolean { color: #0000ff; }
+        .table-info {
+            padding: 8px 16px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        /* ============ JSONPATH QUERY ============ */
+        .jsonpath-bar {
+            display: none;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+        .jsonpath-bar.visible { display: flex; }
+        .jsonpath-container {
+            display: flex;
+            flex: 1;
+            align-items: center;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 0 8px;
+        }
+        .jsonpath-container:focus-within { border-color: var(--accent); }
+        .jsonpath-container input {
+            flex: 1;
+            padding: 5px 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: 'SF Mono', monospace;
+            font-size: 12px;
+            outline: none;
+        }
+        .jsonpath-container input::placeholder { color: var(--text-secondary); }
+        .jsonpath-actions {
+            display: flex;
+            gap: 4px;
+        }
+        .jsonpath-actions button {
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .jsonpath-actions button:hover { background: var(--bg-hover); border-color: var(--accent); }
+        .jsonpath-result-count {
+            color: var(--text-secondary);
+            font-size: 11px;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        /* ============ RAW VIEW ============ */
+        .raw-view-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+        }
+        .raw-view-overlay.visible { display: block; }
+        .raw-view-modal {
+            display: none;
+            position: fixed;
+            top: 5%; left: 5%;
+            width: 90%; height: 90%;
+            z-index: 2001;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .raw-view-modal.visible { display: flex; flex-direction: column; }
+        .raw-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        .raw-header h3 { margin: 0; font-size: 14px; }
+        .raw-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); font-size: 18px;
+            cursor: pointer; padding: 4px 8px; border-radius: 4px;
+        }
+        .raw-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .raw-content {
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+            font-family: 'SF Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre;
+            tab-size: 2;
+        }
+        .raw-content .json-key { color: #9cdcfe; }
+        .raw-content .json-string { color: #ce9178; }
+        .raw-content .json-number { color: #b5cea8; }
+        .raw-content .json-boolean { color: #569cd6; }
+        .raw-content .json-null { color: #569cd6; font-style: italic; }
+        .raw-content .json-bracket { color: #ffd700; }
+        .raw-content .json-colon { color: var(--text-secondary); }
+        .light .raw-content .json-key { color: #0066cc; }
+        .light .raw-content .json-string { color: #a31515; }
+        .light .raw-content .json-number { color: #098658; }
+        .light .raw-content .json-boolean { color: #0000ff; }
+        .light .raw-content .json-null { color: #0000ff; }
+        .light .raw-content .json-bracket { color: #795e26; }
+
+        /* ============ DUPLICATE DETECTION ============ */
+        .dupes-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 2000;
+        }
+        .dupes-overlay.visible { display: block; }
+        .dupes-modal {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2001;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 600px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .dupes-modal.visible { display: block; }
+        .dupes-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        .dupes-header h3 { margin: 0; font-size: 14px; }
+        .dupes-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); font-size: 18px;
+            cursor: pointer; padding: 4px 8px; border-radius: 4px;
+        }
+        .dupes-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .dupes-content {
+            padding: 16px;
+            overflow-y: auto;
+            max-height: calc(80vh - 60px);
+        }
+        .dupes-group {
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .dupes-group-header {
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        .dupes-group-item {
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: 'SF Mono', monospace;
+            border-top: 1px solid var(--border);
+            cursor: pointer;
+            color: #9cdcfe;
+        }
+        .light .dupes-group-item { color: #0066cc; }
+        .dupes-group-item:hover { background: var(--bg-hover); }
+        .dupes-none {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* ============ NOTIFICATION ============ */
+        .notification {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 3000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            animation: notif-in 0.2s ease;
+        }
+        @keyframes notif-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* ============ DIFF VIEW ============ */
+        .diff-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; }
+        .diff-overlay.visible { display: block; }
+        .diff-modal {
+            display: none; position: fixed; top: 5%; left: 5%; width: 90%; height: 90%;
+            z-index: 2001; background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 12px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+        }
+        .diff-modal.visible { display: flex; flex-direction: column; }
+        .diff-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary);
+        }
+        .diff-header h3 { margin: 0; font-size: 14px; }
+        .diff-close { background: transparent; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .diff-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .diff-body { flex: 1; display: flex; overflow: hidden; }
+        .diff-panel { flex: 1; overflow: auto; padding: 12px; font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
+        .diff-panel:first-child { border-right: 1px solid var(--border); }
+        .diff-line-added { background: rgba(76, 175, 80, 0.15); color: #4ec9b0; }
+        .diff-line-removed { background: rgba(244, 67, 54, 0.15); color: #f48771; }
+        .diff-line-changed { background: rgba(255, 183, 77, 0.15); color: #dcdcaa; }
+        .diff-summary { padding: 8px 16px; font-size: 11px; color: var(--text-secondary); border-top: 1px solid var(--border); background: var(--bg-tertiary); }
+
+        /* ============ SCHEMA VALIDATION ============ */
+        .schema-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; }
+        .schema-overlay.visible { display: block; }
+        .schema-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 2001; background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 12px; width: 600px; max-width: 90vw; max-height: 80vh; overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+        }
+        .schema-modal.visible { display: block; }
+        .schema-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
+        .schema-header h3 { margin: 0; font-size: 14px; }
+        .schema-close { background: transparent; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .schema-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .schema-content { padding: 16px; overflow-y: auto; max-height: calc(80vh - 60px); }
+        .schema-section { margin-bottom: 16px; }
+        .schema-section h4 { font-size: 12px; color: var(--accent); margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .schema-tree { font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.6; }
+        .schema-node { padding: 2px 0; }
+        .schema-type { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+        .schema-type-string { background: rgba(206,145,120,0.2); color: #ce9178; }
+        .schema-type-number { background: rgba(181,206,168,0.2); color: #b5cea8; }
+        .schema-type-boolean { background: rgba(86,156,214,0.2); color: #569cd6; }
+        .schema-type-null { background: rgba(86,156,214,0.2); color: #569cd6; }
+        .schema-type-object { background: rgba(78,201,176,0.2); color: #4ec9b0; }
+        .schema-type-array { background: rgba(197,134,192,0.2); color: #c586c0; }
+        .schema-type-mixed { background: rgba(255,215,0,0.2); color: #dcdcaa; }
+        .schema-key { color: #9cdcfe; }
+        .light .schema-key { color: #0066cc; }
+        .schema-required { color: #f44336; font-size: 10px; }
+        .schema-optional { color: var(--text-secondary); font-size: 10px; }
+
+        /* ============ BULK OPERATIONS ============ */
+        .bulk-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; }
+        .bulk-overlay.visible { display: block; }
+        .bulk-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 2001; background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 12px; width: 500px; max-width: 90vw; max-height: 80vh; overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+        }
+        .bulk-modal.visible { display: block; }
+        .bulk-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
+        .bulk-header h3 { margin: 0; font-size: 14px; }
+        .bulk-close { background: transparent; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .bulk-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .bulk-content { padding: 16px; overflow-y: auto; max-height: calc(80vh - 60px); }
+        .bulk-section { margin-bottom: 16px; }
+        .bulk-section label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .bulk-input {
+            width: 100%; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 5px; color: var(--text-primary); font-family: 'SF Mono', monospace; font-size: 12px; outline: none;
+        }
+        .bulk-input:focus { border-color: var(--accent); }
+        .bulk-select {
+            width: 100%; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 5px; color: var(--text-primary); font-size: 12px; outline: none; cursor: pointer;
+        }
+        .bulk-actions { display: flex; gap: 8px; margin-top: 16px; }
+        .bulk-btn {
+            padding: 8px 16px; border-radius: 5px; border: 1px solid var(--border);
+            cursor: pointer; font-size: 12px;
+        }
+        .bulk-btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+        .bulk-btn-primary:hover { background: var(--accent-hover); }
+        .bulk-btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+        .bulk-btn-secondary:hover { background: var(--bg-hover); }
+        .bulk-preview { margin-top: 12px; padding: 10px; background: var(--bg-primary); border-radius: 5px; font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; }
+
         /* Dragging */
         .tree-node.dragging {
             opacity: 0.5;
@@ -1327,6 +1940,39 @@
         </div>
         
         <div class="toolbar-group">
+            <button id="btnStats" disabled title="Statistik (⌘I)">
+                <span class="icon">📊</span>
+            </button>
+            <button id="btnBookmarks" disabled title="Lesezeichen (⌘B)">
+                <span class="icon">🔖</span>
+            </button>
+            <button id="btnTableView" disabled title="Tabellenansicht (⌘T)">
+                <span class="icon">▦</span>
+            </button>
+            <button id="btnRawView" disabled title="Raw JSON (⌘R)">
+                <span class="icon">{}</span>
+            </button>
+            <button id="btnDuplicates" disabled title="Duplikate finden">
+                <span class="icon">🔍²</span>
+            </button>
+            <button id="btnJsonPath" disabled title="JSONPath Abfrage (⌘J)">
+                <span class="icon">$.</span>
+            </button>
+            <button id="btnDiff" disabled title="Diff-Vergleich (⌘D)">
+                <span class="icon">⇔</span>
+            </button>
+            <button id="btnSchema" disabled title="Schema-Validierung">
+                <span class="icon">📐</span>
+            </button>
+            <button id="btnBulk" disabled title="Bulk-Operationen">
+                <span class="icon">⚡</span>
+            </button>
+            <button id="btnRestClient" title="URL laden">
+                <span class="icon">🌐</span>
+            </button>
+        </div>
+
+        <div class="toolbar-group">
             <button id="btnHelp" title="Hilfe (F1)">
                 <span class="icon">❓</span>
             </button>
@@ -1364,6 +2010,18 @@
             <button id="btnReplaceAll" disabled title="Alle Treffer ersetzen (⇧⌘H)">Alle ersetzen</button>
         </div>
         <span class="replace-info" id="replaceInfo"></span>
+    </div>
+    
+    <div class="jsonpath-bar" id="jsonpathBar">
+        <div class="jsonpath-container">
+            <span style="color: var(--accent); font-family: 'SF Mono', monospace; font-size: 12px; margin-right: 4px;">$</span>
+            <input type="text" id="jsonpathInput" placeholder="JSONPath, z.B. $.users[*].name oder ..id">
+        </div>
+        <div class="jsonpath-actions">
+            <button id="btnJsonPathRun">Ausführen</button>
+            <button id="btnJsonPathExport">Export</button>
+        </div>
+        <span class="jsonpath-result-count" id="jsonpathResultCount"></span>
     </div>
     
     <div class="breadcrumb-bar" id="breadcrumbBar">
@@ -1613,6 +2271,122 @@
         </div>
     </div>
     
+    <!-- Statistics Modal -->
+    <div class="stats-overlay" id="statsOverlay"></div>
+    <div class="stats-modal" id="statsModal">
+        <div class="stats-header">
+            <h2>📊 Statistik</h2>
+            <button class="stats-close" id="btnStatsClose">✕</button>
+        </div>
+        <div class="stats-content" id="statsContent"></div>
+    </div>
+    
+    <!-- Bookmarks Panel -->
+    <div class="stats-overlay" id="bookmarksOverlay"></div>
+    <div class="bookmarks-panel" id="bookmarksPanel">
+        <div class="bookmarks-header">
+            <h3>🔖 Lesezeichen</h3>
+            <button class="bookmarks-close" id="btnBookmarksClose">✕</button>
+        </div>
+        <div class="bookmarks-list" id="bookmarksList"></div>
+    </div>
+    
+    <!-- Table View Modal -->
+    <div class="table-view-overlay" id="tableViewOverlay"></div>
+    <div class="table-view-modal" id="tableViewModal">
+        <div class="table-header">
+            <h3 id="tableTitle">Tabellenansicht</h3>
+            <input type="text" class="table-filter-input" id="tableFilterInput" placeholder="Filter...">
+            <button class="table-close" id="btnTableClose">✕</button>
+        </div>
+        <div class="table-scroll" id="tableScroll"></div>
+        <div class="table-info" id="tableInfo"></div>
+    </div>
+    
+    <!-- Raw View Modal -->
+    <div class="raw-view-overlay" id="rawViewOverlay"></div>
+    <div class="raw-view-modal" id="rawViewModal">
+        <div class="raw-header">
+            <h3>Raw JSON (Syntax-Highlighted)</h3>
+            <button class="raw-close" id="btnRawClose">✕</button>
+        </div>
+        <div class="raw-content" id="rawContent"></div>
+    </div>
+    
+    <!-- Duplicates Modal -->
+    <div class="dupes-overlay" id="dupesOverlay"></div>
+    <div class="dupes-modal" id="dupesModal">
+        <div class="dupes-header">
+            <h3>🔍 Duplikate</h3>
+            <button class="dupes-close" id="btnDupesClose">✕</button>
+        </div>
+        <div class="dupes-content" id="dupesContent"></div>
+    </div>
+
+    <!-- Diff Modal -->
+    <div class="diff-overlay" id="diffOverlay"></div>
+    <div class="diff-modal" id="diffModal">
+        <div class="diff-header">
+            <h3>⇔ Diff-Vergleich</h3>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="bulk-btn bulk-btn-secondary" id="btnDiffLoad">Zweite Datei laden...</button>
+                <button class="diff-close" id="btnDiffClose">✕</button>
+            </div>
+        </div>
+        <div class="diff-body">
+            <div class="diff-panel" id="diffLeft"></div>
+            <div class="diff-panel" id="diffRight"></div>
+        </div>
+        <div class="diff-summary" id="diffSummary"></div>
+    </div>
+
+    <!-- Schema Modal -->
+    <div class="schema-overlay" id="schemaOverlay"></div>
+    <div class="schema-modal" id="schemaModal">
+        <div class="schema-header">
+            <h3>📐 Schema-Validierung</h3>
+            <button class="schema-close" id="btnSchemaClose">✕</button>
+        </div>
+        <div class="schema-content" id="schemaContent"></div>
+    </div>
+
+    <!-- Bulk Operations Modal -->
+    <div class="bulk-overlay" id="bulkOverlay"></div>
+    <div class="bulk-modal" id="bulkModal">
+        <div class="bulk-header">
+            <h3>⚡ Bulk-Operationen</h3>
+            <button class="bulk-close" id="btnBulkClose">✕</button>
+        </div>
+        <div class="bulk-content" id="bulkContent">
+            <div class="bulk-section">
+                <label>Operation:</label>
+                <select class="bulk-select" id="bulkOp">
+                    <option value="renameKey">Key umbenennen</option>
+                    <option value="deleteKey">Key löschen</option>
+                    <option value="replaceValue">Wert ersetzen</option>
+                    <option value="addKey">Key hinzufügen</option>
+                </select>
+            </div>
+            <div class="bulk-section" id="bulkFieldFrom">
+                <label>Key-Name (Suche):</label>
+                <input class="bulk-input" id="bulkKeyFrom" placeholder="z.B. old_name">
+            </div>
+            <div class="bulk-section" id="bulkFieldTo">
+                <label>Neuer Name / Wert:</label>
+                <input class="bulk-input" id="bulkKeyTo" placeholder="z.B. new_name">
+            </div>
+            <div class="bulk-section" id="bulkFieldValue" style="display:none">
+                <label>Neuer Wert (JSON):</label>
+                <input class="bulk-input" id="bulkNewValue" placeholder='z.B. "text", 42, true, null'>
+            </div>
+            <div class="bulk-actions">
+                <button class="bulk-btn bulk-btn-secondary" id="btnBulkPreview">Vorschau</button>
+                <button class="bulk-btn bulk-btn-primary" id="btnBulkApply">Anwenden</button>
+            </div>
+            <div class="bulk-preview" id="bulkPreview" style="display:none"></div>
+        </div>
+    </div>
+
     <script>
         // State
         let jsonData = null;
@@ -1635,6 +2409,9 @@
         let showMinimap = false;
         let currentExpandLevel = 1;
         let maxDepth = 0;
+        
+        // Bookmarks
+        let bookmarks = JSON.parse(localStorage.getItem('json-viewer-bookmarks') || '[]');
         
         // Current language and theme
         let currentLang = localStorage.getItem('json-viewer-lang') || 'de';
@@ -2466,6 +3243,16 @@
             document.getElementById('btnRedo').disabled = true;
             document.getElementById('btnExportFiltered').disabled = false;
             document.getElementById('btnExportCSV').disabled = false;
+            document.getElementById('btnStats').disabled = false;
+            document.getElementById('btnBookmarks').disabled = false;
+            document.getElementById('btnTableView').disabled = false;
+            document.getElementById('btnRawView').disabled = false;
+            document.getElementById('btnDuplicates').disabled = false;
+            document.getElementById('btnJsonPath').disabled = false;
+            document.getElementById('btnDiff').disabled = false;
+            document.getElementById('btnSchema').disabled = false;
+            document.getElementById('btnBulk').disabled = false;
+            document.getElementById('btnRestClient').disabled = false;
         }
         
         function toggleIndentGuides() {
@@ -4890,6 +5677,23 @@
                 showNotification(t('pathCopied') + ': ' + row.path);
             }));
             
+            // Bookmark
+            const isBookmarked = bookmarks.includes(row.path);
+            menu.appendChild(createMenuItem(isBookmarked ? '🔖 Lesezeichen entfernen' : '🔖 Lesezeichen setzen', () => {
+                if (isBookmarked) removeBookmark(row.path);
+                else addBookmark(row.path);
+                hideContextMenu();
+            }, '⌘B'));
+            
+            // Table view for arrays
+            if (row.isArray && row.value.length > 0 && typeof row.value[0] === 'object') {
+                menu.appendChild(createMenuItem('▦ Tabellenansicht', () => {
+                    hideContextMenu();
+                    selectedPath = row.path;
+                    showTableView();
+                }));
+            }
+            
             // Duplicate (not root)
             if (row.path !== 'root') {
                 menu.appendChild(createMenuItem(t('ctxDuplicate'), () => {
@@ -4932,6 +5736,948 @@
             if (!e.target.closest('.context-menu')) hideContextMenu();
         });
         
+        // ============ STATISTICS PANEL ============
+        function showStatistics() {
+            if (!jsonData) return;
+            const stats = computeStatistics(jsonData);
+            const total = stats.objects + stats.arrays + stats.strings + stats.numbers + stats.booleans + stats.nulls;
+            const typeColors = { Objekte: '#569cd6', Arrays: '#c586c0', Strings: '#ce9178', Zahlen: '#b5cea8', Booleans: '#dcdcaa', Null: '#6a9955' };
+            const types = [
+                { name: 'Objekte', count: stats.objects, color: typeColors.Objekte },
+                { name: 'Arrays', count: stats.arrays, color: typeColors.Arrays },
+                { name: 'Strings', count: stats.strings, color: typeColors.Strings },
+                { name: 'Zahlen', count: stats.numbers, color: typeColors.Zahlen },
+                { name: 'Booleans', count: stats.booleans, color: typeColors.Booleans },
+                { name: 'Null', count: stats.nulls, color: typeColors.Null },
+            ];
+            const maxCount = Math.max(...types.map(t => t.count));
+            let html = '<div class="stats-grid">';
+            html += `<div class="stats-card"><div class="stats-card-label">Knoten gesamt</div><div class="stats-card-value">${total.toLocaleString()}</div></div>`;
+            html += `<div class="stats-card"><div class="stats-card-label">Max. Tiefe</div><div class="stats-card-value">${stats.maxDepth}</div></div>`;
+            html += `<div class="stats-card"><div class="stats-card-label">Dateigröße</div><div class="stats-card-value">${formatSize(fileSize)}</div></div>`;
+            html += `<div class="stats-card"><div class="stats-card-label">Unique Keys</div><div class="stats-card-value">${stats.uniqueKeys.size.toLocaleString()}</div></div>`;
+            html += '</div>';
+            html += '<div class="stats-bar-chart">';
+            types.forEach(t => {
+                const pct = maxCount > 0 ? (t.count / maxCount * 100) : 0;
+                html += `<div class="stats-bar-row"><span class="stats-bar-label">${t.name}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${pct}%;background:${t.color}"></div></div><span class="stats-bar-count">${t.count.toLocaleString()}</span></div>`;
+            });
+            html += '</div>';
+            // Top keys
+            if (stats.keyCounts.size > 0) {
+                const topKeys = [...stats.keyCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+                html += '<div class="stats-top-keys"><h4>Häufigste Keys</h4>';
+                topKeys.forEach(([key, count]) => {
+                    html += `<div class="stats-key-item"><span class="stats-key-name">${escapeHtml(key)}</span><span class="stats-key-count">${count.toLocaleString()}</span></div>`;
+                });
+                html += '</div>';
+            }
+            document.getElementById('statsContent').innerHTML = html;
+            document.getElementById('statsOverlay').classList.add('visible');
+            document.getElementById('statsModal').classList.add('visible');
+        }
+        function computeStatistics(data) {
+            const stats = { objects: 0, arrays: 0, strings: 0, numbers: 0, booleans: 0, nulls: 0, maxDepth: 0, uniqueKeys: new Set(), keyCounts: new Map() };
+            const stack = [{ val: data, depth: 0 }];
+            while (stack.length > 0) {
+                const { val, depth } = stack.pop();
+                if (depth > stats.maxDepth) stats.maxDepth = depth;
+                if (val === null) { stats.nulls++; continue; }
+                if (Array.isArray(val)) {
+                    stats.arrays++;
+                    for (let i = 0; i < val.length; i++) stack.push({ val: val[i], depth: depth + 1 });
+                } else if (typeof val === 'object') {
+                    stats.objects++;
+                    const keys = Object.keys(val).filter(k => k !== '__size');
+                    for (const k of keys) {
+                        stats.uniqueKeys.add(k);
+                        stats.keyCounts.set(k, (stats.keyCounts.get(k) || 0) + 1);
+                        stack.push({ val: val[k], depth: depth + 1 });
+                    }
+                } else if (typeof val === 'string') stats.strings++;
+                else if (typeof val === 'number') stats.numbers++;
+                else if (typeof val === 'boolean') stats.booleans++;
+            }
+            return stats;
+        }
+        function hideStatistics() {
+            document.getElementById('statsOverlay').classList.remove('visible');
+            document.getElementById('statsModal').classList.remove('visible');
+        }
+        document.getElementById('btnStatsClose').onclick = hideStatistics;
+        document.getElementById('statsOverlay').onclick = hideStatistics;
+        document.getElementById('btnStats').onclick = () => showStatistics();
+
+        // ============ BOOKMARKS ============
+        function saveBookmarks() {
+            localStorage.setItem('json-viewer-bookmarks', JSON.stringify(bookmarks));
+        }
+        function addBookmark(path) {
+            if (!path || bookmarks.includes(path)) return;
+            bookmarks.push(path);
+            saveBookmarks();
+            showNotification('Lesezeichen gesetzt: ' + path);
+        }
+        function removeBookmark(path) {
+            bookmarks = bookmarks.filter(b => b !== path);
+            saveBookmarks();
+            renderBookmarksList();
+        }
+        function showBookmarks() {
+            renderBookmarksList();
+            document.getElementById('bookmarksOverlay').classList.add('visible');
+            document.getElementById('bookmarksPanel').classList.add('visible');
+        }
+        function hideBookmarks() {
+            document.getElementById('bookmarksOverlay').classList.remove('visible');
+            document.getElementById('bookmarksPanel').classList.remove('visible');
+        }
+        function renderBookmarksList() {
+            const list = document.getElementById('bookmarksList');
+            if (bookmarks.length === 0) {
+                list.innerHTML = '<div class="bookmarks-empty">Keine Lesezeichen vorhanden.<br>Rechtsklick → "Lesezeichen setzen" zum Hinzufügen.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            bookmarks.forEach(path => {
+                const item = document.createElement('div');
+                item.className = 'bookmark-item';
+                let valuePreview = '';
+                try {
+                    const val = getValueAtPath(path);
+                    if (val !== undefined) {
+                        if (typeof val === 'object' && val !== null) valuePreview = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`;
+                        else valuePreview = String(val).substring(0, 30);
+                    }
+                } catch(e) {}
+                item.innerHTML = `<span class="bookmark-path">${escapeHtml(path)}</span><span class="bookmark-value">${escapeHtml(valuePreview)}</span><button class="bookmark-remove" data-path="${escapeHtml(path)}">✕</button>`;
+                item.querySelector('.bookmark-path').onclick = () => { hideBookmarks(); navigateToPath(path); };
+                item.querySelector('.bookmark-remove').onclick = (e) => { e.stopPropagation(); removeBookmark(path); };
+                list.appendChild(item);
+            });
+        }
+        function navigateToPath(path) {
+            // Find row index for this path and scroll to it
+            if (expandAllMode) {
+                // Need to expand to this path
+                const idx = findRowIndexForPath(path);
+                if (idx >= 0) scrollToIndex(idx);
+            } else {
+                // Ensure ancestors are expanded
+                let p = getParentPath(path);
+                while (p && p !== 'root') {
+                    expandedPaths.add(p);
+                    p = getParentPath(p);
+                }
+                expandedPaths.add('root');
+                renderTree();
+                setTimeout(() => {
+                    const idx = visibleRows.findIndex(r => r.path === path);
+                    if (idx >= 0) scrollToIndex(idx);
+                }, 50);
+            }
+        }
+        function findRowIndexForPath(path) {
+            // Linear search in expand-all mode for a specific path
+            const totalRows = getVisibleRowCount();
+            for (let i = 0; i < totalRows; i++) {
+                const row = getVisibleRow(i);
+                if (row && row.path === path) return i;
+            }
+            return -1;
+        }
+        document.getElementById('btnBookmarksClose').onclick = hideBookmarks;
+        document.getElementById('bookmarksOverlay').onclick = hideBookmarks;
+        document.getElementById('btnBookmarks').onclick = () => showBookmarks();
+
+        // ============ TABLE VIEW ============
+        function showTableView() {
+            if (!jsonData) return;
+            // Find the best array to show as table
+            let targetArray = null;
+            let targetPath = 'root';
+            if (selectedPath) {
+                const val = getValueAtPath(selectedPath);
+                if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+                    targetArray = val;
+                    targetPath = selectedPath;
+                }
+            }
+            if (!targetArray) {
+                if (Array.isArray(jsonData) && jsonData.length > 0 && typeof jsonData[0] === 'object') {
+                    targetArray = jsonData;
+                } else {
+                    // Search for first large array of objects
+                    targetArray = findFirstObjectArray(jsonData);
+                }
+            }
+            if (!targetArray || targetArray.length === 0) {
+                showNotification('Kein Array von Objekten gefunden für Tabellenansicht.');
+                return;
+            }
+            renderTableView(targetArray, targetPath);
+            document.getElementById('tableViewOverlay').classList.add('visible');
+            document.getElementById('tableViewModal').classList.add('visible');
+        }
+        function findFirstObjectArray(obj, maxDepth = 5, depth = 0) {
+            if (depth > maxDepth || !obj || typeof obj !== 'object') return null;
+            if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'object' && obj[0] !== null) return obj;
+            const keys = Array.isArray(obj) ? obj : Object.values(obj);
+            for (const val of keys) {
+                if (typeof val === 'object' && val !== null) {
+                    const found = findFirstObjectArray(val, maxDepth, depth + 1);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+        let tableSortCol = null;
+        let tableSortAsc = true;
+        let tableData = [];
+        let tableColumns = [];
+        function renderTableView(arr, path) {
+            tableData = arr.filter(item => typeof item === 'object' && item !== null);
+            // Collect all columns
+            const colSet = new Set();
+            tableData.forEach(item => {
+                Object.keys(item).filter(k => k !== '__size').forEach(k => colSet.add(k));
+            });
+            tableColumns = [...colSet];
+            tableSortCol = null;
+            tableSortAsc = true;
+            document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${tableData.length} Zeilen)`;
+            document.getElementById('tableFilterInput').value = '';
+            renderTable();
+        }
+        function renderTable(filter = '') {
+            let data = tableData;
+            if (filter) {
+                const lf = filter.toLowerCase();
+                data = data.filter(row => tableColumns.some(col => {
+                    const v = row[col];
+                    return v !== undefined && v !== null && String(v).toLowerCase().includes(lf);
+                }));
+            }
+            if (tableSortCol !== null) {
+                data = [...data].sort((a, b) => {
+                    const va = a[tableSortCol], vb = b[tableSortCol];
+                    if (va === vb) return 0;
+                    if (va === undefined || va === null) return 1;
+                    if (vb === undefined || vb === null) return -1;
+                    if (typeof va === 'number' && typeof vb === 'number') return tableSortAsc ? va - vb : vb - va;
+                    return tableSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+                });
+            }
+            let html = '<table><thead><tr>';
+            html += '<th>#</th>';
+            tableColumns.forEach(col => {
+                const arrow = tableSortCol === col ? (tableSortAsc ? '▲' : '▼') : '';
+                html += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
+            });
+            html += '</tr></thead><tbody>';
+            const maxRows = Math.min(data.length, 5000); // limit for performance
+            for (let i = 0; i < maxRows; i++) {
+                html += '<tr>';
+                html += `<td style="color:var(--text-secondary)">${i + 1}</td>`;
+                tableColumns.forEach(col => {
+                    const val = data[i][col];
+                    let cls = '', display = '';
+                    if (val === null || val === undefined) { cls = 'null-val'; display = val === null ? 'null' : ''; }
+                    else if (typeof val === 'string') { cls = 'string'; display = '"' + (val.length > 50 ? val.substring(0, 50) + '…' : val) + '"'; }
+                    else if (typeof val === 'number') { cls = 'number'; display = String(val); }
+                    else if (typeof val === 'boolean') { cls = 'boolean'; display = String(val); }
+                    else if (typeof val === 'object') { display = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`; }
+                    html += `<td class="${cls}" title="${escapeHtml(String(val))}">${escapeHtml(display)}</td>`;
+                });
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            document.getElementById('tableScroll').innerHTML = html;
+            document.getElementById('tableInfo').textContent = `${data.length} von ${tableData.length} Zeilen angezeigt` + (maxRows < data.length ? ` (max ${maxRows})` : '');
+            // Attach sort handlers
+            document.querySelectorAll('#tableScroll th[data-col]').forEach(th => {
+                th.onclick = () => {
+                    const col = th.dataset.col;
+                    if (tableSortCol === col) tableSortAsc = !tableSortAsc;
+                    else { tableSortCol = col; tableSortAsc = true; }
+                    renderTable(document.getElementById('tableFilterInput').value);
+                };
+            });
+        }
+        function hideTableView() {
+            document.getElementById('tableViewOverlay').classList.remove('visible');
+            document.getElementById('tableViewModal').classList.remove('visible');
+        }
+        document.getElementById('btnTableClose').onclick = hideTableView;
+        document.getElementById('tableViewOverlay').onclick = hideTableView;
+        document.getElementById('btnTableView').onclick = () => showTableView();
+        document.getElementById('tableFilterInput').oninput = (e) => renderTable(e.target.value);
+
+        // ============ RAW VIEW (Syntax-Highlighted) ============
+        function showRawView() {
+            if (!jsonData) return;
+            const target = selectedPath ? getValueAtPath(selectedPath) : jsonData;
+            const json = JSON.stringify(target, (key, val) => key === '__size' ? undefined : val, 2);
+            // Limit to 500K chars for performance
+            const limited = json.length > 500000 ? json.substring(0, 500000) + '\n\n... (abgeschnitten bei 500 KB)' : json;
+            document.getElementById('rawContent').innerHTML = syntaxHighlightJSON(limited);
+            document.getElementById('rawViewOverlay').classList.add('visible');
+            document.getElementById('rawViewModal').classList.add('visible');
+        }
+        function syntaxHighlightJSON(json) {
+            return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span class="json-key">$1</span><span class="json-colon">:</span>')
+                .replace(/"(?:\\.|[^"\\])*"/g, '<span class="json-string">$&</span>')
+                .replace(/\b(-?\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="json-number">$1</span>')
+                .replace(/\b(true|false)\b/g, '<span class="json-boolean">$1</span>')
+                .replace(/\bnull\b/g, '<span class="json-null">null</span>')
+                .replace(/([{}\[\]])/g, '<span class="json-bracket">$1</span>');
+        }
+        function hideRawView() {
+            document.getElementById('rawViewOverlay').classList.remove('visible');
+            document.getElementById('rawViewModal').classList.remove('visible');
+        }
+        document.getElementById('btnRawClose').onclick = hideRawView;
+        document.getElementById('rawViewOverlay').onclick = hideRawView;
+        document.getElementById('btnRawView').onclick = () => showRawView();
+
+        // ============ DUPLICATE DETECTION ============
+        function showDuplicates() {
+            if (!jsonData) return;
+            status.textContent = 'Suche Duplikate...';
+            setTimeout(() => {
+                const dupes = findDuplicates(jsonData);
+                renderDuplicates(dupes);
+                document.getElementById('dupesOverlay').classList.add('visible');
+                document.getElementById('dupesModal').classList.add('visible');
+                status.textContent = `${dupes.length} Duplikat-Gruppen gefunden`;
+            }, 16);
+        }
+        function findDuplicates(data) {
+            const hashMap = new Map();
+            const stack = [{ val: data, path: 'root' }];
+            let count = 0;
+            const MAX_ITEMS = 100000; // limit for performance
+            while (stack.length > 0 && count < MAX_ITEMS) {
+                const { val, path } = stack.pop();
+                if (val === null || typeof val !== 'object') continue;
+                count++;
+                if (Array.isArray(val)) {
+                    for (let i = 0; i < val.length; i++) {
+                        const child = val[i];
+                        if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
+                            const hash = JSON.stringify(child, (k, v) => k === '__size' ? undefined : v);
+                            if (hash.length < 10000) { // skip huge objects
+                                if (!hashMap.has(hash)) hashMap.set(hash, []);
+                                hashMap.get(hash).push(`${path}[${i}]`);
+                            }
+                        }
+                        stack.push({ val: child, path: `${path}[${i}]` });
+                    }
+                } else {
+                    const keys = Object.keys(val).filter(k => k !== '__size');
+                    for (const k of keys) {
+                        stack.push({ val: val[k], path: `${path}.${k}` });
+                    }
+                }
+            }
+            // Only return groups with duplicates
+            return [...hashMap.entries()].filter(([, paths]) => paths.length > 1).map(([hash, paths]) => {
+                const preview = hash.length > 80 ? hash.substring(0, 80) + '…' : hash;
+                return { preview, paths, count: paths.length };
+            }).sort((a, b) => b.count - a.count).slice(0, 50);
+        }
+        function renderDuplicates(dupes) {
+            const content = document.getElementById('dupesContent');
+            if (dupes.length === 0) {
+                content.innerHTML = '<div class="dupes-none">Keine Duplikate gefunden.</div>';
+                return;
+            }
+            let html = '';
+            dupes.forEach(group => {
+                html += '<div class="dupes-group">';
+                html += `<div class="dupes-group-header">${group.count}× identisch: ${escapeHtml(group.preview)}</div>`;
+                group.paths.forEach(path => {
+                    html += `<div class="dupes-group-item" data-nav-path="${escapeHtml(path)}">${escapeHtml(path)}</div>`;
+                });
+                html += '</div>';
+            });
+            content.innerHTML = html;
+            content.querySelectorAll('.dupes-group-item').forEach(el => {
+                el.onclick = () => { hideDuplicates(); navigateToPath(el.dataset.navPath); };
+            });
+        }
+        function hideDuplicates() {
+            document.getElementById('dupesOverlay').classList.remove('visible');
+            document.getElementById('dupesModal').classList.remove('visible');
+        }
+        document.getElementById('btnDupesClose').onclick = hideDuplicates;
+        document.getElementById('dupesOverlay').onclick = hideDuplicates;
+        document.getElementById('btnDuplicates').onclick = () => showDuplicates();
+
+        // ============ JSONPATH QUERIES ============
+        function toggleJsonPathBar() {
+            const bar = document.getElementById('jsonpathBar');
+            if (bar.classList.contains('visible')) {
+                bar.classList.remove('visible');
+            } else {
+                bar.classList.add('visible');
+                document.getElementById('jsonpathInput').focus();
+            }
+        }
+        function executeJsonPath() {
+            if (!jsonData) return;
+            const expr = document.getElementById('jsonpathInput').value.trim();
+            if (!expr) return;
+            try {
+                const results = jsonPathQuery(jsonData, expr);
+                document.getElementById('jsonpathResultCount').textContent = `${results.length} Treffer`;
+                if (results.length > 0) {
+                    // Show results in match list
+                    searchMatches = results.map(r => r.path);
+                    currentMatchIndex = 0;
+                    updateSearchInfo();
+                    scrollToMatch(0);
+                    showNotification(`JSONPath: ${results.length} Treffer`);
+                } else {
+                    showNotification('JSONPath: Keine Treffer');
+                }
+            } catch(e) {
+                document.getElementById('jsonpathResultCount').textContent = 'Fehler';
+                showNotification('JSONPath Fehler: ' + e.message);
+            }
+        }
+        function jsonPathQuery(data, expr) {
+            // Simple JSONPath implementation supporting: $, ., .., *, [n], [*]
+            const results = [];
+            if (expr.startsWith('$')) expr = expr.substring(1);
+            if (expr.startsWith('.')) expr = expr.substring(1);
+            
+            const segments = parseJsonPathSegments(expr);
+            queryRecursive(data, segments, 0, 'root', results);
+            return results;
+        }
+        function parseJsonPathSegments(expr) {
+            const segments = [];
+            let i = 0;
+            while (i < expr.length) {
+                if (expr[i] === '.') {
+                    if (expr[i + 1] === '.') {
+                        segments.push({ type: 'recursive' });
+                        i += 2;
+                    } else {
+                        i++;
+                    }
+                } else if (expr[i] === '[') {
+                    const end = expr.indexOf(']', i);
+                    if (end < 0) break;
+                    const inner = expr.substring(i + 1, end);
+                    if (inner === '*') segments.push({ type: 'wildcard-index' });
+                    else segments.push({ type: 'index', value: parseInt(inner, 10) });
+                    i = end + 1;
+                } else if (expr[i] === '*') {
+                    segments.push({ type: 'wildcard' });
+                    i++;
+                } else {
+                    let end = i;
+                    while (end < expr.length && expr[end] !== '.' && expr[end] !== '[') end++;
+                    segments.push({ type: 'key', value: expr.substring(i, end) });
+                    i = end;
+                }
+            }
+            return segments;
+        }
+        function queryRecursive(data, segments, segIdx, path, results) {
+            if (segIdx >= segments.length) {
+                results.push({ path, value: data });
+                return;
+            }
+            if (results.length > 10000) return; // safety limit
+            const seg = segments[segIdx];
+            if (seg.type === 'recursive') {
+                // Try matching rest of segments at this level
+                queryRecursive(data, segments, segIdx + 1, path, results);
+                // And recurse into children
+                if (data !== null && typeof data === 'object') {
+                    if (Array.isArray(data)) {
+                        for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx, `${path}[${i}]`, results);
+                    } else {
+                        for (const k of Object.keys(data).filter(k => k !== '__size')) queryRecursive(data[k], segments, segIdx, `${path}.${k}`, results);
+                    }
+                }
+            } else if (seg.type === 'key') {
+                if (data !== null && typeof data === 'object' && !Array.isArray(data) && data.hasOwnProperty(seg.value)) {
+                    queryRecursive(data[seg.value], segments, segIdx + 1, `${path}.${seg.value}`, results);
+                }
+            } else if (seg.type === 'index') {
+                if (Array.isArray(data) && seg.value < data.length) {
+                    queryRecursive(data[seg.value], segments, segIdx + 1, `${path}[${seg.value}]`, results);
+                }
+            } else if (seg.type === 'wildcard' || seg.type === 'wildcard-index') {
+                if (data !== null && typeof data === 'object') {
+                    if (Array.isArray(data)) {
+                        for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx + 1, `${path}[${i}]`, results);
+                    } else {
+                        for (const k of Object.keys(data).filter(k => k !== '__size')) queryRecursive(data[k], segments, segIdx + 1, `${path}.${k}`, results);
+                    }
+                }
+            }
+        }
+        function exportJsonPathResults() {
+            if (!jsonData) return;
+            const expr = document.getElementById('jsonpathInput').value.trim();
+            if (!expr) return;
+            try {
+                const results = jsonPathQuery(jsonData, expr);
+                const exportData = results.map(r => r.value);
+                const json = JSON.stringify(exportData.length === 1 ? exportData[0] : exportData, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'jsonpath-result.json'; a.click();
+                URL.revokeObjectURL(url);
+            } catch(e) {
+                showNotification('Export-Fehler: ' + e.message);
+            }
+        }
+        document.getElementById('btnJsonPath').onclick = () => toggleJsonPathBar();
+        document.getElementById('btnJsonPathRun').onclick = executeJsonPath;
+        document.getElementById('btnJsonPathExport').onclick = exportJsonPathResults;
+        document.getElementById('jsonpathInput').onkeydown = (e) => {
+            if (e.key === 'Enter') executeJsonPath();
+            if (e.key === 'Escape') toggleJsonPathBar();
+        };
+
+        // ============ NOTIFICATION HELPER ============
+        function showNotification(msg, duration = 2500) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+            const el = document.createElement('div');
+            el.className = 'notification';
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), duration);
+        }
+
+        // ============ DIFF VIEW ============
+        let diffSecondData = null;
+        function showDiffView() {
+            if (!jsonData) return;
+            document.getElementById('diffOverlay').classList.add('visible');
+            document.getElementById('diffModal').classList.add('visible');
+            const leftPanel = document.getElementById('diffLeft');
+            leftPanel.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">Aktuelle Datei: ' + (fileName || 'JSON') + '</div>' +
+                '<pre style="margin:0;">' + escapeHTML(JSON.stringify(jsonData, (k, v) => k === '__size' ? undefined : v, 2).substring(0, 500000)) + '</pre>';
+            const rightPanel = document.getElementById('diffRight');
+            if (diffSecondData) {
+                renderDiffPanels();
+            } else {
+                rightPanel.innerHTML = '<div style="color:var(--text-secondary);padding:20px;text-align:center;">Klicke "Zweite Datei laden..." um einen Vergleich zu starten.</div>';
+            }
+            document.getElementById('diffSummary').textContent = diffSecondData ? '' : 'Zweite Datei auswählen um Unterschiede zu sehen.';
+        }
+        function hideDiffView() {
+            document.getElementById('diffOverlay').classList.remove('visible');
+            document.getElementById('diffModal').classList.remove('visible');
+        }
+        function loadDiffFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,.jsonl,.ndjson';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        diffSecondData = JSON.parse(ev.target.result);
+                        renderDiffPanels();
+                    } catch(err) {
+                        showNotification('Fehler beim Parsen: ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        function renderDiffPanels() {
+            const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => k === '__size' ? undefined : v));
+            const left = clean(jsonData);
+            const right = clean(diffSecondData);
+            const diffs = computeDiffs(left, right, '$');
+            const leftLines = JSON.stringify(left, null, 2).split('\n');
+            const rightLines = JSON.stringify(right, null, 2).split('\n');
+            // Simple LCS-based line diff
+            const result = lineDiff(leftLines, rightLines);
+            document.getElementById('diffLeft').innerHTML = result.left.map(l =>
+                `<div class="${l.type === 'removed' ? 'diff-line-removed' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHTML(l.text)}</div>`
+            ).join('');
+            document.getElementById('diffRight').innerHTML = result.right.map(l =>
+                `<div class="${l.type === 'added' ? 'diff-line-added' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHTML(l.text)}</div>`
+            ).join('');
+            const added = result.right.filter(l => l.type === 'added').length;
+            const removed = result.left.filter(l => l.type === 'removed').length;
+            const changed = result.left.filter(l => l.type === 'changed').length;
+            document.getElementById('diffSummary').textContent = `Unterschiede: +${added} hinzugefügt, -${removed} entfernt, ~${changed} geändert`;
+        }
+        function computeDiffs(a, b, path) {
+            const diffs = [];
+            if (typeof a !== typeof b || Array.isArray(a) !== Array.isArray(b)) {
+                diffs.push({ path, type: 'type-change', from: typeof a, to: typeof b });
+                return diffs;
+            }
+            if (a === null || b === null || typeof a !== 'object') {
+                if (a !== b) diffs.push({ path, type: 'value-change', from: a, to: b });
+                return diffs;
+            }
+            if (Array.isArray(a)) {
+                const maxLen = Math.max(a.length, b.length);
+                for (let i = 0; i < maxLen; i++) {
+                    if (i >= a.length) diffs.push({ path: `${path}[${i}]`, type: 'added' });
+                    else if (i >= b.length) diffs.push({ path: `${path}[${i}]`, type: 'removed' });
+                    else diffs.push(...computeDiffs(a[i], b[i], `${path}[${i}]`));
+                }
+            } else {
+                const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
+                for (const k of allKeys) {
+                    if (!(k in a)) diffs.push({ path: `${path}.${k}`, type: 'added' });
+                    else if (!(k in b)) diffs.push({ path: `${path}.${k}`, type: 'removed' });
+                    else diffs.push(...computeDiffs(a[k], b[k], `${path}.${k}`));
+                }
+            }
+            return diffs;
+        }
+        function lineDiff(a, b) {
+            // Simple O(n*m) LCS for reasonable sizes, fallback for large ones
+            const MAX = 5000;
+            if (a.length > MAX || b.length > MAX) {
+                return {
+                    left: a.map(t => ({ text: t, type: '' })),
+                    right: b.map(t => ({ text: t, type: '' }))
+                };
+            }
+            const m = a.length, n = b.length;
+            const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+            for (let i = 1; i <= m; i++)
+                for (let j = 1; j <= n; j++)
+                    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+            const left = [], right = [];
+            let i = m, j = n;
+            const lcsLeft = [], lcsRight = [];
+            while (i > 0 && j > 0) {
+                if (a[i-1] === b[j-1]) {
+                    lcsLeft.unshift({ text: a[i-1], type: '' });
+                    lcsRight.unshift({ text: b[j-1], type: '' });
+                    i--; j--;
+                } else if (dp[i-1][j] > dp[i][j-1]) {
+                    lcsLeft.unshift({ text: a[i-1], type: 'removed' });
+                    i--;
+                } else {
+                    lcsRight.unshift({ text: b[j-1], type: 'added' });
+                    j--;
+                }
+            }
+            while (i > 0) { lcsLeft.unshift({ text: a[--i], type: 'removed' }); }
+            while (j > 0) { lcsRight.unshift({ text: b[--j], type: 'added' }); }
+            // Merge
+            let li = 0, ri = 0;
+            const mergedLeft = [...lcsLeft], mergedRight = [...lcsRight];
+            // Actually just return them directly — interleave via LCS already done
+            return { left: [...lcsLeft, ...Array.from({length: i}, (_, idx) => ({ text: a[idx], type: 'removed' }))],
+                     right: [...lcsRight, ...Array.from({length: j}, (_, idx) => ({ text: b[idx], type: 'added' }))] };
+        }
+        document.getElementById('btnDiff').onclick = showDiffView;
+        document.getElementById('btnDiffClose').onclick = hideDiffView;
+        document.getElementById('diffOverlay').onclick = hideDiffView;
+        document.getElementById('btnDiffLoad').onclick = loadDiffFile;
+
+        // ============ SCHEMA VALIDATION ============
+        function showSchema() {
+            if (!jsonData) return;
+            document.getElementById('schemaOverlay').classList.add('visible');
+            document.getElementById('schemaModal').classList.add('visible');
+            const schema = inferSchema(jsonData);
+            document.getElementById('schemaContent').innerHTML = renderSchemaTree(schema, '');
+        }
+        function hideSchema() {
+            document.getElementById('schemaOverlay').classList.remove('visible');
+            document.getElementById('schemaModal').classList.remove('visible');
+        }
+        function inferSchema(data, depth = 0) {
+            if (depth > 20) return { type: '...' };
+            if (data === null) return { type: 'null' };
+            if (Array.isArray(data)) {
+                const cleanArr = data.filter(item => typeof item !== 'undefined');
+                if (cleanArr.length === 0) return { type: 'array', items: { type: 'any' } };
+                // Sample up to 100 items
+                const sample = cleanArr.slice(0, 100);
+                const itemSchemas = sample.map(item => inferSchema(item, depth + 1));
+                const merged = mergeSchemas(itemSchemas);
+                return { type: 'array', items: merged, count: data.length };
+            }
+            if (typeof data === 'object') {
+                const keys = Object.keys(data).filter(k => k !== '__size');
+                const properties = {};
+                for (const k of keys) {
+                    properties[k] = inferSchema(data[k], depth + 1);
+                }
+                return { type: 'object', properties, keyCount: keys.length };
+            }
+            return { type: typeof data };
+        }
+        function mergeSchemas(schemas) {
+            if (schemas.length === 0) return { type: 'any' };
+            const types = new Set(schemas.map(s => s.type));
+            if (types.size === 1) {
+                const first = schemas[0];
+                if (first.type === 'object') {
+                    // Merge all object properties
+                    const allProps = {};
+                    const keyCounts = {};
+                    for (const s of schemas) {
+                        if (s.properties) {
+                            for (const k of Object.keys(s.properties)) {
+                                if (!allProps[k]) allProps[k] = [];
+                                allProps[k].push(s.properties[k]);
+                                keyCounts[k] = (keyCounts[k] || 0) + 1;
+                            }
+                        }
+                    }
+                    const mergedProps = {};
+                    for (const k of Object.keys(allProps)) {
+                        mergedProps[k] = mergeSchemas(allProps[k]);
+                        mergedProps[k].__required = keyCounts[k] === schemas.length;
+                    }
+                    return { type: 'object', properties: mergedProps };
+                }
+                if (first.type === 'array') {
+                    return { type: 'array', items: mergeSchemas(schemas.filter(s => s.items).map(s => s.items)) };
+                }
+                return first;
+            }
+            return { type: 'mixed', types: [...types] };
+        }
+        function renderSchemaTree(schema, indent) {
+            const pad = indent;
+            if (!schema) return `<div class="schema-node">${pad}<span class="schema-type schema-type-null">any</span></div>`;
+            if (schema.type === 'mixed') {
+                return `<div class="schema-node">${pad}<span class="schema-type schema-type-mixed">${schema.types.join(' | ')}</span></div>`;
+            }
+            if (schema.type === 'object' && schema.properties) {
+                const keys = Object.keys(schema.properties);
+                if (keys.length === 0) return `<div class="schema-node">${pad}<span class="schema-type schema-type-object">object</span> {}</div>`;
+                let html = `<div class="schema-node">${pad}<span class="schema-type schema-type-object">object</span> {${schema.keyCount ? ' (' + schema.keyCount + ' keys)' : ''}</div>`;
+                for (const k of keys.slice(0, 100)) {
+                    const prop = schema.properties[k];
+                    const req = prop.__required !== false ? '<span class="schema-required"> *</span>' : '<span class="schema-optional"> ?</span>';
+                    html += `<div class="schema-node">${indent}  <span class="schema-key">"${escapeHTML(k)}"</span>${req}: `;
+                    if (prop.type === 'object' || prop.type === 'array') {
+                        html += '</div>' + renderSchemaTree(prop, indent + '    ');
+                    } else {
+                        const cls = 'schema-type-' + (prop.type === 'mixed' ? 'mixed' : prop.type);
+                        html += `<span class="schema-type ${cls}">${prop.type === 'mixed' ? prop.types.join(' | ') : prop.type}</span></div>`;
+                    }
+                }
+                if (keys.length > 100) html += `<div class="schema-node">${indent}  ... und ${keys.length - 100} weitere Keys</div>`;
+                html += `<div class="schema-node">${pad}}</div>`;
+                return html;
+            }
+            if (schema.type === 'array') {
+                let html = `<div class="schema-node">${pad}<span class="schema-type schema-type-array">array</span> [${schema.count ? ' (' + schema.count + ' items)' : ''}]</div>`;
+                html += renderSchemaTree(schema.items, indent + '  ');
+                return html;
+            }
+            const cls = 'schema-type-' + schema.type;
+            return `<div class="schema-node">${pad}<span class="schema-type ${cls}">${schema.type}</span></div>`;
+        }
+        document.getElementById('btnSchema').onclick = showSchema;
+        document.getElementById('btnSchemaClose').onclick = hideSchema;
+        document.getElementById('schemaOverlay').onclick = hideSchema;
+
+        // ============ BULK OPERATIONS ============
+        function showBulk() {
+            if (!jsonData) return;
+            document.getElementById('bulkOverlay').classList.add('visible');
+            document.getElementById('bulkModal').classList.add('visible');
+            document.getElementById('bulkPreview').style.display = 'none';
+            updateBulkUI();
+        }
+        function hideBulk() {
+            document.getElementById('bulkOverlay').classList.remove('visible');
+            document.getElementById('bulkModal').classList.remove('visible');
+        }
+        function updateBulkUI() {
+            const op = document.getElementById('bulkOp').value;
+            const fromSection = document.getElementById('bulkFieldFrom');
+            const toSection = document.getElementById('bulkFieldTo');
+            const valueSection = document.getElementById('bulkFieldValue');
+            fromSection.style.display = 'block';
+            toSection.style.display = 'block';
+            valueSection.style.display = 'none';
+            if (op === 'renameKey') {
+                fromSection.querySelector('label').textContent = 'Alter Key-Name:';
+                toSection.querySelector('label').textContent = 'Neuer Key-Name:';
+            } else if (op === 'deleteKey') {
+                fromSection.querySelector('label').textContent = 'Key zum Löschen:';
+                toSection.style.display = 'none';
+            } else if (op === 'replaceValue') {
+                fromSection.querySelector('label').textContent = 'Key-Name:';
+                toSection.querySelector('label').textContent = 'Suchwert (JSON):';
+                valueSection.style.display = 'block';
+            } else if (op === 'addKey') {
+                fromSection.querySelector('label').textContent = 'Neuer Key-Name:';
+                toSection.style.display = 'none';
+                valueSection.style.display = 'block';
+                valueSection.querySelector('label').textContent = 'Wert (JSON):';
+            }
+        }
+        function bulkPreview() {
+            const op = document.getElementById('bulkOp').value;
+            const keyFrom = document.getElementById('bulkKeyFrom').value.trim();
+            if (!keyFrom) { showNotification('Bitte Key-Name eingeben'); return; }
+            const count = countBulkMatches(jsonData, op, keyFrom);
+            const preview = document.getElementById('bulkPreview');
+            preview.style.display = 'block';
+            preview.textContent = `Gefunden: ${count} Vorkommen von "${keyFrom}" werden betroffen.`;
+        }
+        function countBulkMatches(data, op, key, count = { n: 0 }) {
+            if (data === null || typeof data !== 'object') return count.n;
+            if (Array.isArray(data)) {
+                for (const item of data) {
+                    if (typeof item === 'object' && item !== null) countBulkMatches(item, op, key, count);
+                }
+            } else {
+                const keys = Object.keys(data).filter(k => k !== '__size');
+                for (const k of keys) {
+                    if (k === key) count.n++;
+                    if (typeof data[k] === 'object' && data[k] !== null) countBulkMatches(data[k], op, key, count);
+                }
+            }
+            return count.n;
+        }
+        function bulkApply() {
+            const op = document.getElementById('bulkOp').value;
+            const keyFrom = document.getElementById('bulkKeyFrom').value.trim();
+            const keyTo = document.getElementById('bulkKeyTo').value.trim();
+            const newValueStr = document.getElementById('bulkNewValue').value.trim();
+            if (!keyFrom) { showNotification('Bitte Key-Name eingeben'); return; }
+            saveUndoState();
+            let count = 0;
+            function walk(data) {
+                if (data === null || typeof data !== 'object') return;
+                if (Array.isArray(data)) {
+                    for (const item of data) walk(item);
+                    return;
+                }
+                const keys = Object.keys(data).filter(k => k !== '__size');
+                for (const k of keys) {
+                    if (k === keyFrom) {
+                        if (op === 'renameKey' && keyTo) {
+                            data[keyTo] = data[k];
+                            delete data[k];
+                            count++;
+                        } else if (op === 'deleteKey') {
+                            delete data[k];
+                            count++;
+                        } else if (op === 'replaceValue') {
+                            try {
+                                const newVal = JSON.parse(newValueStr);
+                                data[k] = newVal;
+                                count++;
+                            } catch(e) { /* skip */ }
+                        }
+                    }
+                    if (typeof data[k] === 'object' && data[k] !== null) walk(data[k]);
+                }
+                if (op === 'addKey' && !data.hasOwnProperty(keyFrom)) {
+                    // addKey: only add to objects that don't already have the key
+                }
+                if (op === 'addKey' && typeof data === 'object' && !Array.isArray(data)) {
+                    if (!data.hasOwnProperty(keyFrom)) {
+                        try {
+                            data[keyFrom] = JSON.parse(newValueStr || 'null');
+                            count++;
+                        } catch(e) { data[keyFrom] = null; count++; }
+                    }
+                }
+            }
+            walk(jsonData);
+            computeSubtreeSize(jsonData);
+            buildFlatList(jsonData);
+            renderVisibleItems();
+            isModified = true;
+            document.title = '● ' + fileName + ' – JSON Viewer';
+            showNotification(`${count} Änderungen angewendet`);
+            hideBulk();
+        }
+        document.getElementById('bulkOp').onchange = updateBulkUI;
+        document.getElementById('btnBulk').onclick = showBulk;
+        document.getElementById('btnBulkClose').onclick = hideBulk;
+        document.getElementById('bulkOverlay').onclick = hideBulk;
+        document.getElementById('btnBulkPreview').onclick = bulkPreview;
+        document.getElementById('btnBulkApply').onclick = bulkApply;
+
+        // ============ JSON PATCH EXPORT (RFC 6902) ============
+        let patchOps = [];
+        function recordPatch(op, path, value, oldValue) {
+            const jsonPointer = path.replace(/\$/g, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1');
+            if (op === 'replace') patchOps.push({ op: 'replace', path: jsonPointer || '/', value });
+            else if (op === 'add') patchOps.push({ op: 'add', path: jsonPointer || '/', value });
+            else if (op === 'remove') patchOps.push({ op: 'remove', path: jsonPointer || '/' });
+        }
+        function exportJsonPatch() {
+            if (patchOps.length === 0) {
+                showNotification('Keine Änderungen zum Exportieren');
+                return;
+            }
+            const json = JSON.stringify(patchOps, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'patch.json'; a.click();
+            URL.revokeObjectURL(url);
+            showNotification(`${patchOps.length} Patch-Operationen exportiert`);
+        }
+
+        // ============ REST CLIENT ============
+        function showRestClient() {
+            const url = prompt('JSON URL laden:', 'https://jsonplaceholder.typicode.com/posts');
+            if (!url) return;
+            status.textContent = 'Lade von URL...';
+            fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    return response.text();
+                })
+                .then(text => {
+                    try {
+                        const data = JSON.parse(text);
+                        jsonData = data;
+                        computeSubtreeSize(jsonData);
+                        fileName = new URL(url).pathname.split('/').pop() || 'api-response.json';
+                        fileSize = text.length;
+                        document.title = fileName + ' – JSON Viewer';
+                        expandedPaths.clear();
+                        expandAllMode = false;
+                        buildFlatList(jsonData);
+                        enableButtons();
+                        scrollTop = 0;
+                        renderVisibleItems();
+                        let nodeCount = jsonData.__size || 0;
+                        status.textContent = `${fileName} (${formatBytes(fileSize)}) – ${nodeCount.toLocaleString()} Knoten – Geladen von URL`;
+                        showNotification('JSON von URL geladen');
+                    } catch(e) {
+                        status.textContent = 'Fehler: ' + e.message;
+                        showNotification('Parse-Fehler: ' + e.message);
+                    }
+                })
+                .catch(err => {
+                    status.textContent = 'Fehler: ' + err.message;
+                    showNotification('Laden fehlgeschlagen: ' + err.message);
+                });
+        }
+        document.getElementById('btnRestClient').onclick = showRestClient;
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             const isMac = navigator.platform.includes('Mac');
@@ -4961,6 +6707,16 @@
                 hideGotoDialog();
                 hideGotoLineDialog();
                 hideHelp();
+                hideStatistics();
+                hideBookmarks();
+                hideTableView();
+                hideRawView();
+                hideDuplicates();
+                hideDiffView();
+                hideSchema();
+                hideBulk();
+                const jpBar = document.getElementById('jsonpathBar');
+                if (jpBar.classList.contains('visible')) jpBar.classList.remove('visible');
             }
             
             if (mod) {
@@ -4979,6 +6735,12 @@
                 else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
                 else if (e.key === 'y') { e.preventDefault(); redo(); }
                 else if (e.key === 'p') { e.preventDefault(); showGotoDialog(); }
+                else if (e.key === 'i') { e.preventDefault(); showStatistics(); }
+                else if (e.key === 'b') { e.preventDefault(); if (selectedPath) addBookmark(selectedPath); else showBookmarks(); }
+                else if (e.key === 't') { e.preventDefault(); showTableView(); }
+                else if (e.key === 'r' && !e.shiftKey) { e.preventDefault(); showRawView(); }
+                else if (e.key === 'j') { e.preventDefault(); toggleJsonPathBar(); }
+                else if (e.key === 'd') { e.preventDefault(); showDiffView(); }
             } else if (jsonData) {
                 if (e.key === '+' || e.key === '=') { e.preventDefault(); expandLevel(); }
                 else if (e.key === '-') { e.preventDefault(); collapseLevel(); }
