@@ -8,9 +8,16 @@ use std::path::PathBuf;
 use std::io::Read;
 use serde::{Deserialize, Serialize};
 
-// Optimized fast file reading command with memory mapping for very large files
+// Optimized fast file reading command with buffered reading for large files
 #[tauri::command]
 fn read_file_fast(path: String) -> Result<String, String> {
+    // Validate file path: only allow JSON/TXT files
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    }
+    
     let file = fs::File::open(&path)
         .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
     
@@ -19,7 +26,7 @@ fn read_file_fast(path: String) -> Result<String, String> {
     
     let file_size = metadata.len() as usize;
     
-    // For files > 10MB, use memory mapping (much faster, bypasses AV scanning partially)
+    // For files > 10MB, use buffered reading (much faster for large files)
     if file_size > 10 * 1024 * 1024 {
         #[cfg(windows)]
         {
@@ -58,7 +65,66 @@ fn read_file_fast(path: String) -> Result<String, String> {
 // Fast file writing command
 #[tauri::command]
 fn write_file_fast(path: String, content: String) -> Result<(), String> {
+    // Validate file path: only allow JSON files for writing
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
+    }
     fs::write(&path, content).map_err(|e| format!("Fehler beim Schreiben: {}", e))
+}
+
+// Get file statistics: exact byte size and accurate JSON node count (Rust-side)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FileStats {
+    size_bytes: u64,
+    node_count: u64,
+}
+
+fn count_json_value(val: &serde_json::Value) -> u64 {
+    // Iterative counting to handle arbitrarily deep/large structures
+    let mut count: u64 = 0;
+    let mut stack: Vec<&serde_json::Value> = vec![val];
+    while let Some(v) = stack.pop() {
+        count += 1;
+        match v {
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    stack.push(item);
+                }
+            }
+            serde_json::Value::Object(map) => {
+                for (_k, item) in map {
+                    stack.push(item);
+                }
+            }
+            _ => {}
+        }
+    }
+    count
+}
+
+#[tauri::command]
+fn get_file_stats(path: String) -> Result<FileStats, String> {
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    }
+
+    let metadata = fs::metadata(&path)
+        .map_err(|e| format!("Fehler Metadaten: {}", e))?;
+    let size_bytes = metadata.len();
+
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("JSON-Parse-Fehler: {}", e))?;
+
+    let node_count = count_json_value(&parsed);
+
+    Ok(FileStats { size_bytes, node_count })
 }
 
 // Window state persistence
@@ -73,7 +139,9 @@ struct WindowState {
 fn get_window_state_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        let app_data = std::env::var("APPDATA").unwrap_or_else(|_| String::from("C:\\"));
+        let app_data = std::env::var("APPDATA").unwrap_or_else(|_| {
+            std::env::temp_dir().to_string_lossy().to_string()
+        });
         PathBuf::from(app_data)
             .join("com.jsonviewer.app")
             .join("window_state.json")
@@ -81,7 +149,9 @@ fn get_window_state_path() -> PathBuf {
     
     #[cfg(target_os = "macos")]
     {
-        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+        let home = std::env::var("HOME").unwrap_or_else(|_| {
+            std::env::temp_dir().to_string_lossy().to_string()
+        });
         PathBuf::from(home)
             .join("Library/Application Support/com.jsonviewer.app")
             .join("window_state.json")
@@ -89,7 +159,9 @@ fn get_window_state_path() -> PathBuf {
     
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
+        let home = std::env::var("HOME").unwrap_or_else(|_| {
+            std::env::temp_dir().to_string_lossy().to_string()
+        });
         PathBuf::from(home)
             .join(".config/com.jsonviewer.app")
             .join("window_state.json")
@@ -380,7 +452,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, write_file_fast, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, write_file_fast, get_file_stats, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       
@@ -413,10 +485,7 @@ pub fn run() {
                       let app_handle_clone = app_handle.clone();
                       std::thread::spawn(move || {
                           std::thread::sleep(std::time::Duration::from_millis(800));
-                          if let Some(window) = app_handle_clone.get_webview_window("main") {
-                              let escaped = path_clone.replace("\\", "\\\\").replace("'", "\\'");
-                              let _ = window.eval(&format!("loadFileFromPath('{}')", escaped));
-                          }
+                          let _ = app_handle_clone.emit("open-file", &path_clone);
                       });
                   }
               }
@@ -425,17 +494,13 @@ pub fn run() {
       
       // Fallback: Check raw env args (for "Open With")
       let args: Vec<String> = std::env::args().collect();
-      println!("DEBUG: args = {:?}", args);
       for arg in args.iter().skip(1) {
           if arg.ends_with(".json") && std::path::Path::new(arg).exists() {
               let path_clone = arg.clone();
               let app_handle_clone = app_handle.clone();
               std::thread::spawn(move || {
                   std::thread::sleep(std::time::Duration::from_millis(800));
-                  if let Some(window) = app_handle_clone.get_webview_window("main") {
-                      let escaped = path_clone.replace("\\", "\\\\").replace("'", "\\'");
-                      let _ = window.eval(&format!("loadFileFromPath('{}')", escaped));
-                  }
+                  let _ = app_handle_clone.emit("open-file", &path_clone);
               });
               break;
           }
@@ -489,9 +554,7 @@ pub fn run() {
           if let Some(ext) = path.extension() {
             if ext == "json" {
               let path_str = path.to_string_lossy().to_string();
-              let escaped = path_str.replace("\\", "\\\\").replace("'", "\\'");
-              let js = format!("loadFileFromPath('{}')", escaped);
-              let _ = window.emit("load-file", js);
+              let _ = window.emit("open-file", &path_str);
             }
           }
         }

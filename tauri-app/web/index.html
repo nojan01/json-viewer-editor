@@ -800,26 +800,39 @@
             left: 0;
             right: 0;
             bottom: 0;
-            overflow-y: auto;
-            overflow-x: auto;
+            overflow: hidden;
         }
         
-        .virtual-list::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
-        
-        .virtual-list::-webkit-scrollbar-track {
+        /* Custom scrollbar (replaces native scroll to avoid browser height limits) */
+        .custom-scrollbar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 12px;
             background: var(--bg-primary);
+            z-index: 10;
+            cursor: default;
         }
         
-        .virtual-list::-webkit-scrollbar-thumb {
+        .custom-scrollbar-thumb {
+            position: absolute;
+            right: 1px;
+            width: 10px;
+            min-height: 20px;
             background: var(--bg-hover);
             border-radius: 5px;
+            cursor: default;
+            transition: background 0.1s;
         }
         
-        .virtual-list::-webkit-scrollbar-thumb:hover {
+        .custom-scrollbar-thumb:hover,
+        .custom-scrollbar-thumb.active {
             background: #555;
+        }
+        
+        .virtual-list.has-scrollbar {
+            right: 12px;
         }
         
         .virtual-content {
@@ -897,46 +910,6 @@
         .breadcrumb-sep {
             color: var(--text-secondary);
             opacity: 0.5;
-        }
-        
-        /* Focus Mode Indicator */
-        .focus-indicator {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 12px;
-            background: var(--accent);
-            color: white;
-            font-size: 11px;
-        }
-        
-        .focus-indicator.visible {
-            display: flex;
-        }
-        
-        .focus-indicator button {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 11px;
-        }
-        
-        .focus-indicator button:hover {
-            background: rgba(255,255,255,0.3);
-        }
-        
-        /* Compact Mode Styles */
-        .compact-mode .tree-node {
-            height: 18px;
-            line-height: 18px;
-            font-size: 11px;
-        }
-        
-        .compact-mode .count {
-            display: none;
         }
         
         /* Minimap */
@@ -1332,9 +1305,6 @@
             <button id="btnMinimap" disabled title="Minimap ein/aus">
                 <span class="icon">▐</span>
             </button>
-            <button id="btnCompact" disabled title="Kompaktansicht ein/aus">
-                <span class="icon">≡</span>
-            </button>
             <button id="btnGotoLine" disabled title="Gehe zu Zeile (⇧⌘L)">
                 <span class="icon">↓</span>
                 <span>Zeile</span>
@@ -1398,12 +1368,6 @@
     
     <div class="breadcrumb-bar" id="breadcrumbBar">
         <span class="breadcrumb-item" data-path="root">root</span>
-    </div>
-    
-    <div class="focus-indicator" id="focusIndicator">
-        <span>🔍 Fokus-Modus:</span>
-        <span id="focusPathDisplay">root</span>
-        <button id="btnExitFocus" title="Fokus-Modus beenden (Escape)">✕ Beenden</button>
     </div>
     
     <div class="goto-container" id="gotoContainer">
@@ -1626,18 +1590,6 @@
                         <strong>Minimap</strong>
                         <p>Zeigt eine Übersicht des gesamten Dokuments am rechten Rand.</p>
                     </div>
-                    <div class="help-feature">
-                        <strong>Kompaktansicht</strong>
-                        <p>Zeigt mehr Zeilen auf dem Bildschirm durch kleinere Zeilenhöhe.</p>
-                    </div>
-                    <div class="help-feature">
-                        <strong>Fokus-Modus</strong>
-                        <p>Rechtsklick → "Fokus auf Element" um nur einen Teilbaum anzuzeigen. Escape zum Beenden.</p>
-                    </div>
-                    <div class="help-feature">
-                        <strong>Breadcrumb-Navigation</strong>
-                        <p>Klicken Sie auf Pfadelemente in der Breadcrumb-Leiste um schnell zu navigieren.</p>
-                    </div>
                 </div>
             </div>
             
@@ -1666,7 +1618,10 @@
         let jsonData = null;
         let fileName = '';
         let fileSize = 0;
+        let currentFilePath = null;
         let expandedPaths = new Set();
+        let expandAllMode = false; // When true, ALL nodes are expanded without using expandedPaths
+        let totalExpandedCount = 0; // Total rows when all expanded (from __size)
         let visibleRows = [];
         let searchMatches = [];
         let currentMatchIndex = -1;
@@ -1680,10 +1635,6 @@
         let showMinimap = false;
         let currentExpandLevel = 1;
         let maxDepth = 0;
-        let focusMode = false;
-        let focusPath = null;
-        let focusData = null;
-        let compactMode = false;
         
         // Current language and theme
         let currentLang = localStorage.getItem('json-viewer-lang') || 'de';
@@ -1750,7 +1701,18 @@
                 invalidJson: 'Ungültiges JSON',
                 parseError: 'Fehler beim Parsen',
                 saveError: 'Fehler beim Speichern',
-                loadError: 'Fehler beim Laden'
+                loadError: 'Fehler beim Laden',
+                // Context menu
+                ctxEditValue: 'Wert bearbeiten',
+                ctxRenameKey: 'Schlüssel umbenennen',
+                ctxChangeType: 'Typ ändern zu…',
+                ctxAddElement: 'Element hinzufügen',
+                ctxAddProperty: 'Eigenschaft hinzufügen',
+                ctxDelete: 'Löschen',
+                ctxCopyValue: 'Wert kopieren',
+                ctxCopyPath: 'Pfad kopieren',
+                ctxDuplicate: 'Duplizieren',
+                pathCopied: 'Pfad kopiert'
             },
             en: {
                 // Toolbar
@@ -1811,7 +1773,18 @@
                 invalidJson: 'Invalid JSON',
                 parseError: 'Parse error',
                 saveError: 'Save error',
-                loadError: 'Load error'
+                loadError: 'Load error',
+                // Context menu
+                ctxEditValue: 'Edit value',
+                ctxRenameKey: 'Rename key',
+                ctxChangeType: 'Change type to…',
+                ctxAddElement: 'Add element',
+                ctxAddProperty: 'Add property',
+                ctxDelete: 'Delete',
+                ctxCopyValue: 'Copy value',
+                ctxCopyPath: 'Copy path',
+                ctxDuplicate: 'Duplicate',
+                pathCopied: 'Path copied'
             }
         };
         
@@ -1983,16 +1956,13 @@
         let searchKeysOnly = false;
         let searchValuesOnly = false;
         let searchRegex = false;
-        let lastSearchQuery = '';
         
         // Drag & Drop
         let draggedPath = null;
         
-        // Virtual scroll
-        let ROW_HEIGHT = 22;
+        // Virtual scroll – custom wheel-based (no browser height limit)
+        const ROW_HEIGHT = 22;
         const INDENT_WIDTH = 20;
-        const MAX_SCROLL_HEIGHT = 30000000; // Browser limit ~33M pixels, use 30M for safety
-        let scrollScale = 1; // Scale factor when content exceeds browser limit
         let scrollTop = 0;
         let containerHeight = 0;
         
@@ -2062,12 +2032,13 @@
             
             try {
                 fileName = filePath.split('/').pop();
+                currentFilePath = filePath;
                 
                 status.textContent = `Lade ${fileName}...`;
                 treeContainer.innerHTML = `
                     <div class="loading">
                         <div class="spinner"></div>
-                        <div>Lade ${fileName}...</div>
+                        <div>Lade ${escapeHtml(fileName)}...</div>
                         <div id="loadProgress" style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Lese Datei...</div>
                     </div>
                 `;
@@ -2092,15 +2063,39 @@
                 }
                 
                 const parseTime = performance.now() - parseStart;
-                const nodeCount = countNodesSmart(jsonData, fileSize);
+                
+                // Get Rust-side verified node count (parses independently, no IPC truncation)
+                let nodeCount;
+                try {
+                    if (progressEl) progressEl.textContent = 'Zähle Knoten (Rust)...';
+                    const stats = await window.__TAURI__.core.invoke('get_file_stats', { path: filePath });
+                    nodeCount = stats.node_count;
+                    fileSize = stats.size_bytes; // Use real byte size
+                    console.log(`[Verify] Rust nodes: ${stats.node_count}, File bytes: ${stats.size_bytes}, JS text.length: ${text.length}`);
+                    if (text.length < stats.size_bytes * 0.95) {
+                        console.warn(`[IPC Truncation] Received ${text.length} chars but file is ${stats.size_bytes} bytes!`);
+                    }
+                } catch (e) {
+                    console.warn('Rust get_file_stats failed, using JS count:', e);
+                    nodeCount = countNodesSmart(jsonData, fileSize);
+                }
+                
                 const totalTime = performance.now() - startTime;
                 
                 expandedPaths = new Set(['root']);
+                expandAllMode = false;
+                window._collapsedInExpandAll = new Set();
                 searchMatches = [];
                 currentMatchIndex = -1;
                 isModified = false;
                 currentExpandLevel = 1;
                 maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20);
+                
+                // Precompute subtree sizes for virtual rendering
+                if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
+                await new Promise(r => setTimeout(r, 16));
+                totalExpandedCount = computeSubtreeSizes(jsonData);
+                console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
                 
                 updateTitle();
                 updateStatusBar(nodeCount, totalTime, parseTime);
@@ -2115,7 +2110,7 @@
                 console.error('Fehler beim Laden:', err);
                 treeContainer.innerHTML = `
                     <div style="color: #f48771; padding: 20px;">
-                        Fehler beim Laden: ${err.message || err}
+                        Fehler beim Laden: ${escapeHtml(String(err.message || err))}
                     </div>
                 `;
             }
@@ -2136,12 +2131,13 @@
                     if (selected) {
                         const filePath = selected;
                         fileName = filePath.split('/').pop();
+                        currentFilePath = filePath;
                         
                         status.textContent = `Lade ${fileName}...`;
                         treeContainer.innerHTML = `
                             <div class="loading">
                                 <div class="spinner"></div>
-                                <div>Lade ${fileName}...</div>
+                                <div>Lade ${escapeHtml(fileName)}...</div>
                                 <div id="loadProgress" style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Lese Datei...</div>
                             </div>
                         `;
@@ -2173,17 +2169,37 @@
                         
                         const parseTime = performance.now() - parseStart;
                         
-                        // Use smart counting (estimation for large files)
-                        const nodeCount = countNodesSmart(jsonData, fileSize);
+                        // Get Rust-side verified node count
+                        let nodeCount;
+                        try {
+                            const progressEl2 = document.getElementById('loadProgress');
+                            if (progressEl2) progressEl2.textContent = 'Zähle Knoten (Rust)...';
+                            const stats = await window.__TAURI__.core.invoke('get_file_stats', { path: filePath });
+                            nodeCount = stats.node_count;
+                            fileSize = stats.size_bytes;
+                            console.log(`[Verify] Rust nodes: ${stats.node_count}, File bytes: ${stats.size_bytes}, JS text.length: ${text.length}`);
+                        } catch (e) {
+                            console.warn('Rust get_file_stats failed, using JS count:', e);
+                            nodeCount = countNodesSmart(jsonData, fileSize);
+                        }
+                        
                         const totalTime = performance.now() - startTime;
                         
                         // Initialize with only root expanded - crucial for performance!
                         expandedPaths = new Set(['root']);
+                        expandAllMode = false;
+                        window._collapsedInExpandAll = new Set();
                         searchMatches = [];
                         currentMatchIndex = -1;
                         isModified = false;
                         currentExpandLevel = 1;
                         maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20); // Limit depth calculation
+                        
+                        // Precompute subtree sizes for virtual rendering
+                        if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
+                        await new Promise(r => setTimeout(r, 16));
+                        totalExpandedCount = computeSubtreeSizes(jsonData);
+                        console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
                         
                         updateTitle();
                         updateStatusBar(nodeCount, totalTime, parseTime);
@@ -2273,6 +2289,11 @@
         }
         
         async function loadFile(file) {
+            const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+            if (file.size > MAX_FILE_SIZE) {
+                showNotification(`Datei zu groß (${formatSize(file.size)}). Maximum: ${formatSize(MAX_FILE_SIZE)}`, 'error');
+                return;
+            }
             fileName = file.name;
             fileSize = file.size;
             status.textContent = `Lade ${fileName}...`;
@@ -2314,6 +2335,8 @@
                 
                 // Initialize with only root expanded - crucial for performance!
                 expandedPaths = new Set(['root']);
+                expandAllMode = false;
+                window._collapsedInExpandAll = new Set();
                 searchMatches = [];
                 currentMatchIndex = -1;
                 isModified = false;
@@ -2375,20 +2398,21 @@
             return results.length === 1 ? results[0] : results;
         }
         
-        // Fast node count estimation - doesn't traverse entire structure
-        function countNodesEstimate(obj, maxDepth = 3, currentDepth = 0) {
-            if (obj === null || typeof obj !== 'object') return 1;
-            if (currentDepth >= maxDepth) {
-                // Estimate based on JSON string length
-                const str = JSON.stringify(obj);
-                // Roughly 1 node per 50 chars for nested content
-                return Math.max(1, Math.floor(str.length / 50));
-            }
-            let count = 1;
-            if (Array.isArray(obj)) {
-                for (const item of obj) count += countNodesEstimate(item, maxDepth, currentDepth + 1);
-            } else {
-                for (const key in obj) count += countNodesEstimate(obj[key], maxDepth, currentDepth + 1);
+        // Fast node count - iterative to prevent stack overflow
+        function countNodesEstimate(obj) {
+            let count = 0;
+            const stack = [obj];
+            while (stack.length > 0) {
+                const cur = stack.pop();
+                count++;
+                if (cur !== null && typeof cur === 'object') {
+                    if (Array.isArray(cur)) {
+                        for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+                    } else {
+                        const keys = Object.keys(cur);
+                        for (let i = 0; i < keys.length; i++) stack.push(cur[keys[i]]);
+                    }
+                }
             }
             return count;
         }
@@ -2405,13 +2429,9 @@
             return count;
         }
         
-        // Smart count - uses estimation for large files
+        // Smart count - iterative counting for all files
         function countNodesSmart(obj, fileSizeBytes) {
-            // For files < 1MB, count exactly
-            if (fileSizeBytes < 1024 * 1024) {
-                return countNodes(obj);
-            }
-            // For larger files, use estimation
+            // Use iterative countNodesEstimate for all sizes (it's stack-safe)
             return countNodesEstimate(obj);
         }
         
@@ -2441,7 +2461,6 @@
             document.getElementById('btnGuides').disabled = false;
             document.getElementById('btnLineNum').disabled = false;
             document.getElementById('btnMinimap').disabled = false;
-            document.getElementById('btnCompact').disabled = false;
             document.getElementById('btnGotoLine').disabled = false;
             document.getElementById('btnUndo').disabled = true;
             document.getElementById('btnRedo').disabled = true;
@@ -2472,78 +2491,6 @@
             if (showMinimap) updateMinimap();
         }
         
-        // Compact Mode - smaller row height, hide element counts
-        function toggleCompactMode() {
-            compactMode = !compactMode;
-            const btn = document.getElementById('btnCompact');
-            const container = document.getElementById('treeContainer');
-            btn.style.opacity = compactMode ? '1' : '0.5';
-            
-            if (compactMode) {
-                container.classList.add('compact-mode');
-                ROW_HEIGHT = 18;
-            } else {
-                container.classList.remove('compact-mode');
-                ROW_HEIGHT = 22;
-            }
-            
-            renderTree();
-            showNotification(compactMode ? 'Kompaktansicht aktiviert' : 'Normale Ansicht');
-        }
-        
-        // Focus Mode - show only a subtree
-        function enterFocusMode(path) {
-            if (!jsonData || path === 'root') return;
-            
-            const value = getValueAtPath(path);
-            if (value === undefined || value === null || typeof value !== 'object') {
-                showNotification('Fokus nur für Objekte/Arrays möglich');
-                return;
-            }
-            
-            focusMode = true;
-            focusPath = path;
-            focusData = JSON.parse(JSON.stringify(value));
-            
-            // Update UI
-            const indicator = document.getElementById('focusIndicator');
-            const pathDisplay = document.getElementById('focusPathDisplay');
-            indicator.classList.add('visible');
-            pathDisplay.textContent = path;
-            
-            // Reset view state
-            expandedPaths = new Set(['root']);
-            selectedIndex = -1;
-            selectedPath = null;
-            
-            renderTree();
-            showNotification(`Fokus auf: ${path}`);
-        }
-        
-        function exitFocusMode() {
-            if (!focusMode) return;
-            
-            focusMode = false;
-            focusPath = null;
-            focusData = null;
-            
-            // Update UI
-            const indicator = document.getElementById('focusIndicator');
-            indicator.classList.remove('visible');
-            
-            // Reset view state
-            expandedPaths = new Set(['root']);
-            selectedIndex = -1;
-            selectedPath = null;
-            
-            renderTree();
-            showNotification('Fokus-Modus beendet');
-        }
-        
-        function getDataForRendering() {
-            return focusMode && focusData ? focusData : jsonData;
-        }
-        
         let minimapCanvas = null;
         let minimapNeedsRedraw = true;
         let minimapDragging = false;
@@ -2558,7 +2505,7 @@
             if (!list || !content || !viewport || !minimap) return;
             
             const minimapHeight = minimap.clientHeight;
-            const totalRows = visibleRows.length;
+            const totalRows = getVisibleRowCount();
             
             if (totalRows === 0 || minimapHeight === 0) return;
             
@@ -2583,11 +2530,13 @@
                 ctx.clearRect(0, 0, canvasWidth, canvasHeight);
                 
                 // Sample rows for performance (max ~1000 lines drawn)
-                const maxLines = 1000;
+                // In expandAllMode, limit to fewer samples since each requires tree navigation
+                const maxLines = expandAllMode ? 200 : 1000;
                 const step = Math.max(1, Math.ceil(totalRows / maxLines));
                 
                 for (let i = 0; i < totalRows; i += step) {
-                    const row = visibleRows[i];
+                    const row = expandAllMode ? getVisibleRow(i) : visibleRows[i];
+                    if (!row) continue;
                     const y = (i / totalRows) * canvasHeight;
                     const h = Math.max(1, (step / totalRows) * canvasHeight);
                     const indent = Math.min(row.depth * 3, 30) * dpr;
@@ -2618,7 +2567,7 @@
             const minimap = document.getElementById('minimap');
             const list = document.getElementById('virtualList');
             
-            if (!minimap || !list || visibleRows.length === 0) return;
+            if (!minimap || !list || getVisibleRowCount() === 0) return;
             
             const rect = minimap.getBoundingClientRect();
             const clickY = e.clientY - rect.top;
@@ -2630,7 +2579,7 @@
             const listHeight = list.clientHeight;
             
             const clickRatio = Math.max(0, Math.min(1, clickY / minimapHeight));
-            const totalHeight = visibleRows.length * ROW_HEIGHT;
+            const totalHeight = getVisibleRowCount() * ROW_HEIGHT;
             const maxVirtualScroll = Math.max(0, totalHeight - listHeight);
             
             // Calculate target virtual scroll position (center viewport on click)
@@ -2640,10 +2589,8 @@
             // Update virtual scrollTop
             scrollTop = clampedVirtualScroll;
             
-            // Set actual scroll position (scaled down for browser)
-            list.scrollTop = clampedVirtualScroll / scrollScale;
-            
             // Force re-render
+            updateCustomScrollbar();
             renderVisibleItems();
             updateMinimap();
         }
@@ -2696,23 +2643,16 @@
             // Mouse wheel scrolling on minimap
             minimap.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                const list = document.getElementById('virtualList');
-                if (!list || visibleRows.length === 0) return;
-                
-                const listHeight = list.clientHeight;
-                const totalHeight = visibleRows.length * ROW_HEIGHT;
-                const maxVirtualScroll = Math.max(0, totalHeight - listHeight);
+                if (getVisibleRowCount() === 0) return;
                 
                 // Scroll amount (multiply by 3 for faster scrolling)
                 const delta = e.deltaY * 3;
                 
                 // Calculate new virtual scroll position
-                const newScrollTop = Math.max(0, Math.min(scrollTop + delta, maxVirtualScroll));
-                scrollTop = newScrollTop;
+                const maxScroll = getMaxScrollTop();
+                scrollTop = Math.max(0, Math.min(scrollTop + delta, maxScroll));
                 
-                // Set actual scroll position (scaled down for browser)
-                list.scrollTop = newScrollTop / scrollScale;
-                
+                updateCustomScrollbar();
                 renderVisibleItems();
                 updateMinimap();
             }, { passive: false });
@@ -2732,9 +2672,7 @@
             document.getElementById('btnGuides')?.addEventListener('click', toggleIndentGuides);
             document.getElementById('btnLineNum')?.addEventListener('click', toggleLineNumbers);
             document.getElementById('btnMinimap')?.addEventListener('click', toggleMinimap);
-            document.getElementById('btnCompact')?.addEventListener('click', toggleCompactMode);
             document.getElementById('btnGotoLine')?.addEventListener('click', showGotoLineDialog);
-            document.getElementById('btnExitFocus')?.addEventListener('click', exitFocusMode);
             document.getElementById('btnExportFiltered')?.addEventListener('click', exportSearchResults);
             document.getElementById('btnExportCSV')?.addEventListener('click', (e) => toggleCSVDropdown(e));
             document.getElementById('csvExportFull')?.addEventListener('click', () => exportCSV('full'));
@@ -2847,13 +2785,11 @@
                 moveTimeout = setTimeout(saveWindowState, 500);
             });
             
-            // Listen for file drop events from Rust
-            window.__TAURI__.event.listen('load-file', (event) => {
-                const js = event.payload;
-                // Extract path from the JS call
-                const match = js.match(/loadFileFromPath\('(.+)'\)/);
-                if (match && match[1]) {
-                    loadFileFromPath(match[1]);
+            // Listen for file open events from Rust (CLI args, env args, drag-drop)
+            window.__TAURI__.event.listen('open-file', (event) => {
+                const filePath = event.payload;
+                if (filePath && typeof filePath === 'string') {
+                    loadFileFromPath(filePath);
                 }
             });
         }
@@ -2882,8 +2818,16 @@
         }
         
         // Undo/Redo System
-        function saveUndoState() {
-            undoStack.push(JSON.stringify(jsonData));
+        function saveUndoState(containerPath) {
+            // Diff-based undo: store only the affected subtree, not the entire JSON
+            let entry;
+            if (!containerPath || containerPath === 'root') {
+                entry = { path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) };
+            } else {
+                const value = getValueAtPath(containerPath);
+                entry = { path: containerPath, snapshot: JSON.parse(JSON.stringify(value)) };
+            }
+            undoStack.push(entry);
             if (undoStack.length > MAX_UNDO) undoStack.shift();
             redoStack = [];
             updateUndoButtons();
@@ -2891,16 +2835,31 @@
         
         function undo() {
             if (undoStack.length === 0) return;
-            redoStack.push(JSON.stringify(jsonData));
-            jsonData = JSON.parse(undoStack.pop());
+            const entry = undoStack.pop();
+            // Save current state of the same subtree for redo
+            if (entry.path === 'root') {
+                redoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
+                jsonData = entry.snapshot;
+            } else {
+                const currentValue = getValueAtPath(entry.path);
+                redoStack.push({ path: entry.path, snapshot: JSON.parse(JSON.stringify(currentValue)) });
+                setValueAtPath(entry.path, entry.snapshot);
+            }
             updateUndoButtons();
             renderTree();
         }
         
         function redo() {
             if (redoStack.length === 0) return;
-            undoStack.push(JSON.stringify(jsonData));
-            jsonData = JSON.parse(redoStack.pop());
+            const entry = redoStack.pop();
+            if (entry.path === 'root') {
+                undoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
+                jsonData = entry.snapshot;
+            } else {
+                const currentValue = getValueAtPath(entry.path);
+                undoStack.push({ path: entry.path, snapshot: JSON.parse(JSON.stringify(currentValue)) });
+                setValueAtPath(entry.path, entry.snapshot);
+            }
             updateUndoButtons();
             renderTree();
         }
@@ -2945,12 +2904,13 @@
         // Breadcrumb Navigation
         function updateBreadcrumb() {
             const bar = document.getElementById('breadcrumbBar');
-            if (!bar || selectedIndex < 0 || selectedIndex >= visibleRows.length) {
+            if (!bar || selectedIndex < 0 || selectedIndex >= getVisibleRowCount()) {
                 if (bar) bar.innerHTML = '<span class="breadcrumb-item" data-path="root">root</span>';
                 return;
             }
             
-            const row = visibleRows[selectedIndex];
+            const row = getVisibleRow(selectedIndex);
+            if (!row) return;
             const parts = row.path.split(/\.|\[/).filter(p => p);
             let html = '<span class="breadcrumb-item" data-path="root">root</span>';
             let currentPath = 'root';
@@ -2959,14 +2919,14 @@
                 const clean = part.replace(']', '');
                 const isIndex = /^\d+$/.test(clean);
                 currentPath += isIndex ? `[${clean}]` : `.${clean}`;
-                html += ` › <span class="breadcrumb-item" data-path="${currentPath}">${clean}</span>`;
+                html += ` › <span class="breadcrumb-item" data-path="${escapeHtml(currentPath)}">${escapeHtml(clean)}</span>`;
             }
             
             bar.innerHTML = html;
         }
         
         function goToBreadcrumb(path) {
-            const idx = visibleRows.findIndex(r => r.path === path);
+            const idx = findVisibleRowIndex(path);
             if (idx >= 0) {
                 selectRow(idx);
                 scrollToIndex(idx);
@@ -2994,7 +2954,7 @@
             buildVisibleRows();
             renderVisibleItems();
             
-            const idx = visibleRows.findIndex(r => r.path === path);
+            const idx = findVisibleRowIndex(path);
             if (idx >= 0) {
                 selectRow(idx);
                 scrollToIndex(idx);
@@ -3030,7 +2990,7 @@
             const input = document.getElementById('gotoLineInput');
             dialog.classList.add('visible');
             input.value = '';
-            input.max = visibleRows.length;
+            input.max = getVisibleRowCount();
             input.focus();
         }
         
@@ -3054,82 +3014,68 @@
         function goToLine(lineNumber) {
             if (!jsonData) return;
             
-            // First expand all nodes to ensure the line number corresponds to the full tree
-            const expandAllNodes = (obj, path) => {
-                if (obj === null || typeof obj !== 'object') return;
-                expandedPaths.add(path);
-                if (Array.isArray(obj)) obj.forEach((item, idx) => expandAllNodes(item, `${path}[${idx}]`));
-                else Object.keys(obj).forEach(k => expandAllNodes(obj[k], `${path}.${k}`));
-            };
-            expandAllNodes(jsonData, 'root');
+            // Compute subtree sizes if needed
+            if (!jsonData.__size || jsonData.__size <= 0) {
+                totalExpandedCount = computeSubtreeSizes(jsonData);
+            } else {
+                totalExpandedCount = jsonData.__size;
+            }
+            
+            // Use expandAllMode for virtual rendering
+            expandAllMode = true;
+            window._collapsedInExpandAll = new Set();
             currentExpandLevel = maxDepth;
             updateLevelDisplay();
             
-            // Rebuild the tree with all nodes expanded
+            // In expandAllMode, buildVisibleRows is a no-op; virtual rendering is used
             buildVisibleRows();
             
-            if (visibleRows.length === 0) return;
+            if (getVisibleRowCount() === 0) return;
             
             // Line numbers are 1-based, array index is 0-based
-            const idx = Math.max(0, Math.min(lineNumber - 1, visibleRows.length - 1));
+            const idx = Math.max(0, Math.min(lineNumber - 1, getVisibleRowCount() - 1));
             
             // Set selected index
             selectedIndex = idx;
-            selectedPath = visibleRows[idx]?.path || null;
+            selectedPath = getVisibleRow(idx)?.path || null;
             
             // Render the tree first
             renderTree();
             
             // Then scroll to the line after a short delay to ensure DOM is updated
             setTimeout(() => {
-                const list = document.getElementById('virtualList');
-                if (!list) return;
-                
                 const targetScroll = idx * ROW_HEIGHT;
+                scrollTop = Math.max(0, targetScroll - containerHeight / 3);
                 
-                if (scrollScale > 1) {
-                    // Virtual scrolling mode
-                    scrollTop = targetScroll;
-                    list.scrollTop = targetScroll / scrollScale;
-                } else {
-                    scrollTop = Math.max(0, targetScroll - containerHeight / 3);
-                    list.scrollTop = scrollTop;
-                }
-                
+                updateCustomScrollbar();
                 renderVisibleItems();
                 updateBreadcrumb();
-                showNotification(`Zeile ${idx + 1} von ${visibleRows.length}`);
+                showNotification(`Zeile ${idx + 1} von ${getVisibleRowCount()}`);
             }, 50);
         }
         
         // Keyboard Navigation
         function selectRow(idx) {
-            if (idx < 0 || idx >= visibleRows.length) return;
+            if (idx < 0 || idx >= getVisibleRowCount()) return;
             selectedIndex = idx;
             updateBreadcrumb();
             renderVisibleItems();
         }
         
         function scrollToIndex(idx) {
-            const list = document.getElementById('virtualList');
-            const targetScroll = idx * ROW_HEIGHT - containerHeight / 2;
-            list.scrollTop = Math.max(0, targetScroll);
+            scrollTop = Math.max(0, idx * ROW_HEIGHT - containerHeight / 2);
+            updateCustomScrollbar();
+            renderVisibleItems();
+            if (showMinimap) updateMinimap();
         }
         
         function handleKeyDown(e) {
             if (editingPath || e.target.tagName === 'INPUT') return;
             
-            // Exit focus mode with Escape
-            if (e.key === 'Escape' && focusMode) {
-                e.preventDefault();
-                exitFocusMode();
-                return;
-            }
-            
             switch(e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
-                    if (selectedIndex < visibleRows.length - 1) {
+                    if (selectedIndex < getVisibleRowCount() - 1) {
                         selectRow(selectedIndex + 1);
                         if ((selectedIndex + 1) * ROW_HEIGHT > scrollTop + containerHeight - ROW_HEIGHT) {
                             scrollToIndex(selectedIndex);
@@ -3148,9 +3094,16 @@
                 case 'ArrowRight':
                     e.preventDefault();
                     if (selectedIndex >= 0) {
-                        const row = visibleRows[selectedIndex];
-                        if (row.hasChildren && !expandedPaths.has(row.path)) {
-                            expandedPaths.add(row.path);
+                        const row = getVisibleRow(selectedIndex);
+                        const isExpanded = expandAllMode 
+                            ? !(window._collapsedInExpandAll && window._collapsedInExpandAll.has(row.path))
+                            : expandedPaths.has(row.path);
+                        if (row.hasChildren && !isExpanded) {
+                            if (expandAllMode) {
+                                if (window._collapsedInExpandAll) window._collapsedInExpandAll.delete(row.path);
+                            } else {
+                                expandedPaths.add(row.path);
+                            }
                             trackMaxDepth();
                             buildVisibleRows();
                             renderVisibleItems();
@@ -3160,14 +3113,22 @@
                 case 'ArrowLeft':
                     e.preventDefault();
                     if (selectedIndex >= 0) {
-                        const row = visibleRows[selectedIndex];
-                        if (row.hasChildren && expandedPaths.has(row.path)) {
-                            expandedPaths.delete(row.path);
+                        const row = getVisibleRow(selectedIndex);
+                        const isExpanded = expandAllMode 
+                            ? !(window._collapsedInExpandAll && window._collapsedInExpandAll.has(row.path))
+                            : expandedPaths.has(row.path);
+                        if (row.hasChildren && isExpanded) {
+                            if (expandAllMode) {
+                                if (!window._collapsedInExpandAll) window._collapsedInExpandAll = new Set();
+                                window._collapsedInExpandAll.add(row.path);
+                            } else {
+                                expandedPaths.delete(row.path);
+                            }
                             buildVisibleRows();
                             renderVisibleItems();
                         } else if (row.depth > 0) {
                             const parentPath = getParentPath(row.path);
-                            const parentIdx = visibleRows.findIndex(r => r.path === parentPath);
+                            const parentIdx = findVisibleRowIndex(parentPath);
                             if (parentIdx >= 0) selectRow(parentIdx);
                         }
                     }
@@ -3175,10 +3136,19 @@
                 case 'Enter':
                     e.preventDefault();
                     if (selectedIndex >= 0) {
-                        const row = visibleRows[selectedIndex];
-                        if (row.hasChildren) {
-                            if (expandedPaths.has(row.path)) expandedPaths.delete(row.path);
-                            else expandedPaths.add(row.path);
+                        const row = getVisibleRow(selectedIndex);
+                        if (row && row.hasChildren) {
+                            if (expandAllMode) {
+                                if (!window._collapsedInExpandAll) window._collapsedInExpandAll = new Set();
+                                if (window._collapsedInExpandAll.has(row.path)) {
+                                    window._collapsedInExpandAll.delete(row.path);
+                                } else {
+                                    window._collapsedInExpandAll.add(row.path);
+                                }
+                            } else {
+                                if (expandedPaths.has(row.path)) expandedPaths.delete(row.path);
+                                else expandedPaths.add(row.path);
+                            }
                             trackMaxDepth();
                             buildVisibleRows();
                             renderVisibleItems();
@@ -3203,7 +3173,7 @@
         }
         
         function duplicateElement(path) {
-            saveUndoState();
+            saveUndoState(getParentPath(path));
             const value = JSON.parse(JSON.stringify(getValueAtPath(path)));
             const parentPath = getParentPath(path);
             const parent = getValueAtPath(parentPath);
@@ -3249,7 +3219,7 @@
             const exportData = searchMatches.map(path => {
                 const value = getValueAtPath(path);
                 // Find the line number (1-based) in the tree view
-                const rowIndex = visibleRows.findIndex(r => r.path === path);
+                const rowIndex = findVisibleRowIndex(path);
                 const lineNumber = rowIndex >= 0 ? rowIndex + 1 : null;
                 
                 return {
@@ -3455,7 +3425,7 @@
             if (!draggedPath || draggedPath === targetPath) return;
             if (targetPath.startsWith(draggedPath)) return; // Can't drop parent into child
             
-            saveUndoState();
+            saveUndoState('root');
             const value = JSON.parse(JSON.stringify(getValueAtPath(draggedPath)));
             const targetValue = getValueAtPath(targetPath);
             
@@ -3482,20 +3452,202 @@
             renderTree();
         }
         
+        // ── Virtual rendering helpers for expandAllMode ──────────────────
+        // Compute __size on every object/array via iterative post-order traversal.
+        // __size = total number of nodes in the subtree INCLUDING the node itself.
+        function computeSubtreeSizes(root) {
+            if (root === null || typeof root !== 'object') return 1;
+            const stack = [{
+                value: root,
+                children: Array.isArray(root) ? root : Object.values(root),
+                childIndex: 0,
+                size: 1
+            }];
+            while (stack.length > 0) {
+                const frame = stack[stack.length - 1];
+                if (frame.childIndex < frame.children.length) {
+                    const child = frame.children[frame.childIndex++];
+                    if (child !== null && typeof child === 'object') {
+                        const ch = Array.isArray(child) ? child : Object.values(child);
+                        if (ch.length > 0) {
+                            stack.push({ value: child, children: ch, childIndex: 0, size: 1 });
+                        } else {
+                            try { child.__size = 1; } catch {}
+                            frame.size += 1;
+                        }
+                    } else {
+                        frame.size += 1;
+                    }
+                } else {
+                    stack.pop();
+                    try { frame.value.__size = frame.size; } catch {}
+                    if (stack.length > 0) stack[stack.length - 1].size += frame.size;
+                }
+            }
+            return root.__size || 1;
+        }
+
+        function getNodeSize(val) {
+            if (val === null || typeof val !== 'object') return 1;
+            return val.__size || 1;
+        }
+
+        // Total visible rows – either visibleRows.length or computed from __size
+        function getVisibleRowCount() {
+            if (expandAllMode && jsonData) {
+                let count = totalExpandedCount;
+                if (window._collapsedInExpandAll && window._collapsedInExpandAll.size > 0) {
+                    for (const cPath of window._collapsedInExpandAll) {
+                        const val = getValueAtPath(cPath);
+                        if (val !== null && typeof val === 'object' && val.__size) {
+                            count -= (val.__size - 1);
+                        }
+                    }
+                }
+                return count;
+            }
+            return visibleRows.length;
+        }
+
+        // Single row by flat index
+        function getVisibleRow(index) {
+            if (expandAllMode && jsonData) {
+                const rows = getExpandedRowsInRange(index, index + 1);
+                return rows[0] || null;
+            }
+            return visibleRows[index] || null;
+        }
+
+        // Find flat index for a given path
+        function findVisibleRowIndex(path) {
+            if (expandAllMode && jsonData) {
+                return getFlatIndexForPath(path);
+            }
+            return visibleRows.findIndex(r => r.path === path);
+        }
+
+        // Navigate the JSON tree along `path` segments, summing __size of skipped siblings
+        function getFlatIndexForPath(targetPath) {
+            if (!jsonData || targetPath === 'root') return 0;
+            let idx = 0;
+            let currentValue = jsonData;
+            // Parse segments after "root"
+            const rest = targetPath.substring(4);
+            const segments = [];
+            let seg = '';
+            for (let i = 0; i < rest.length; i++) {
+                const ch = rest[i];
+                if (ch === '.') { if (seg) segments.push(seg); seg = ''; }
+                else if (ch === '[') { if (seg) segments.push(seg); seg = '['; }
+                else if (ch === ']') { segments.push(seg + ']'); seg = ''; }
+                else { seg += ch; }
+            }
+            if (seg) segments.push(seg);
+            for (const s of segments) {
+                idx++; // move past current node
+                if (s.startsWith('[')) {
+                    const arrIdx = parseInt(s.slice(1, -1));
+                    for (let i = 0; i < arrIdx; i++) idx += getNodeSize(currentValue[i]);
+                    currentValue = currentValue[arrIdx];
+                } else {
+                    const keys = Object.keys(currentValue).sort();
+                    for (const k of keys) {
+                        if (k === s) break;
+                        idx += getNodeSize(currentValue[k]);
+                    }
+                    currentValue = currentValue[s];
+                }
+            }
+            return idx;
+        }
+
+        // Get rows in [startIdx, endIdx) for expandAllMode – O(depth × branching) via __size skipping
+        function getExpandedRowsInRange(startIdx, endIdx) {
+            const rows = [];
+            if (!jsonData) return rows;
+            const rootKey = fileName || 'root';
+            const hasCollapsed = window._collapsedInExpandAll && window._collapsedInExpandAll.size > 0;
+            const stack = [{
+                key: rootKey, value: jsonData, path: 'root', depth: 0,
+                childIndex: -1, childKeys: null, childCount: 0
+            }];
+            let idx = 0;
+            while (stack.length > 0 && rows.length < (endIdx - startIdx)) {
+                const frame = stack[stack.length - 1];
+                if (frame.childIndex === -1) {
+                    // ── Process self ──
+                    const isCollapsed = hasCollapsed && window._collapsedInExpandAll.has(frame.path);
+                    const nodeSize = isCollapsed ? 1 : getNodeSize(frame.value);
+                    if (idx + nodeSize <= startIdx) { stack.pop(); idx += nodeSize; continue; }
+                    if (idx >= endIdx) { break; }
+                    if (idx >= startIdx) {
+                        const isObj = frame.value !== null && typeof frame.value === 'object';
+                        const isArr = Array.isArray(frame.value);
+                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).length > 0);
+                        rows.push({ key: frame.key, value: frame.value, path: frame.path,
+                                    depth: frame.depth, hasChildren: hasKids, isArray: isArr, isObject: isObj });
+                    }
+                    idx++;
+                    const isObj = frame.value !== null && typeof frame.value === 'object';
+                    if (isObj && !isCollapsed) {
+                        if (Array.isArray(frame.value)) {
+                            frame.childKeys = null;
+                            frame.childCount = frame.value.length;
+                        } else {
+                            frame.childKeys = Object.keys(frame.value).sort();
+                            frame.childCount = frame.childKeys.length;
+                        }
+                        frame.childIndex = 0;
+                    } else { stack.pop(); }
+                } else if (frame.childIndex < frame.childCount) {
+                    // ── Process next child ──
+                    let childValue;
+                    if (frame.childKeys) { childValue = frame.value[frame.childKeys[frame.childIndex]]; }
+                    else { childValue = frame.value[frame.childIndex]; }
+                    // Fast skip without path construction when no collapsed nodes
+                    if (!hasCollapsed) {
+                        const cs = getNodeSize(childValue);
+                        if (idx + cs <= startIdx) { frame.childIndex++; idx += cs; continue; }
+                    }
+                    let childKey, childPath;
+                    if (frame.childKeys) {
+                        const k = frame.childKeys[frame.childIndex];
+                        childKey = k; childPath = frame.path + '.' + k;
+                    } else {
+                        const i = frame.childIndex;
+                        childKey = '[' + i + ']'; childPath = frame.path + '[' + i + ']';
+                    }
+                    frame.childIndex++;
+                    if (hasCollapsed) {
+                        const cCollapsed = window._collapsedInExpandAll.has(childPath);
+                        const cs = cCollapsed ? 1 : getNodeSize(childValue);
+                        if (idx + cs <= startIdx) { idx += cs; continue; }
+                    }
+                    if (idx >= endIdx) { stack.pop(); continue; }
+                    stack.push({ key: childKey, value: childValue, path: childPath,
+                                 depth: frame.depth + 1, childIndex: -1, childKeys: null, childCount: 0 });
+                } else { stack.pop(); }
+            }
+            return rows;
+        }
+        // ── End virtual rendering helpers ─────────────────────────────────
+
         function buildVisibleRows() {
-            visibleRows = [];
             minimapNeedsRedraw = true;
+            if (!jsonData) { visibleRows = []; return; }
+
+            // In expandAllMode, do NOT build the full array – use virtual rendering instead
+            if (expandAllMode) {
+                visibleRows = [];
+                return;
+            }
+
+            visibleRows = [];
             
-            const dataToRender = getDataForRendering();
-            if (!dataToRender) return;
+            // Use iterative approach to prevent stack overflow
+            const stack = [{ key: fileName || 'root', value: jsonData, path: 'root', depth: 0 }];
             
-            const rootLabel = focusMode ? focusPath.split('.').pop() || 'fokus' : (fileName || 'root');
-            
-            // Use iterative approach with limit to prevent stack overflow and UI blocking
-            const stack = [{ key: rootLabel, value: dataToRender, path: 'root', depth: 0 }];
-            const MAX_VISIBLE_ROWS = 500000; // Limit to prevent UI freeze
-            
-            while (stack.length > 0 && visibleRows.length < MAX_VISIBLE_ROWS) {
+            while (stack.length > 0) {
                 const { key, value, path, depth } = stack.pop();
                 
                 const isObject = value !== null && typeof value === 'object';
@@ -3504,8 +3656,9 @@
                 
                 visibleRows.push({ key, value, path, depth, hasChildren, isArray, isObject });
                 
-                // Only expand if path is in expandedPaths - this is crucial for performance
-                if (hasChildren && expandedPaths.has(path)) {
+                // Expand if in expandAllMode (and not manually collapsed) OR path is in expandedPaths
+                const isCollapsedManually = expandAllMode && window._collapsedInExpandAll && window._collapsedInExpandAll.has(path);
+                if (hasChildren && !isCollapsedManually && (expandAllMode || expandedPaths.has(path))) {
                     // Add children in reverse order so they come out in correct order
                     if (isArray) {
                         for (let i = value.length - 1; i >= 0; i--) {
@@ -3528,10 +3681,6 @@
                         }
                     }
                 }
-            }
-            
-            if (visibleRows.length >= MAX_VISIBLE_ROWS) {
-                console.warn('Row limit reached, some nodes may not be visible');
             }
         }
         
@@ -3556,6 +3705,80 @@
             }
         }
         
+        // ── Custom scrollbar helpers ─────────────────────────────────
+        function getMaxScrollTop() {
+            const totalHeight = getVisibleRowCount() * ROW_HEIGHT;
+            return Math.max(0, totalHeight - containerHeight);
+        }
+
+        function updateCustomScrollbar() {
+            const thumb = document.getElementById('customScrollbarThumb');
+            const track = document.getElementById('customScrollbar');
+            if (!thumb || !track) return;
+            const totalRows = getVisibleRowCount();
+            const totalHeight = totalRows * ROW_HEIGHT;
+            if (totalHeight <= containerHeight) {
+                thumb.style.display = 'none';
+                return;
+            }
+            thumb.style.display = 'block';
+            const trackH = track.clientHeight;
+            const thumbH = Math.max(20, (containerHeight / totalHeight) * trackH);
+            const maxThumbTop = trackH - thumbH;
+            const maxScroll = getMaxScrollTop();
+            const ratio = maxScroll > 0 ? scrollTop / maxScroll : 0;
+            thumb.style.height = `${thumbH}px`;
+            thumb.style.top = `${ratio * maxThumbTop}px`;
+        }
+
+        function initCustomScrollbar(trackEl) {
+            const thumb = trackEl.querySelector('.custom-scrollbar-thumb');
+            let dragging = false;
+            let dragStartY = 0;
+            let dragStartScroll = 0;
+
+            thumb.addEventListener('pointerdown', (e) => {
+                dragging = true;
+                thumb.classList.add('active');
+                thumb.setPointerCapture(e.pointerId);
+                dragStartY = e.clientY;
+                dragStartScroll = scrollTop;
+                e.preventDefault();
+            });
+
+            thumb.addEventListener('pointermove', (e) => {
+                if (!dragging) return;
+                const trackH = trackEl.clientHeight;
+                const thumbH = thumb.clientHeight;
+                const maxThumbTop = trackH - thumbH;
+                if (maxThumbTop <= 0) return;
+                const dy = e.clientY - dragStartY;
+                const maxScroll = getMaxScrollTop();
+                scrollTop = Math.max(0, Math.min(maxScroll, dragStartScroll + (dy / maxThumbTop) * maxScroll));
+                updateCustomScrollbar();
+                renderVisibleItems();
+                if (showMinimap) updateMinimap();
+            });
+
+            const endDrag = () => { dragging = false; thumb.classList.remove('active'); };
+            thumb.addEventListener('pointerup', endDrag);
+            thumb.addEventListener('pointercancel', endDrag);
+            thumb.addEventListener('lostpointercapture', endDrag);
+
+            // Click on track → jump
+            trackEl.addEventListener('pointerdown', (e) => {
+                if (e.target === thumb) return;
+                const rect = trackEl.getBoundingClientRect();
+                const clickRatio = (e.clientY - rect.top) / rect.height;
+                const totalHeight = getVisibleRowCount() * ROW_HEIGHT;
+                scrollTop = Math.max(0, Math.min(getMaxScrollTop(), clickRatio * totalHeight - containerHeight / 2));
+                updateCustomScrollbar();
+                renderVisibleItems();
+                if (showMinimap) updateMinimap();
+            });
+        }
+        // ── End custom scrollbar helpers ──────────────────────────────
+
         function renderTree() {
             // Don't re-render while editing - it would destroy the input
             if (editingPath || editingKey) return;
@@ -3566,42 +3789,49 @@
             buildVisibleRows();
             
             const container = document.createElement('div');
-            container.className = 'virtual-list';
+            container.className = 'virtual-list has-scrollbar';
             container.id = 'virtualList';
             
             const content = document.createElement('div');
             content.className = 'virtual-content';
-            
-            // Calculate scaled height for browser compatibility
-            const totalHeight = visibleRows.length * ROW_HEIGHT;
-            if (totalHeight > MAX_SCROLL_HEIGHT) {
-                scrollScale = totalHeight / MAX_SCROLL_HEIGHT;
-                content.style.height = `${MAX_SCROLL_HEIGHT}px`;
-            } else {
-                scrollScale = 1;
-                content.style.height = `${totalHeight}px`;
-            }
             content.id = 'virtualContent';
             
             container.appendChild(content);
+
+            // Custom scrollbar (no browser height limit)
+            const scrollbar = document.createElement('div');
+            scrollbar.className = 'custom-scrollbar';
+            scrollbar.id = 'customScrollbar';
+            const scrollThumb = document.createElement('div');
+            scrollThumb.className = 'custom-scrollbar-thumb';
+            scrollThumb.id = 'customScrollbarThumb';
+            scrollbar.appendChild(scrollThumb);
+
             treeContainer.innerHTML = '';
             treeContainer.appendChild(container);
+            treeContainer.appendChild(scrollbar);
             
             containerHeight = treeContainer.clientHeight || window.innerHeight - 150;
             
             // Restore scroll position
+            const totalHeight = getVisibleRowCount() * ROW_HEIGHT;
             scrollTop = Math.min(savedScrollTop, Math.max(0, totalHeight - containerHeight));
-            container.scrollTop = scrollTop / scrollScale;
-            
-            container.addEventListener('scroll', () => {
-                // Scale scrollTop back to virtual position
-                scrollTop = container.scrollTop * scrollScale;
+
+            // Wheel-based scrolling (no native scroll needed → no height limit)
+            container.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const maxScroll = getMaxScrollTop();
+                scrollTop = Math.max(0, Math.min(maxScroll, scrollTop + e.deltaY));
+                updateCustomScrollbar();
                 renderVisibleItems();
                 if (showMinimap) updateMinimap();
-            });
+            }, { passive: false });
+
+            initCustomScrollbar(scrollbar);
             
             // Immediate render
             renderVisibleItems();
+            updateCustomScrollbar();
             if (showMinimap) updateMinimap();
             
             // Also ensure rendering after layout is complete
@@ -3613,6 +3843,7 @@
                 if (newHeight !== containerHeight && newHeight > 0) {
                     containerHeight = newHeight;
                     renderVisibleItems();
+                    updateCustomScrollbar();
                     if (showMinimap) updateMinimap();
                 }
             });
@@ -3630,11 +3861,17 @@
             const listHeight = list.clientHeight || containerHeight || window.innerHeight - 150;
             
             const buffer = 5;
+            const totalRowCount = getVisibleRowCount();
             const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - buffer);
-            const endIndex = Math.min(startIndex + Math.ceil(listHeight / ROW_HEIGHT) + buffer * 2, visibleRows.length);
+            const endIndex = Math.min(startIndex + Math.ceil(listHeight / ROW_HEIGHT) + buffer * 2, totalRowCount);
+            
+            // In expandAllMode, compute visible rows on-the-fly instead of indexing visibleRows
+            const rangeRows = expandAllMode
+                ? getExpandedRowsInRange(startIndex, endIndex)
+                : null;
             
             // Get hierarchy path for highlighting
-            const selectedRow = selectedIndex >= 0 ? visibleRows[selectedIndex] : null;
+            const selectedRow = selectedIndex >= 0 ? (expandAllMode ? getVisibleRow(selectedIndex) : visibleRows[selectedIndex]) : null;
             const hierarchyPaths = new Set();
             if (selectedRow) {
                 let path = selectedRow.path;
@@ -3648,15 +3885,15 @@
             content.innerHTML = '';
             
             for (let i = startIndex; i < endIndex; i++) {
-                const row = visibleRows[i];
+                const row = expandAllMode ? rangeRows[i - startIndex] : visibleRows[i];
+                if (!row) continue;
                 const div = document.createElement('div');
                 div.className = 'tree-node virtual-item';
                 if (showLineNumbers) div.classList.add('with-line-numbers');
-                // Position relative to current scroll - items keep full height
+                // Position relative to virtual scrollTop (no native scroll)
                 const virtualTop = i * ROW_HEIGHT;
                 const relativeToScroll = virtualTop - scrollTop;
-                const scaledTop = list.scrollTop + relativeToScroll;
-                div.style.top = `${scaledTop}px`;
+                div.style.top = `${relativeToScroll}px`;
                 // Calculate indentation (will be applied via inline elements)
                 const indentWidth = row.depth * INDENT_WIDTH;
                 div.dataset.path = row.path;
@@ -3698,8 +3935,9 @@
                 }
                 
                 if (row.hasChildren) {
-                    const expanded = expandedPaths.has(row.path);
-                    html += `<span class="toggle" data-toggle-path="${row.path}">${expanded ? '▼' : '▶'}</span>`;
+                    const isCollapsedManually = expandAllMode && window._collapsedInExpandAll && window._collapsedInExpandAll.has(row.path);
+                    const expanded = !isCollapsedManually && (expandAllMode || expandedPaths.has(row.path));
+                    html += `<span class="toggle" data-toggle-path="${escapeHtml(row.path)}">${expanded ? '▼' : '▶'}</span>`;
                 } else {
                     html += '<span class="toggle"></span>';
                 }
@@ -3715,13 +3953,13 @@
                     html += `<span class="bracket">${bracket[1]}</span>`;
                 } else if (typeof row.value === 'string') {
                     const display = row.value.length > 100 ? row.value.substring(0, 100) + '…' : row.value;
-                    html += `<span class="string value-editable" data-path="${row.path}" data-type="string">"${escapeHtml(display)}"</span>`;
+                    html += `<span class="string value-editable" data-path="${escapeHtml(row.path)}" data-type="string">"${escapeHtml(display)}"</span>`;
                 } else if (typeof row.value === 'number') {
-                    html += `<span class="number value-editable" data-path="${row.path}" data-type="number">${row.value}</span>`;
+                    html += `<span class="number value-editable" data-path="${escapeHtml(row.path)}" data-type="number">${row.value}</span>`;
                 } else if (typeof row.value === 'boolean') {
-                    html += `<span class="boolean value-editable" data-path="${row.path}" data-type="boolean">${row.value}</span>`;
+                    html += `<span class="boolean value-editable" data-path="${escapeHtml(row.path)}" data-type="boolean">${row.value}</span>`;
                 } else if (row.value === null) {
-                    html += `<span class="null value-editable" data-path="${row.path}" data-type="null">null</span>`;
+                    html += `<span class="null value-editable" data-path="${escapeHtml(row.path)}" data-type="null">null</span>`;
                 }
                 
                 div.innerHTML = html;
@@ -3776,29 +4014,68 @@
         }
         
         function escapeHtml(str) {
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         
         function toggle(path) {
-            if (expandedPaths.has(path)) expandedPaths.delete(path);
-            else expandedPaths.add(path);
+            if (expandAllMode) {
+                // Switching from expandAllMode: need to populate expandedPaths with current state
+                // but only for ancestor paths that are currently expanded
+                // To toggle a single node, we turn off expandAllMode and mark this node as collapsed
+                // We use a collapsedPaths set to track exceptions in expandAllMode
+                expandAllMode = false;
+                // Since we're coming from expandAll, all paths were expanded
+                // We can't store them all - instead just collapse this one path
+                // and keep expandAllMode but with exceptions
+                expandAllMode = true;
+                if (!window._collapsedInExpandAll) window._collapsedInExpandAll = new Set();
+                if (window._collapsedInExpandAll.has(path)) {
+                    window._collapsedInExpandAll.delete(path);
+                } else {
+                    window._collapsedInExpandAll.add(path);
+                }
+            } else {
+                if (expandedPaths.has(path)) expandedPaths.delete(path);
+                else expandedPaths.add(path);
+            }
             renderTree();
         }
         
         function expandAll() {
-            const expand = (obj, path) => {
-                if (obj === null || typeof obj !== 'object') return;
-                expandedPaths.add(path);
-                if (Array.isArray(obj)) obj.forEach((item, idx) => expand(item, `${path}[${idx}]`));
-                else Object.keys(obj).forEach(k => expand(obj[k], `${path}.${k}`));
-            };
-            expand(jsonData, 'root');
-            currentExpandLevel = maxDepth;
-            updateLevelDisplay();
-            renderTree();
+            // Guard: prevent UI freeze on very large files
+            const MAX_EXPAND_SIZE = 50 * 1024 * 1024; // 50 MB
+            if (fileSize > MAX_EXPAND_SIZE) {
+                if (!confirm(`Die Datei ist ${formatSize(fileSize)} groß. Alle Knoten aufklappen kann den Browser einfrieren. Fortfahren?`)) {
+                    return;
+                }
+            }
+            // Compute subtree sizes if not already done
+            if (jsonData && (!jsonData.__size || jsonData.__size <= 0)) {
+                status.textContent = 'Berechne Baumgrößen...';
+                setTimeout(() => {
+                    totalExpandedCount = computeSubtreeSizes(jsonData);
+                    expandAllMode = true;
+                    expandedPaths = new Set(['root']);
+                    window._collapsedInExpandAll = new Set();
+                    currentExpandLevel = maxDepth;
+                    updateLevelDisplay();
+                    renderTree();
+                    status.textContent = `${totalExpandedCount.toLocaleString()} Knoten – Alle aufgeklappt`;
+                }, 16);
+            } else {
+                totalExpandedCount = jsonData ? (jsonData.__size || 1) : 0;
+                expandAllMode = true;
+                expandedPaths = new Set(['root']);
+                window._collapsedInExpandAll = new Set();
+                currentExpandLevel = maxDepth;
+                updateLevelDisplay();
+                renderTree();
+            }
         }
         
         function collapseAll() {
+            expandAllMode = false;
+            window._collapsedInExpandAll = new Set();
             expandedPaths = new Set(['root']);
             currentExpandLevel = 1;
             updateLevelDisplay();
@@ -3808,6 +4085,8 @@
         function expandLevel() {
             if (currentExpandLevel >= maxDepth) return;
             currentExpandLevel++;
+            expandAllMode = false;
+            window._collapsedInExpandAll = new Set();
             expandToLevel(jsonData, 'root', 0);
             updateLevelDisplay();
             renderTree();
@@ -3816,32 +4095,53 @@
         function collapseLevel() {
             if (currentExpandLevel <= 1) return;
             currentExpandLevel--;
+            expandAllMode = false;
+            window._collapsedInExpandAll = new Set();
             collapseToLevel(jsonData, 'root', 0);
             updateLevelDisplay();
             renderTree();
         }
         
         function expandToLevel(obj, path, depth) {
-            if (obj === null || typeof obj !== 'object') return;
-            if (depth < currentExpandLevel) {
-                expandedPaths.add(path);
-                if (Array.isArray(obj)) {
-                    obj.forEach((item, idx) => expandToLevel(item, `${path}[${idx}]`, depth + 1));
+            // Iterative approach to prevent stack overflow on large files
+            const stack = [{ obj, path, depth }];
+            while (stack.length > 0) {
+                const { obj: cur, path: curPath, depth: curDepth } = stack.pop();
+                if (cur === null || typeof cur !== 'object') continue;
+                if (curDepth >= currentExpandLevel) continue;
+                expandedPaths.add(curPath);
+                if (Array.isArray(cur)) {
+                    for (let i = cur.length - 1; i >= 0; i--) {
+                        stack.push({ obj: cur[i], path: `${curPath}[${i}]`, depth: curDepth + 1 });
+                    }
                 } else {
-                    Object.keys(obj).forEach(k => expandToLevel(obj[k], `${path}.${k}`, depth + 1));
+                    const keys = Object.keys(cur);
+                    for (let i = keys.length - 1; i >= 0; i--) {
+                        stack.push({ obj: cur[keys[i]], path: `${curPath}.${keys[i]}`, depth: curDepth + 1 });
+                    }
                 }
             }
         }
         
         function collapseToLevel(obj, path, depth) {
-            if (obj === null || typeof obj !== 'object') return;
-            if (depth >= currentExpandLevel) {
-                expandedPaths.delete(path);
-            }
-            if (Array.isArray(obj)) {
-                obj.forEach((item, idx) => collapseToLevel(item, `${path}[${idx}]`, depth + 1));
-            } else {
-                Object.keys(obj).forEach(k => collapseToLevel(obj[k], `${path}.${k}`, depth + 1));
+            // Iterative approach to prevent stack overflow on large files
+            const stack = [{ obj, path, depth }];
+            while (stack.length > 0) {
+                const { obj: cur, path: curPath, depth: curDepth } = stack.pop();
+                if (cur === null || typeof cur !== 'object') continue;
+                if (curDepth >= currentExpandLevel) {
+                    expandedPaths.delete(curPath);
+                }
+                if (Array.isArray(cur)) {
+                    for (let i = cur.length - 1; i >= 0; i--) {
+                        stack.push({ obj: cur[i], path: `${curPath}[${i}]`, depth: curDepth + 1 });
+                    }
+                } else {
+                    const keys = Object.keys(cur);
+                    for (let i = keys.length - 1; i >= 0; i--) {
+                        stack.push({ obj: cur[keys[i]], path: `${curPath}.${keys[i]}`, depth: curDepth + 1 });
+                    }
+                }
             }
         }
         
@@ -3870,27 +4170,11 @@
         
         function handleSearchKey(e) {
             if (e.key === 'Enter') {
-                const query = searchInput.value.trim();
-                if (e.shiftKey) {
-                    // Shift+Enter: vorheriger Treffer
-                    if (query !== lastSearchQuery || searchMatches.length === 0) {
-                        search();
-                    } else {
-                        prevMatch();
-                    }
-                } else {
-                    // Enter: Suche durchführen oder zum nächsten Treffer
-                    if (query !== lastSearchQuery || searchMatches.length === 0) {
-                        search();
-                    } else {
-                        nextMatch();
-                    }
-                }
+                e.shiftKey ? prevMatch() : search();
             } else if (e.key === 'Escape') {
                 searchInput.blur();
                 searchMatches = [];
                 currentMatchIndex = -1;
-                lastSearchQuery = '';
                 updateSearchInfo();
                 renderTree();
             }
@@ -3901,48 +4185,20 @@
             if (!query || !jsonData) {
                 searchMatches = [];
                 currentMatchIndex = -1;
-                lastSearchQuery = '';
                 updateSearchInfo();
                 renderTree();
                 return;
             }
             
-            // Always collapse all first to avoid row limit issues with large files
-            expandedPaths.clear();
-            expandedPaths.add('root');
-            
             searchMatches = [];
             searchInObject(jsonData, 'root', query);
             currentMatchIndex = searchMatches.length > 0 ? 0 : -1;
-            lastSearchQuery = query;
             
-            // Expand only to current match
-            if (currentMatchIndex >= 0) {
-                goToSearchMatch(currentMatchIndex);
-            } else {
-                updateSearchInfo();
-                renderTree();
-            }
-        }
-        
-        // Navigate to a specific search match by index
-        function goToSearchMatch(index) {
-            if (index < 0 || index >= searchMatches.length) return;
-            currentMatchIndex = index;
-            const targetPath = searchMatches[index];
-            
-            // Expand all parent paths to this match
-            expandPathTo(targetPath);
-            
-            // Update UI
+            searchMatches.forEach(expandPathTo);
             updateSearchInfo();
             renderTree();
             
-            // Scroll to match after render
-            requestAnimationFrame(() => {
-                scrollToMatch();
-                renderVisibleItems();
-            });
+            if (currentMatchIndex >= 0) scrollToMatch();
         }
         
         function searchInObject(obj, path, query) {
@@ -3988,14 +4244,18 @@
         
         function nextMatch() {
             if (searchMatches.length === 0) return;
-            const newIndex = (currentMatchIndex + 1) % searchMatches.length;
-            goToSearchMatch(newIndex);
+            currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
+            updateSearchInfo();
+            scrollToMatch();
+            renderVisibleItems();
         }
         
         function prevMatch() {
             if (searchMatches.length === 0) return;
-            const newIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
-            goToSearchMatch(newIndex);
+            currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+            updateSearchInfo();
+            scrollToMatch();
+            renderVisibleItems();
         }
         
         // === REPLACE FUNCTIONS ===
@@ -4050,7 +4310,7 @@
             const replaceTerm = replaceInput.value;
             
             // Save state for undo
-            saveUndoState();
+            saveUndoState(getParentPath(path));
             
             // Replace the value
             let newValue;
@@ -4082,8 +4342,8 @@
             const searchTerm = searchInput.value;
             const replaceTerm = replaceInput.value;
             
-            // Save state for undo
-            saveUndoState();
+            // Save state for undo (full clone — affects many paths)
+            saveUndoState('root');
             
             let replacedCount = 0;
             const pathsToReplace = [...searchMatches]; // Copy array as it will change
@@ -4140,19 +4400,14 @@
         });
         
         function scrollToMatch() {
-            if (currentMatchIndex < 0 || currentMatchIndex >= searchMatches.length) return;
-            const targetPath = searchMatches[currentMatchIndex];
-            const rowIndex = visibleRows.findIndex(r => r.path === targetPath);
+            if (currentMatchIndex < 0) return;
+            const rowIndex = findVisibleRowIndex(searchMatches[currentMatchIndex]);
             if (rowIndex >= 0) {
-                const list = document.getElementById('virtualList');
-                if (list) {
-                    // Calculate target virtual scroll position (centered)
-                    const targetVirtualScroll = Math.max(0, rowIndex * ROW_HEIGHT - containerHeight / 2);
-                    // Update global scrollTop
-                    scrollTop = targetVirtualScroll;
-                    // Set actual scroll position (accounting for scale)
-                    list.scrollTop = targetVirtualScroll / scrollScale;
-                }
+                // Calculate target virtual scroll position (centered)
+                scrollTop = Math.max(0, rowIndex * ROW_HEIGHT - containerHeight / 2);
+                updateCustomScrollbar();
+                renderVisibleItems();
+                if (showMinimap) updateMinimap();
             }
         }
         
@@ -4198,7 +4453,7 @@
                 const isCurrent = index === currentMatchIndex;
                 
                 return `<div class="match-list-item${isCurrent ? ' current' : ''}" data-match-index="${index}">
-                    <span class="match-list-path">${path}</span>
+                    <span class="match-list-path">${escapeHtml(path)}</span>
                     <span class="match-list-value">${escapeHtml(displayValue)}</span>
                 </div>`;
             }).join('');
@@ -4321,11 +4576,17 @@
         }
         
         function parsePath(path) {
+            const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
             const parts = [];
             const regex = /\.([^.\[\]]+)|\[(\d+)\]/g;
             let match;
             while ((match = regex.exec(path)) !== null) {
-                if (match[1] !== undefined) parts.push(match[1]);
+                if (match[1] !== undefined) {
+                    if (DANGEROUS_KEYS.has(match[1])) {
+                        throw new Error(`Unsafe key in path: ${match[1]}`);
+                    }
+                    parts.push(match[1]);
+                }
                 else if (match[2] !== undefined) parts.push(parseInt(match[2]));
             }
             return parts;
@@ -4388,7 +4649,14 @@
                 if (type === 'string') {
                     newValue = inputVal;
                 } else if (type === 'number') {
-                    newValue = parseFloat(inputVal) || 0;
+                    const parsed = parseFloat(inputVal);
+                    if (isNaN(parsed)) {
+                        showNotification('Ungültige Zahl');
+                        editingPath = null;
+                        renderTree();
+                        return;
+                    }
+                    newValue = parsed;
                 } else if (type === 'boolean') {
                     newValue = inputVal.toLowerCase() === 'true';
                 } else if (value === null) {
@@ -4400,7 +4668,7 @@
                 }
                 
                 if (JSON.stringify(newValue) !== originalValue) {
-                    saveUndoState();
+                    saveUndoState(getParentPath(path));
                 }
                 setValueAtPath(path, newValue);
                 editingPath = null;
@@ -4461,7 +4729,7 @@
                     
                     if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
                         if (!parent.hasOwnProperty(newKey)) {
-                            saveUndoState();
+                            saveUndoState(parentPath);
                             const value = parent[currentKey];
                             delete parent[currentKey];
                             parent[newKey] = value;
@@ -4519,7 +4787,7 @@
             
             // Edit value
             if (canEdit) {
-                menu.appendChild(createMenuItem('Wert bearbeiten', () => {
+                menu.appendChild(createMenuItem(t('ctxEditValue'), () => {
                     const el = document.querySelector(`[data-path="${row.path}"]`);
                     if (el) startEdit(row.path, el);
                 }, 'Doppelklick'));
@@ -4527,7 +4795,7 @@
             
             // Rename key
             if (canRenameKey) {
-                menu.appendChild(createMenuItem('Schlüssel umbenennen', () => {
+                menu.appendChild(createMenuItem(t('ctxRenameKey'), () => {
                     setTimeout(() => {
                         const el = document.querySelector(`[data-path="${row.path}"] .key`);
                         if (el) startKeyEdit(row.path, el, row.key);
@@ -4539,7 +4807,7 @@
             if (row.path !== 'root') {
                 const typeSubmenu = document.createElement('div');
                 typeSubmenu.className = 'context-menu-item context-submenu';
-                typeSubmenu.innerHTML = '<span>Typ ändern zu…</span>';
+                typeSubmenu.innerHTML = '<span>' + escapeHtml(t('ctxChangeType')) + '</span>';
                 
                 const submenuContent = document.createElement('div');
                 submenuContent.className = 'context-submenu-content';
@@ -4559,7 +4827,7 @@
                     item.className = 'context-menu-item';
                     item.textContent = t.name;
                     item.onclick = () => {
-                        saveUndoState();
+                        saveUndoState(getParentPath(row.path));
                         setValueAtPath(row.path, typeof t.value === 'object' && t.value !== null ? JSON.parse(JSON.stringify(t.value)) : t.value);
                         hideContextMenu();
                         renderTree();
@@ -4576,8 +4844,8 @@
             // Add child (for objects/arrays)
             if (isObject) {
                 if (isArray) {
-                    menu.appendChild(createMenuItem('Element hinzufügen', () => {
-                        saveUndoState();
+                    menu.appendChild(createMenuItem(t('ctxAddElement'), () => {
+                        saveUndoState(row.path);
                         const arr = getValueAtPath(row.path);
                         arr.push(null);
                         markModified();
@@ -4586,13 +4854,13 @@
                         renderTree();
                     }));
                 } else {
-                    menu.appendChild(createMenuItem('Eigenschaft hinzufügen', () => {
-                        saveUndoState();
+                    menu.appendChild(createMenuItem(t('ctxAddProperty'), () => {
+                        saveUndoState(row.path);
                         const obj = getValueAtPath(row.path);
-                        let newKey = 'neue_eigenschaft';
+                        let newKey = 'new_property';
                         let i = 1;
                         while (obj.hasOwnProperty(newKey)) {
-                            newKey = `neue_eigenschaft_${i++}`;
+                            newKey = `new_property_${i++}`;
                         }
                         obj[newKey] = null;
                         markModified();
@@ -4605,8 +4873,8 @@
             
             // Delete (not root)
             if (row.path !== 'root') {
-                menu.appendChild(createMenuItem('Löschen', () => {
-                    saveUndoState();
+                menu.appendChild(createMenuItem(t('ctxDelete'), () => {
+                    saveUndoState(getParentPath(row.path));
                     deleteAtPath(row.path);
                     hideContextMenu();
                     renderTree();
@@ -4616,32 +4884,23 @@
             menu.appendChild(createSeparator());
             
             // Copy value
-            menu.appendChild(createMenuItem('Wert kopieren', () => {
+            menu.appendChild(createMenuItem(t('ctxCopyValue'), () => {
                 const json = JSON.stringify(value, null, 2);
                 navigator.clipboard.writeText(json);
                 hideContextMenu();
             }, '⌘C'));
             
             // Copy path
-            menu.appendChild(createMenuItem('Pfad kopieren', () => {
+            menu.appendChild(createMenuItem(t('ctxCopyPath'), () => {
                 navigator.clipboard.writeText(row.path);
                 hideContextMenu();
-                showNotification('Pfad kopiert: ' + row.path);
+                showNotification(t('pathCopied') + ': ' + row.path);
             }));
             
             // Duplicate (not root)
             if (row.path !== 'root') {
-                menu.appendChild(createMenuItem('Duplizieren', () => {
+                menu.appendChild(createMenuItem(t('ctxDuplicate'), () => {
                     duplicateElement(row.path);
-                    hideContextMenu();
-                }));
-            }
-            
-            // Focus Mode (for objects/arrays, not root)
-            if (isObject && row.path !== 'root' && !focusMode) {
-                menu.appendChild(createSeparator());
-                menu.appendChild(createMenuItem('🔍 Fokus auf Element', () => {
-                    enterFocusMode(row.path);
                     hideContextMenu();
                 }));
             }

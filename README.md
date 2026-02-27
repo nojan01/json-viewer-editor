@@ -1,103 +1,47 @@
 # JSON Viewer/Editor
 
-Ein moderner JSON Viewer und Editor für macOS und Windows, gebaut mit [Tauri](https://tauri.app/).
+Ein moderner JSON Viewer und Editor für macOS (und Windows), gebaut mit [Tauri](https://tauri.app/).
 
 ## Features
 
 - 📂 **JSON-Dateien öffnen** - Per Menü, Drag & Drop oder "Öffnen mit"
 - 🌳 **Baumansicht** - Hierarchische Darstellung mit auf-/zuklappbaren Knoten
 - 🔍 **Volltextsuche** - Durchsuchen von Keys und Values mit RegEx-Unterstützung
-- 🔄 **Suchen & Ersetzen** - Werte im gesamten Dokument finden und ersetzen (Strg+H / ⌘H)
+- 🔄 **Suchen & Ersetzen** - Werte im gesamten Dokument finden und ersetzen (⌘H)
 - ✏️ **Bearbeiten** - Werte direkt im Baum editieren mit Undo/Redo
 - 💾 **Speichern** - Geänderte JSON-Dateien speichern
 - 📤 **Export** - CSV-Export und Suchergebnisse exportieren
 - 🌙 **Hell/Dunkel-Theme** - Automatisch oder manuell umschaltbar
 - 🌍 **Mehrsprachig** - Deutsch und Englisch
 - 📐 **Fenster-Position** - Größe und Position werden gespeichert
-- 🖥️ **Cross-Platform** - Läuft auf macOS und Windows
 
 ## Installation
 
 ### macOS
 
-1. DMG-Datei herunterladen (oder selbst bauen, siehe unten)
+1. DMG-Datei herunterladen
 2. `JSON Viewer.app` in den Programme-Ordner ziehen
 3. App starten
 
 ### Windows
 
-**Option 1: Installer verwenden**
-1. MSI- oder NSIS-Installer herunterladen
-2. Installer ausführen
-3. App starten
-
-**Option 2: Portable Version (keine Installation)** ⭐
-1. `app.exe` herunterladen
-2. Direkt ausführen - keine Installation erforderlich!
-3. Perfekt für USB-Sticks oder wenn keine Admin-Rechte vorhanden sind
-
-⚠️ **Wichtig:** Für normale Windows-PCs (Intel/AMD) benötigen Sie die **x64-Version**!
-
-📖 **Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details zur portablen Version**
-
-**Option 3: Selbst bauen**
-
-Siehe Build-Anleitung unten.
+Siehe [INSTALL-WINDOWS.md](tauri-app/INSTALL-WINDOWS.md) für Build-Anleitung.
 
 ## Entwicklung
 
 ### Voraussetzungen
 
-**Alle Plattformen:**
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://rustup.rs/)
-
-**Windows zusätzlich:**
-- [Microsoft Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/downloads/)
-- [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (meist bereits installiert)
-- Rust Target für x64: `rustup target add x86_64-pc-windows-msvc`
-
-**macOS zusätzlich:**
-- Xcode Command Line Tools: `xcode-select --install`
+- [Tauri CLI](https://tauri.app/v1/guides/getting-started/prerequisites)
 
 ### Build
 
-**Windows (x64 - für normale PCs):**
-```bash
-cd tauri-app
-npm install
-npm run tauri build -- --target x86_64-pc-windows-msvc
-```
-
-**Windows (ARM64 - für Surface Pro X, etc.):**
-```bash
-cd tauri-app
-npm install
-npm run tauri build -- --target aarch64-pc-windows-msvc
-```
-
-**macOS:**
 ```bash
 cd tauri-app
 npm install
 npm run tauri build
 ```
-
-**Build-Ausgaben:**
-
-**macOS:**
-- DMG: `src-tauri/target/release/bundle/dmg/JSON Viewer_1.0.0_aarch64.dmg`
-- App: `src-tauri/target/release/bundle/macos/JSON Viewer.app`
-
-**Windows (x64):**
-- MSI Installer: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/JSON Viewer_1.0.0_x64_en-US.msi`
-- NSIS Installer: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/JSON Viewer_1.0.0_x64-setup.exe`
-- **Portable EXE**: `src-tauri/target/x86_64-pc-windows-msvc/release/app.exe` ⭐ (keine Installation erforderlich!)
-
-**Windows (ARM64):**
-- MSI Installer: `src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/JSON Viewer_1.0.0_arm64_en-US.msi`
-- NSIS Installer: `src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/JSON Viewer_1.0.0_arm64-setup.exe`
-- Portable EXE: `src-tauri/target/aarch64-pc-windows-msvc/release/app.exe`
 
 ### Entwicklungsmodus
 
@@ -105,32 +49,6 @@ npm run tauri build
 cd tauri-app
 npm run tauri dev
 ```
-
-## Portable Version (Windows)
-
-Die portable Version benötigt **keine Installation** und **keine Admin-Rechte**:
-
-1. Nach dem Build die Datei `src-tauri/target/x86_64-pc-windows-msvc/release/app.exe` kopieren
-2. Auf USB-Stick, in einen Ordner oder direkt ausführen
-3. Keine Registry-Einträge, komplett eigenständig
-
-**Wichtig:** Verwenden Sie die **x64-Version** für normale Windows-PCs (Intel/AMD)!
-
-**Vorteile:**
-- ✅ Keine Installation erforderlich
-- ✅ Keine Admin-Rechte nötig
-- ✅ USB-Stick tauglich
-- ✅ Ca. 8-15 MB groß
-- ✅ Funktioniert auf Windows 10/11
-
-Siehe [PORTABLE-WINDOWS.md](tauri-app/PORTABLE-WINDOWS.md) für Details.
-
-## Windows-Architekturen
-
-| Architektur | Für welche PCs? | Build-Command |
-|-------------|----------------|---------------|
-| **x64** | Normale Windows-PCs (Intel/AMD) - **99% der Nutzer** | `--target x86_64-pc-windows-msvc` |
-| ARM64 | Windows on ARM (Surface Pro X, etc.) - ~1% | `--target aarch64-pc-windows-msvc` |
 
 ## Projektstruktur
 
@@ -141,63 +59,21 @@ json-viewer-editor/
 │   │   └── index.html      # Frontend (HTML/JS/CSS)
 │   ├── src-tauri/
 │   │   ├── src/
-│   │   │   ├── lib.rs      # Rust Backend (Cross-Platform)
-│   │   │   └── main.rs     # Entry Point
+│   │   │   └── lib.rs      # Rust Backend
 │   │   ├── icons/          # App Icons
 │   │   └── tauri.conf.json # Tauri Konfiguration
-│   ├── PORTABLE-WINDOWS.md # Portable Version Anleitung
 │   └── package.json
 └── README.md
 ```
-
-## Plattform-Spezifische Features
-
-### macOS
-- Native App-Menü mit "About", "Hide", etc.
-- Vollbild-Modus (⌘^F)
-- Window State gespeichert in: `~/Library/Application Support/com.jsonviewer.app/`
-
-### Windows
-- Standard-Menü (File, Edit, View, Window, Help)
-- Window State gespeichert in: `%APPDATA%\com.jsonviewer.app\`
-- MSI und NSIS Installer verfügbar
-- **Portable EXE** ohne Installation verfügbar
-- Unterstützt x64 und ARM64
 
 ## Technologie
 
 - **Frontend:** HTML, CSS, JavaScript (Vanilla)
 - **Backend:** Rust mit Tauri 2.x
 - **Plugins:** tauri-plugin-dialog, tauri-plugin-fs, tauri-plugin-cli
-- **Cross-Platform:** Conditional compilation für plattformspezifische Features
-
-## Tastenkürzel
-
-| Aktion | Windows | macOS |
-|--------|---------|-------|
-| Datei öffnen | Strg+O | ⌘O |
-| Speichern | Strg+S | ⌘S |
-| Suchen | Strg+F | ⌘F |
-| Suchen & Ersetzen | Strg+H | ⌘H |
-| Alle aufklappen | Strg+E | ⌘E |
-| Alle zuklappen | Strg+W | ⌘W |
-| Rückgängig | Strg+Z | ⌘Z |
-| Wiederholen | Strg+Y / Strg+Shift+Z | ⌘⇧Z |
-| Hilfe | F1 | F1 |
 
 ## Lizenz
 
 MIT License - Frei verwendbar, auch kommerziell.
 
 Das App-Icon ist eigen erstellt und lizenzfrei.
-
-## Changelog
-
-### Version 1.0.0
-- ✨ Initiales Release
-- 🖥️ Windows-Support (x64 und ARM64)
-- 🍎 macOS-Support
-- 📦 Portable Windows-Version (keine Installation erforderlich)
-- 🔍 Volltextsuche mit RegEx
-- ✏️ Inline-Editing mit Undo/Redo
-- 📤 CSV-Export

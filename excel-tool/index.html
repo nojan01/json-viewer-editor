@@ -1502,6 +1502,19 @@
             reader.onload = async (e) => {
                 try {
                     const config = JSON.parse(e.target.result);
+                    // Validate config schema before applying
+                    if (config.mapping && typeof config.mapping === 'object') {
+                        const m = config.mapping;
+                        if (Array.isArray(m.sourceColumns)) {
+                            m.sourceColumns = m.sourceColumns.filter(c => Number.isInteger(c) && c >= 0);
+                        }
+                        if (m.targetStartColumn !== undefined && (!Number.isInteger(m.targetStartColumn) || m.targetStartColumn < 0)) {
+                            m.targetStartColumn = 3;
+                        }
+                        if (m.duplicateCheckColumn !== undefined && (!Number.isInteger(m.duplicateCheckColumn) || m.duplicateCheckColumn < 0)) {
+                            m.duplicateCheckColumn = 0;
+                        }
+                    }
                     state.mapping = config.mapping || state.mapping;
                     
                     // Speichere in IndexedDB (kann große Dateien speichern)
@@ -1654,6 +1667,11 @@
         }
         
         function processFile(file, fileNum) {
+            const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+            if (file.size > MAX_FILE_SIZE) {
+                showStatus(`Datei zu groß (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum: 100 MB`, 'error');
+                return;
+            }
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
@@ -1948,10 +1966,11 @@
             let html = '';
             state.mapping.sourceColumns.forEach((colIndex, i) => {
                 const headerName = state.file1.headers[colIndex] || `Spalte ${colIndex + 1}`;
+                const safeHeader = escapeHtml(headerName);
                 html += `
                     <div class="new-row-field">
-                        <label title="${headerName}">${headerName}</label>
-                        <input type="text" id="newRowField_${i}" data-col-index="${colIndex}" placeholder="${headerName}">
+                        <label title="${safeHeader}">${safeHeader}</label>
+                        <input type="text" id="newRowField_${i}" data-col-index="${colIndex}" placeholder="${safeHeader}">
                     </div>`;
             });
             
@@ -2074,6 +2093,8 @@
         function wildcardToRegex(pattern) {
             // Escape special regex characters except * and ?
             let escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+            // Collapse consecutive wildcards to prevent ReDoS
+            escaped = escaped.replace(/\*{2,}/g, '*');
             // Convert wildcards to regex
             escaped = escaped.replace(/\*/g, '.*');  // * = beliebig viele Zeichen
             escaped = escaped.replace(/\?/g, '.');   // ? = genau ein Zeichen
@@ -2275,9 +2296,13 @@
         }
         
         function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            if (text == null) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
         
         function escapeRegex(string) {
@@ -2577,7 +2602,7 @@
                 const editedBadge = item.wasEdited ? '<span class="queue-item-edited" title="Bearbeitet">✏️</span>' : '';
                 html += `
                     <div class="queue-item">
-                        <span class="queue-item-flag">${item.flag}</span>
+                        <span class="queue-item-flag">${escapeHtml(item.flag)}</span>
                         ${editedBadge}
                         <span class="queue-item-value" title="${escapeHtml(String(item.data))}">${escapeHtml(preview)}</span>
                         ${item.comment ? `<span class="queue-item-comment" title="${escapeHtml(item.comment)}">${escapeHtml(item.comment)}</span>` : ''}
@@ -2750,6 +2775,12 @@
                 return;
             }
             
+            // Validate filename characters
+            const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+            if (INVALID_FILENAME_CHARS.test(newFilename)) {
+                showStatus(elements.transferStatus, 'Dateiname enthält ungültige Zeichen', 'error');
+                return;
+            }
             const finalFilename = newFilename.endsWith('.xlsx') ? newFilename : newFilename + '.xlsx';
             
             try {
@@ -2811,7 +2842,11 @@
             }
             
             // Range aktualisieren
-            const maxCol = Math.max(...allData.map(row => row.length)) - 1;
+            let maxCol = 0;
+            for (const row of allData) {
+                if (row.length > maxCol) maxCol = row.length;
+            }
+            maxCol -= 1;
             ws['!ref'] = XLSX.utils.encode_range({
                 s: { r: 0, c: 0 },
                 e: { r: allData.length - 1, c: maxCol }
@@ -2874,7 +2909,7 @@
             a.href = url;
             a.download = filename;
             a.click();
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
         }
         
         function updateHistoryDisplay() {
@@ -2898,7 +2933,11 @@
         }
         
         function showStatus(element, message, type) {
-            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+            const div = document.createElement('div');
+            div.className = `status ${escapeHtml(type)}`;
+            div.textContent = message;
+            element.innerHTML = '';
+            element.appendChild(div);
             setTimeout(() => {
                 element.innerHTML = '';
             }, 5000);
