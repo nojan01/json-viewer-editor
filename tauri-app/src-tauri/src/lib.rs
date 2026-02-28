@@ -566,10 +566,13 @@ pub fn run() {
       // Handle file drop events (drag & drop from File Explorer)
       if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
         if let Some(path) = paths.first() {
-          if let Some(ext) = path.extension() {
-            if ext == "json" {
-              let path_str = path.to_string_lossy().to_string();
-              let _ = window.emit("open-file", &path_str);
+          if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            match ext {
+              "json" | "txt" | "geojson" | "jsonl" => {
+                let path_str = path.to_string_lossy().to_string();
+                let _ = window.emit("open-file", &path_str);
+              },
+              _ => {}
             }
           }
         }

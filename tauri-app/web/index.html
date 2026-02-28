@@ -3177,6 +3177,13 @@
             e.stopPropagation();
             if (dropZone) dropZone.classList.remove('drag-over');
             
+            // In Tauri: skip browser File API path — Tauri DragDrop event
+            // handles it via open-file (avoids race condition + empty file.text() on Windows)
+            if (window.__TAURI__) {
+                console.log('[Drop] In Tauri — letting DragDrop event handle file');
+                return;
+            }
+            
             const files = e.dataTransfer.files;
             if (files && files.length > 0) {
                 const file = files[0];
@@ -3197,6 +3204,9 @@
         treeContainer.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            
+            // In Tauri: skip browser File API path (see above)
+            if (window.__TAURI__) return;
             
             const files = e.dataTransfer.files;
             if (files && files.length > 0) {
@@ -3288,7 +3298,7 @@
             
             // Step 4: Check for empty content
             if (!text) {
-                throw new Error('Datei ist leer');
+                throw new Error('Datei ist leer (nach BOM-Strip/Trim). Eingabe-Typ: ' + typeof input + ', Eingabe-Länge: ' + (input ? (input.length || input.byteLength || '?') : 'null/undefined'));
             }
             
             // Step 5: Try standard JSON.parse
@@ -3342,6 +3352,8 @@
                 const readResult = await readFileContent(filePath);
                 let text = readResult.text;
                 fileSize = readResult.byteSize;
+                
+                console.log(`[loadFileFromPath] readResult: type=${typeof text}, length=${text ? text.length : 'null'}, byteSize=${fileSize}`);
                 
                 const progressEl = document.getElementById('loadProgress');
                 if (progressEl) progressEl.textContent = `${formatSize(fileSize)} - Parsen...`;
@@ -3595,6 +3607,11 @@
                 showNotification(`Datei zu groß (${formatSize(file.size)}). Maximum: ${formatSize(MAX_FILE_SIZE)}`, 'error');
                 return;
             }
+            if (file.size === 0) {
+                showNotification('Datei ist leer (0 Bytes)', 'error');
+                return;
+            }
+            console.log(`[loadFile] Browser File API: ${file.name}, size: ${file.size}`);
             fileName = file.name;
             fileSize = file.size;
             status.textContent = `Lade ${fileName}...`;
