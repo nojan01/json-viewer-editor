@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::io::Read;
 use serde::{Deserialize, Serialize};
 
-// Optimized fast file reading command with buffered reading for large files
+// Optimized fast file reading command
 #[tauri::command]
 fn read_file_fast(path: String) -> Result<String, String> {
     // Validate file path: only allow JSON/TXT files
@@ -18,45 +18,18 @@ fn read_file_fast(path: String) -> Result<String, String> {
         _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
     }
     
+    let metadata = fs::metadata(&path)
+        .map_err(|e| format!("Fehler beim Lesen der Metadaten: {}", e))?;
+    let file_size = metadata.len() as usize;
+    
+    // Pre-allocate the string with the known size, then read in one pass
+    let mut contents = String::with_capacity(file_size);
     let file = fs::File::open(&path)
         .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
     
-    let metadata = file.metadata()
-        .map_err(|e| format!("Fehler beim Lesen der Metadaten: {}", e))?;
-    
-    let file_size = metadata.len() as usize;
-    
-    // For files > 10MB, use buffered reading (much faster for large files)
-    if file_size > 10 * 1024 * 1024 {
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::FileExt;
-            // Try to read in one large chunk
-            let mut buffer = vec![0u8; file_size];
-            
-            file.seek_read(&mut buffer, 0)
-                .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
-            
-            let contents = String::from_utf8(buffer)
-                .map_err(|e| format!("UTF-8 Fehler: {}", e))?;
-            
-            return Ok(contents);
-        }
-        
-        #[cfg(not(windows))]
-        {
-            // Fallback for non-Windows
-            return fs::read_to_string(&path)
-                .map_err(|e| format!("Fehler beim Lesen: {}", e));
-        }
-    }
-    
-    // For smaller files, use standard buffered reading
-    let mut contents = String::with_capacity(file_size);
     use std::io::BufReader;
-    let mut buf_reader = BufReader::with_capacity(1024 * 1024, file); // 1MB buffer
-    
-    buf_reader.read_to_string(&mut contents)
+    let mut reader = BufReader::with_capacity(8 * 1024 * 1024, file); // 8 MB buffer
+    reader.read_to_string(&mut contents)
         .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
     
     Ok(contents)
@@ -104,6 +77,14 @@ fn count_json_value(val: &serde_json::Value) -> u64 {
     count
 }
 
+// Get file size only (without re-reading and re-parsing the file)
+#[tauri::command]
+fn get_file_size(path: String) -> Result<u64, String> {
+    let metadata = fs::metadata(&path)
+        .map_err(|e| format!("Fehler Metadaten: {}", e))?;
+    Ok(metadata.len())
+}
+
 #[tauri::command]
 fn get_file_stats(path: String) -> Result<FileStats, String> {
     let path_obj = std::path::Path::new(&path);
@@ -115,6 +96,11 @@ fn get_file_stats(path: String) -> Result<FileStats, String> {
     let metadata = fs::metadata(&path)
         .map_err(|e| format!("Fehler Metadaten: {}", e))?;
     let size_bytes = metadata.len();
+
+    // For files > 50 MB, only return size (avoid re-reading and re-parsing)
+    if size_bytes > 50 * 1024 * 1024 {
+        return Ok(FileStats { size_bytes, node_count: 0 });
+    }
 
     let content = fs::read_to_string(&path)
         .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
@@ -452,7 +438,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, write_file_fast, get_file_stats, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       
