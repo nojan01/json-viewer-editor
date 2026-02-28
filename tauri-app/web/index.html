@@ -3209,6 +3209,35 @@
             }
         });
         
+        // Helper: Read file content, using raw bytes for large files to avoid IPC overhead
+        // For files >50MB, read_file_raw avoids JSON string escaping in Tauri IPC,
+        // saving ~200MB+ peak memory for a 300MB file (prevents Windows OOM/STATUS_BREAKPOINT)
+        const RAW_READ_THRESHOLD = 50 * 1024 * 1024; // 50 MB
+        async function readFileContent(filePath) {
+            // Check file size first
+            let byteSize = 0;
+            try {
+                byteSize = await window.__TAURI__.core.invoke('get_file_size', { path: filePath });
+            } catch(e) {
+                // Fallback: read with read_file_fast (small files or error)
+                const text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
+                return { text, byteSize: text.length };
+            }
+            
+            if (byteSize > RAW_READ_THRESHOLD) {
+                // Large file: use raw bytes to avoid IPC JSON escaping overhead
+                console.log(`[ReadFile] Using read_file_raw for ${(byteSize / 1024 / 1024).toFixed(1)} MB file`);
+                const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
+                // Decode bytes to string (buffer is ArrayBuffer from Tauri IPC)
+                const text = new TextDecoder('utf-8').decode(buffer);
+                return { text, byteSize };
+            } else {
+                // Small file: use standard string IPC (simpler, negligible overhead)
+                const text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
+                return { text, byteSize: byteSize || text.length };
+            }
+        }
+        
         // Load file from path (used for "Open With" and drag & drop from Finder)
         async function loadFileFromPath(filePath) {
             if (!window.__TAURI__ || !filePath) return;
@@ -3229,8 +3258,9 @@
                 await new Promise(r => setTimeout(r, 16));
                 
                 const startTime = performance.now();
-                let text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
-                fileSize = text.length;
+                const readResult = await readFileContent(filePath);
+                let text = readResult.text;
+                fileSize = readResult.byteSize;
                 
                 const progressEl = document.getElementById('loadProgress');
                 if (progressEl) progressEl.textContent = `${formatSize(fileSize)} - Parsen...`;
@@ -3253,12 +3283,8 @@
                 // For large files (>50MB), skip Rust re-read to avoid OOM
                 // Use computeSubtreeSizes result as node count instead
                 let nodeCount;
-                const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024;
-                if (fileSize > LARGE_FILE_THRESHOLD) {
-                    // Get only the real byte size from Rust (no re-parse)
-                    try {
-                        fileSize = await window.__TAURI__.core.invoke('get_file_size', { path: filePath });
-                    } catch(e) { /* keep text.length */ }
+                if (fileSize > RAW_READ_THRESHOLD) {
+                    // Already have accurate byte size from readFileContent
                     nodeCount = 0; // will be set after computeSubtreeSizes
                 } else {
                     try {
@@ -3343,9 +3369,11 @@
                         
                         const startTime = performance.now();
                         
-                        // Read file using fast Rust command (much faster than fs plugin)
-                        let text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
-                        fileSize = text.length;
+                        // Read file using optimized Rust commands
+                        // For large files (>50MB), uses raw bytes to avoid IPC overhead
+                        const readResult = await readFileContent(filePath);
+                        let text = readResult.text;
+                        fileSize = readResult.byteSize;
                         
                         // Update progress
                         const progressEl = document.getElementById('loadProgress');
@@ -3370,11 +3398,8 @@
                         
                         // For large files (>50MB), skip Rust re-read to avoid OOM on Windows
                         let nodeCount;
-                        const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024;
-                        if (fileSize > LARGE_FILE_THRESHOLD) {
-                            try {
-                                fileSize = await window.__TAURI__.core.invoke('get_file_size', { path: filePath });
-                            } catch(e) { /* keep text.length */ }
+                        if (fileSize > RAW_READ_THRESHOLD) {
+                            // Already have accurate byte size from readFileContent
                             nodeCount = 0; // will be set after computeSubtreeSizes
                         } else {
                             try {

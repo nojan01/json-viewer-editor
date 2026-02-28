@@ -35,6 +35,22 @@ fn read_file_fast(path: String) -> Result<String, String> {
     Ok(contents)
 }
 
+// Fast file reading that returns raw bytes (avoids JSON string escaping in IPC)
+// For a 500MB file, this saves ~200MB+ of IPC overhead
+#[tauri::command]
+fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    }
+    
+    let bytes = fs::read(&path)
+        .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+    
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 // Fast file writing command
 #[tauri::command]
 fn write_file_fast(path: String, content: String) -> Result<(), String> {
@@ -434,11 +450,21 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // On Windows, increase WebView2's V8 heap limit for large JSON files
+  // Default V8 heap is ~1.7GB which isn't enough for 500MB+ files
+  #[cfg(target_os = "windows")]
+  {
+    std::env::set_var(
+      "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+      "--js-flags=--max-old-space-size=8192 --disable-features=RendererCodeIntegrity"
+    );
+  }
+
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       
