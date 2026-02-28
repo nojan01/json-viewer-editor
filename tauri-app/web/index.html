@@ -1502,19 +1502,32 @@
             cursor: pointer; padding: 4px 8px; border-radius: 4px;
         }
         .table-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .table-export-btn {
+            background: var(--accent); border: none;
+            color: #fff; font-size: 12px;
+            cursor: pointer; padding: 5px 12px; border-radius: 5px;
+            display: flex; align-items: center; gap: 4px;
+            white-space: nowrap; transition: background 0.15s;
+        }
+        .table-export-btn:hover { background: var(--accent-hover); }
         .table-scroll {
             flex: 1;
             overflow: auto;
+            position: relative;
         }
         .table-scroll table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
             font-family: 'SF Mono', monospace;
+            position: relative;
         }
-        .table-scroll th {
+        .table-scroll thead {
             position: sticky;
             top: 0;
+            z-index: 2;
+        }
+        .table-scroll th {
             background: var(--bg-tertiary);
             border-bottom: 2px solid var(--border);
             padding: 8px 10px;
@@ -1870,6 +1883,58 @@
             align-items: center;
             gap: 4px;
         }
+
+        /* ============ REST CLIENT ============ */
+        .rest-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; }
+        .rest-overlay.visible { display: block; }
+        .rest-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 2001; background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 12px; width: 600px; max-width: 90vw; max-height: 80vh; overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+        }
+        .rest-modal.visible { display: flex; flex-direction: column; }
+        .rest-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
+        .rest-header h3 { margin: 0; font-size: 14px; }
+        .rest-close { background: transparent; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .rest-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .rest-content { padding: 16px; overflow-y: auto; }
+        .rest-url-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .rest-method {
+            padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 5px; color: var(--text-primary); font-size: 12px; font-weight: 600;
+        }
+        .rest-url-input {
+            flex: 1; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 5px; color: var(--text-primary); font-size: 12px; font-family: 'SF Mono', monospace;
+        }
+        .rest-url-input:focus { border-color: var(--accent); outline: none; }
+        .rest-send-btn {
+            padding: 8px 16px; background: var(--accent); border: none; color: #fff;
+            border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;
+            transition: background 0.15s;
+        }
+        .rest-send-btn:hover { background: var(--accent-hover); }
+        .rest-send-btn:disabled { opacity: 0.5; cursor: default; }
+        .rest-section { margin-bottom: 10px; }
+        .rest-section label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+        .rest-textarea {
+            width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 5px; color: var(--text-primary); font-size: 12px; font-family: 'SF Mono', monospace;
+            resize: vertical;
+        }
+        .rest-textarea:focus { border-color: var(--accent); outline: none; }
+        .rest-status { font-size: 12px; color: var(--text-secondary); padding-top: 8px; }
+        .rest-auth-row { display: flex; gap: 6px; align-items: center; }
+        .rest-auth-row .rest-url-input { flex: 1; }
+        .rest-auth-bearer { position: relative; }
+        .rest-eye-btn {
+            background: transparent; border: 1px solid var(--border); border-radius: 4px;
+            color: var(--text-secondary); cursor: pointer; padding: 6px 8px; font-size: 13px;
+            flex-shrink: 0; transition: background 0.15s;
+        }
+        .rest-eye-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .rest-eye-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     </style>
 </head>
 <body>
@@ -2576,6 +2641,7 @@
         <div class="table-header">
             <h3 id="tableTitle">Tabellenansicht</h3>
             <input type="text" class="table-filter-input" id="tableFilterInput" placeholder="Filter...">
+            <button class="table-export-btn" id="btnTableExport" title="Als Excel exportieren">📥 Excel</button>
             <button class="table-close" id="btnTableClose">✕</button>
         </div>
         <div class="table-scroll" id="tableScroll"></div>
@@ -2666,6 +2732,67 @@
         </div>
     </div>
 
+    <!-- REST Client Modal -->
+    <div class="rest-overlay" id="restOverlay"></div>
+    <div class="rest-modal" id="restModal">
+        <div class="rest-header">
+            <h3>🌐 REST-Client</h3>
+            <button class="rest-close" id="btnRestClose">✕</button>
+        </div>
+        <div class="rest-content">
+            <div class="rest-url-row">
+                <select class="rest-method" id="restMethod">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                </select>
+                <input class="rest-url-input" id="restUrlInput" type="text" placeholder="https://jsonplaceholder.typicode.com/posts" value="https://jsonplaceholder.typicode.com/posts">
+                <button class="rest-send-btn" id="btnRestSend">Senden</button>
+            </div>
+            <div class="rest-section">
+                <label>Authentifizierung:</label>
+                <select class="rest-method" id="restAuthType" style="width:100%;margin-bottom:8px;">
+                    <option value="none">Keine</option>
+                    <option value="basic">Basic Auth (Benutzername / Passwort)</option>
+                    <option value="bearer">Bearer Token</option>
+                    <option value="apikey">API Key</option>
+                </select>
+                <div class="rest-auth-fields" id="restAuthFields">
+                    <div class="rest-auth-basic" id="restAuthBasic" style="display:none;">
+                        <div class="rest-auth-row">
+                            <input class="rest-url-input" id="restAuthUser" type="text" placeholder="Benutzername">
+                            <input class="rest-url-input" id="restAuthPass" type="password" placeholder="Passwort">
+                            <button class="rest-eye-btn" id="btnTogglePass" title="Passwort anzeigen">👁</button>
+                        </div>
+                    </div>
+                    <div class="rest-auth-bearer" id="restAuthBearer" style="display:none;">
+                        <input class="rest-url-input" id="restAuthToken" type="password" placeholder="Bearer Token" style="width:100%;">
+                        <button class="rest-eye-btn" id="btnToggleToken" title="Token anzeigen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);">👁</button>
+                    </div>
+                    <div class="rest-auth-apikey" id="restAuthApiKey" style="display:none;">
+                        <div class="rest-auth-row">
+                            <input class="rest-url-input" id="restApiKeyName" type="text" placeholder="Header-Name (z.B. X-API-Key)" value="X-API-Key">
+                            <input class="rest-url-input" id="restApiKeyValue" type="password" placeholder="API Key Wert">
+                            <button class="rest-eye-btn" id="btnToggleApiKey" title="Key anzeigen">👁</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="rest-section">
+                <label>Headers (optional, JSON):</label>
+                <textarea class="rest-textarea" id="restHeaders" rows="2" placeholder='{"Custom-Header": "value"}'></textarea>
+            </div>
+            <div class="rest-section" id="restBodySection">
+                <label>Body (optional, JSON):</label>
+                <textarea class="rest-textarea" id="restBody" rows="3" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <div class="rest-status" id="restStatus"></div>
+        </div>
+    </div>
+
+    <script src="xlsx.full.min.js"></script>
     <script>
         // State
         let jsonData = null;
@@ -6195,8 +6322,6 @@
                 return;
             }
             renderTableView(targetArray, targetPath);
-            document.getElementById('tableViewOverlay').classList.add('visible');
-            document.getElementById('tableViewModal').classList.add('visible');
         }
         function findFirstObjectArray(obj, maxDepth = 5, depth = 0) {
             if (depth > maxDepth || !obj || typeof obj !== 'object') return null;
@@ -6214,21 +6339,94 @@
         let tableSortAsc = true;
         let tableData = [];
         let tableColumns = [];
-        function renderTableView(arr, path) {
-            tableData = arr.filter(item => typeof item === 'object' && item !== null);
-            // Collect all columns
-            const colSet = new Set();
-            tableData.forEach(item => {
-                Object.keys(item).filter(k => k !== '__size').forEach(k => colSet.add(k));
-            });
-            tableColumns = [...colSet];
-            tableSortCol = null;
-            tableSortAsc = true;
-            document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${tableData.length} Zeilen)`;
-            document.getElementById('tableFilterInput').value = '';
-            renderTable();
+        // Flatten nested objects/arrays into dot-notation keys so every cell is a primitive.
+        // Objects are always fully expanded (they have bounded keys).
+        // Only arrays count towards depth (maxArrayDepth limits nested array-in-array expansion).
+        // maxArrayExpand: only expand the first N items of each array.
+        function flattenObject(obj, prefix, arrayDepth, maxArrayDepth, maxArrayExpand) {
+            const result = {};
+            if (obj === null || obj === undefined || typeof obj !== 'object') {
+                if (prefix) result[prefix] = obj;
+                return result;
+            }
+            if (Array.isArray(obj)) {
+                // Arrays count towards depth limit
+                if (arrayDepth > maxArrayDepth) {
+                    if (prefix) result[prefix] = obj;
+                    return result;
+                }
+                if (obj.length === 0) {
+                    if (prefix) result[prefix] = '[]';
+                } else {
+                    const limit = Math.min(obj.length, maxArrayExpand);
+                    for (let i = 0; i < limit; i++) {
+                        const key = prefix ? `${prefix}[${i}]` : `[${i}]`;
+                        const val = obj[i];
+                        if (val !== null && typeof val === 'object') {
+                            Object.assign(result, flattenObject(val, key, arrayDepth + 1, maxArrayDepth, maxArrayExpand));
+                        } else {
+                            result[key] = val;
+                        }
+                    }
+                    if (obj.length > limit && prefix) {
+                        result[prefix + '.length'] = obj.length;
+                    }
+                }
+            } else {
+                // Objects: always expand fully (no depth limit)
+                const keys = Object.keys(obj).filter(k => k !== '__size');
+                for (const k of keys) {
+                    const key = prefix ? `${prefix}.${k}` : k;
+                    const val = obj[k];
+                    if (val !== null && typeof val === 'object') {
+                        Object.assign(result, flattenObject(val, key, arrayDepth, maxArrayDepth, maxArrayExpand));
+                    } else {
+                        result[key] = val;
+                    }
+                }
+            }
+            return result;
         }
-        function renderTable(filter = '') {
+        const MAX_TABLE_COLUMNS = 200;
+        let tableFilteredData = []; // current filtered/sorted view
+        const TABLE_ROW_HEIGHT = 28; // px per row
+        const TABLE_OVERSCAN = 20; // extra rows rendered above/below viewport
+        function renderTableView(arr, path) {
+            const rawData = arr.filter(item => typeof item === 'object' && item !== null);
+            document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${rawData.length} Zeilen) — lade…`;
+            document.getElementById('tableFilterInput').value = '';
+            document.getElementById('tableScroll').innerHTML = '<div style="padding:24px;color:var(--text-secondary)">Tabelle wird aufgebaut…</div>';
+            document.getElementById('tableViewOverlay').classList.add('visible');
+            document.getElementById('tableViewModal').classList.add('visible');
+            // Use setTimeout to allow the modal to paint before doing heavy work
+            setTimeout(() => {
+                // Flatten each row: objects fully expanded, arrays limited to 3 nesting levels & 3 items each
+                tableData = rawData.map(item => flattenObject(item, '', 0, 3, 3));
+                // Collect all columns from flattened data
+                const colSet = new Set();
+                tableData.forEach(item => {
+                    Object.keys(item).forEach(k => colSet.add(k));
+                });
+                // Sort: flat columns first, then nested columns alphabetically
+                let cols = [...colSet].sort((a, b) => {
+                    const aDepth = (a.match(/[.\[]/g) || []).length;
+                    const bDepth = (b.match(/[.\[]/g) || []).length;
+                    if (aDepth !== bDepth) return aDepth - bDepth;
+                    return a.localeCompare(b);
+                });
+                if (cols.length > MAX_TABLE_COLUMNS) {
+                    cols = cols.slice(0, MAX_TABLE_COLUMNS);
+                }
+                tableColumns = cols;
+                tableSortCol = null;
+                tableSortAsc = true;
+                document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${rawData.length} Zeilen)`;
+                prepareTableData();
+                renderVirtualTable();
+            }, 30);
+        }
+        // Prepare filtered/sorted data
+        function prepareTableData(filter = '') {
             let data = tableData;
             if (filter) {
                 const lf = filter.toLowerCase();
@@ -6247,41 +6445,96 @@
                     return tableSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
                 });
             }
-            let html = '<table><thead><tr>';
-            html += '<th>#</th>';
+            tableFilteredData = data;
+        }
+        function formatCellValue(val) {
+            if (val === null || val === undefined) return { cls: 'null-val', display: val === null ? 'null' : '' };
+            if (typeof val === 'string') return { cls: 'string', display: '"' + (val.length > 50 ? val.substring(0, 50) + '…' : val) + '"' };
+            if (typeof val === 'number') return { cls: 'number', display: String(val) };
+            if (typeof val === 'boolean') return { cls: 'boolean', display: String(val) };
+            if (typeof val === 'object') return { cls: '', display: Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}` };
+            return { cls: '', display: String(val) };
+        }
+        let _tableScrollHandler = null;
+        function renderVirtualTable() {
+            const container = document.getElementById('tableScroll');
+            const data = tableFilteredData;
+            const totalRows = data.length;
+            const totalHeight = totalRows * TABLE_ROW_HEIGHT;
+            // Build header
+            let headerHtml = '<tr>';
+            headerHtml += '<th style="min-width:60px">#</th>';
             tableColumns.forEach(col => {
                 const arrow = tableSortCol === col ? (tableSortAsc ? '▲' : '▼') : '';
-                html += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
+                headerHtml += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
             });
-            html += '</tr></thead><tbody>';
-            const maxRows = Math.min(data.length, 5000); // limit for performance
-            for (let i = 0; i < maxRows; i++) {
-                html += '<tr>';
-                html += `<td style="color:var(--text-secondary)">${i + 1}</td>`;
-                tableColumns.forEach(col => {
-                    const val = data[i][col];
-                    let cls = '', display = '';
-                    if (val === null || val === undefined) { cls = 'null-val'; display = val === null ? 'null' : ''; }
-                    else if (typeof val === 'string') { cls = 'string'; display = '"' + (val.length > 50 ? val.substring(0, 50) + '…' : val) + '"'; }
-                    else if (typeof val === 'number') { cls = 'number'; display = String(val); }
-                    else if (typeof val === 'boolean') { cls = 'boolean'; display = String(val); }
-                    else if (typeof val === 'object') { display = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`; }
-                    html += `<td class="${cls}" title="${escapeHtml(String(val))}">${escapeHtml(display)}</td>`;
-                });
-                html += '</tr>';
+            headerHtml += '</tr>';
+            // Single table: sticky thead + spacer rows for virtual scrolling
+            container.innerHTML = `
+                <table>
+                    <thead>${headerHtml}</thead>
+                    <tbody></tbody>
+                </table>`;
+            const table = container.querySelector('table');
+            const tbody = table.querySelector('tbody');
+            let lastStart = -1, lastEnd = -1;
+            function updateVisibleRows() {
+                const scrollTop = container.scrollTop;
+                const viewHeight = container.clientHeight;
+                const start = Math.max(0, Math.floor(scrollTop / TABLE_ROW_HEIGHT) - TABLE_OVERSCAN);
+                const end = Math.min(totalRows, Math.ceil((scrollTop + viewHeight) / TABLE_ROW_HEIGHT) + TABLE_OVERSCAN);
+                if (start === lastStart && end === lastEnd) return;
+                lastStart = start;
+                lastEnd = end;
+                const topPad = start * TABLE_ROW_HEIGHT;
+                const bottomPad = (totalRows - end) * TABLE_ROW_HEIGHT;
+                let html = '';
+                // Top spacer row
+                if (topPad > 0) {
+                    html += `<tr style="height:${topPad}px"><td colspan="${tableColumns.length + 1}"></td></tr>`;
+                }
+                for (let i = start; i < end; i++) {
+                    html += `<tr style="height:${TABLE_ROW_HEIGHT}px">`;
+                    html += `<td style="color:var(--text-secondary);min-width:60px">${i + 1}</td>`;
+                    const row = data[i];
+                    for (let c = 0; c < tableColumns.length; c++) {
+                        const { cls, display } = formatCellValue(row[tableColumns[c]]);
+                        html += `<td class="${cls}">${escapeHtml(display)}</td>`;
+                    }
+                    html += '</tr>';
+                }
+                // Bottom spacer row
+                if (bottomPad > 0) {
+                    html += `<tr style="height:${bottomPad}px"><td colspan="${tableColumns.length + 1}"></td></tr>`;
+                }
+                tbody.innerHTML = html;
             }
-            html += '</tbody></table>';
-            document.getElementById('tableScroll').innerHTML = html;
-            document.getElementById('tableInfo').textContent = `${data.length} von ${tableData.length} Zeilen angezeigt` + (maxRows < data.length ? ` (max ${maxRows})` : '');
-            // Attach sort handlers
-            document.querySelectorAll('#tableScroll th[data-col]').forEach(th => {
+            // Remove old scroll handler if any
+            if (_tableScrollHandler) {
+                container.removeEventListener('scroll', _tableScrollHandler);
+            }
+            _tableScrollHandler = () => requestAnimationFrame(updateVisibleRows);
+            container.addEventListener('scroll', _tableScrollHandler);
+            updateVisibleRows();
+            // Sort handlers
+            container.querySelectorAll('th[data-col]').forEach(th => {
                 th.onclick = () => {
                     const col = th.dataset.col;
                     if (tableSortCol === col) tableSortAsc = !tableSortAsc;
                     else { tableSortCol = col; tableSortAsc = true; }
-                    renderTable(document.getElementById('tableFilterInput').value);
+                    prepareTableData(document.getElementById('tableFilterInput').value);
+                    renderVirtualTable();
                 };
             });
+            document.getElementById('tableInfo').textContent =
+                data.length === tableData.length
+                    ? `${data.length} Zeilen angezeigt`
+                    : `${data.length} von ${tableData.length} Zeilen angezeigt`;
+        }
+        // Keep old renderTable as alias for filter updates
+        function renderTable(filter) {
+            prepareTableData(filter || '');
+            renderVirtualTable();
         }
         function hideTableView() {
             document.getElementById('tableViewOverlay').classList.remove('visible');
@@ -6290,7 +6543,55 @@
         document.getElementById('btnTableClose').onclick = hideTableView;
         document.getElementById('tableViewOverlay').onclick = hideTableView;
         document.getElementById('btnTableView').onclick = () => showTableView();
-        document.getElementById('tableFilterInput').oninput = (e) => renderTable(e.target.value);
+        let _tableFilterTimer = null;
+        document.getElementById('tableFilterInput').oninput = (e) => {
+            clearTimeout(_tableFilterTimer);
+            _tableFilterTimer = setTimeout(() => renderTable(e.target.value), 250);
+        };
+        // ---- Excel Export ----
+        function exportTableToExcel() {
+            if (!tableFilteredData || tableFilteredData.length === 0) {
+                showNotification('Keine Daten zum Exportieren.');
+                return;
+            }
+            try {
+                showNotification('Excel wird erstellt…');
+                setTimeout(() => {
+                    // Build array-of-arrays: header + rows
+                    const header = ['#', ...tableColumns];
+                    const rows = tableFilteredData.map((row, idx) => {
+                        const cells = [idx + 1];
+                        for (const col of tableColumns) {
+                            const val = row[col];
+                            if (val === null || val === undefined) cells.push('');
+                            else if (typeof val === 'object') cells.push(Array.isArray(val) ? `[${val.length}]` : JSON.stringify(val));
+                            else cells.push(val);
+                        }
+                        return cells;
+                    });
+                    const aoa = [header, ...rows];
+                    const ws = XLSX.utils.aoa_to_sheet(aoa);
+                    // Auto-width columns
+                    ws['!cols'] = header.map((h, i) => {
+                        let maxLen = String(h).length;
+                        for (let r = 0; r < Math.min(rows.length, 100); r++) {
+                            const cell = rows[r][i];
+                            const len = String(cell != null ? cell : '').length;
+                            if (len > maxLen) maxLen = len;
+                        }
+                        return { wch: Math.min(maxLen + 2, 50) };
+                    });
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Daten');
+                    const filename = `export_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.xlsx`;
+                    XLSX.writeFile(wb, filename);
+                    showNotification(`Excel exportiert: ${filename}`);
+                }, 30);
+            } catch (e) {
+                showNotification('Fehler beim Excel-Export: ' + e.message);
+            }
+        }
+        document.getElementById('btnTableExport').onclick = exportTableToExcel;
 
         // ============ RAW VIEW (Syntax-Highlighted) ============
         function showRawView() {
@@ -6749,7 +7050,7 @@
                 for (const k of keys.slice(0, 100)) {
                     const prop = schema.properties[k];
                     const req = prop.__required !== false ? '<span class="schema-required"> *</span>' : '<span class="schema-optional"> ?</span>';
-                    html += `<div class="schema-node">${indent}  <span class="schema-key">"${escapeHTML(k)}"</span>${req}: `;
+                    html += `<div class="schema-node">${indent}  <span class="schema-key">"${escapeHtml(k)}"</span>${req}: `;
                     if (prop.type === 'object' || prop.type === 'array') {
                         html += '</div>' + renderSchemaTree(prop, indent + '    ');
                     } else {
@@ -6919,42 +7220,156 @@
         }
 
         // ============ REST CLIENT ============
+        const restOverlay = document.getElementById('restOverlay');
+        const restModal = document.getElementById('restModal');
+        const restMethod = document.getElementById('restMethod');
+        const restUrlInput = document.getElementById('restUrlInput');
+        const restHeaders = document.getElementById('restHeaders');
+        const restBody = document.getElementById('restBody');
+        const restBodySection = document.getElementById('restBodySection');
+        const restStatus = document.getElementById('restStatus');
+        const btnRestSend = document.getElementById('btnRestSend');
+        const btnRestClose = document.getElementById('btnRestClose');
+        const restAuthType = document.getElementById('restAuthType');
+        const restAuthBasic = document.getElementById('restAuthBasic');
+        const restAuthBearer = document.getElementById('restAuthBearer');
+        const restAuthApiKey = document.getElementById('restAuthApiKey');
+        const restAuthUser = document.getElementById('restAuthUser');
+        const restAuthPass = document.getElementById('restAuthPass');
+        const restAuthToken = document.getElementById('restAuthToken');
+        const restApiKeyName = document.getElementById('restApiKeyName');
+        const restApiKeyValue = document.getElementById('restApiKeyValue');
+
         function showRestClient() {
-            const url = prompt('JSON URL laden:', 'https://jsonplaceholder.typicode.com/posts');
-            if (!url) return;
-            status.textContent = 'Lade von URL...';
-            fetch(url, { headers: { 'Accept': 'application/json' } })
-                .then(response => {
-                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    return response.text();
-                })
-                .then(text => {
-                    try {
-                        const data = JSON.parse(text);
-                        jsonData = data;
-                        computeSubtreeSize(jsonData);
-                        fileName = new URL(url).pathname.split('/').pop() || 'api-response.json';
-                        fileSize = text.length;
-                        document.title = fileName + ' – JSON Viewer';
-                        expandedPaths.clear();
-                        expandAllMode = false;
-                        buildFlatList(jsonData);
-                        enableButtons();
-                        scrollTop = 0;
-                        renderVisibleItems();
-                        let nodeCount = jsonData.__size || 0;
-                        status.textContent = `${fileName} (${formatBytes(fileSize)}) – ${nodeCount.toLocaleString()} Knoten – Geladen von URL`;
-                        showNotification('JSON von URL geladen');
-                    } catch(e) {
-                        status.textContent = 'Fehler: ' + e.message;
-                        showNotification('Parse-Fehler: ' + e.message);
-                    }
-                })
-                .catch(err => {
-                    status.textContent = 'Fehler: ' + err.message;
-                    showNotification('Laden fehlgeschlagen: ' + err.message);
-                });
+            restOverlay.classList.add('visible');
+            restModal.classList.add('visible');
+            restStatus.textContent = '';
+            restUrlInput.focus();
+            // Show/hide body section based on method
+            updateBodyVisibility();
         }
+        function hideRestClient() {
+            restOverlay.classList.remove('visible');
+            restModal.classList.remove('visible');
+        }
+        function updateBodyVisibility() {
+            const m = restMethod.value;
+            restBodySection.style.display = (m === 'GET' || m === 'DELETE') ? 'none' : 'block';
+        }
+        restMethod.addEventListener('change', updateBodyVisibility);
+
+        // Auth type switching
+        function updateAuthFields() {
+            restAuthBasic.style.display = restAuthType.value === 'basic' ? 'block' : 'none';
+            restAuthBearer.style.display = restAuthType.value === 'bearer' ? 'block' : 'none';
+            restAuthApiKey.style.display = restAuthType.value === 'apikey' ? 'block' : 'none';
+        }
+        restAuthType.addEventListener('change', updateAuthFields);
+
+        // Toggle password visibility
+        function setupToggle(btn, input) {
+            btn.addEventListener('click', () => {
+                const show = input.type === 'password';
+                input.type = show ? 'text' : 'password';
+                btn.classList.toggle('active', show);
+            });
+        }
+        setupToggle(document.getElementById('btnTogglePass'), restAuthPass);
+        setupToggle(document.getElementById('btnToggleToken'), restAuthToken);
+        setupToggle(document.getElementById('btnToggleApiKey'), restApiKeyValue);
+
+        async function executeRestRequest() {
+            const url = restUrlInput.value.trim();
+            if (!url) { restStatus.textContent = '⚠ Bitte URL eingeben'; return; }
+
+            const method = restMethod.value;
+            const fetchOpts = { method, headers: { 'Accept': 'application/json' } };
+
+            // Apply authentication
+            const authType = restAuthType.value;
+            if (authType === 'basic') {
+                const user = restAuthUser.value.trim();
+                const pass = restAuthPass.value;
+                if (!user) { restStatus.textContent = '⚠ Benutzername erforderlich'; return; }
+                fetchOpts.headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+            } else if (authType === 'bearer') {
+                const token = restAuthToken.value.trim();
+                if (!token) { restStatus.textContent = '⚠ Token erforderlich'; return; }
+                fetchOpts.headers['Authorization'] = 'Bearer ' + token;
+            } else if (authType === 'apikey') {
+                const keyName = restApiKeyName.value.trim();
+                const keyValue = restApiKeyValue.value.trim();
+                if (!keyName || !keyValue) { restStatus.textContent = '⚠ API Key Name und Wert erforderlich'; return; }
+                fetchOpts.headers[keyName] = keyValue;
+            }
+
+            // Parse custom headers
+            const hdrText = restHeaders.value.trim();
+            if (hdrText) {
+                try {
+                    const customHeaders = JSON.parse(hdrText);
+                    Object.assign(fetchOpts.headers, customHeaders);
+                } catch(e) {
+                    restStatus.textContent = '⚠ Header-JSON ungültig: ' + e.message;
+                    return;
+                }
+            }
+
+            // Parse body for POST/PUT/PATCH
+            if (method !== 'GET' && method !== 'DELETE') {
+                const bodyText = restBody.value.trim();
+                if (bodyText) {
+                    try {
+                        JSON.parse(bodyText); // validate
+                        fetchOpts.body = bodyText;
+                        fetchOpts.headers['Content-Type'] = 'application/json';
+                    } catch(e) {
+                        restStatus.textContent = '⚠ Body-JSON ungültig: ' + e.message;
+                        return;
+                    }
+                }
+            }
+
+            btnRestSend.disabled = true;
+            btnRestSend.textContent = '⏳ Lade...';
+            restStatus.textContent = `${method} ${url} ...`;
+
+            try {
+                const response = await fetch(url, fetchOpts);
+                const text = await response.text();
+                restStatus.textContent = `HTTP ${response.status} ${response.statusText} – ${formatBytes(text.length)}`;
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+                const data = JSON.parse(text);
+                jsonData = data;
+                computeSubtreeSize(jsonData);
+                fileName = new URL(url).pathname.split('/').pop() || 'api-response.json';
+                fileSize = text.length;
+                document.title = fileName + ' – JSON Viewer';
+                expandedPaths.clear();
+                expandAllMode = false;
+                buildFlatList(jsonData);
+                enableButtons();
+                scrollTop = 0;
+                renderVisibleItems();
+                let nodeCount = jsonData.__size || 0;
+                status.textContent = `${fileName} (${formatBytes(fileSize)}) – ${nodeCount.toLocaleString()} Knoten – Geladen von URL`;
+                showNotification('JSON von URL geladen');
+                hideRestClient();
+            } catch(err) {
+                restStatus.textContent = '❌ ' + err.message;
+                showNotification('Laden fehlgeschlagen: ' + err.message);
+            } finally {
+                btnRestSend.disabled = false;
+                btnRestSend.textContent = 'Senden';
+            }
+        }
+
+        btnRestSend.addEventListener('click', executeRestRequest);
+        btnRestClose.addEventListener('click', hideRestClient);
+        restOverlay.addEventListener('click', hideRestClient);
+        restUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') executeRestRequest(); });
         document.getElementById('btnRestClient').onclick = showRestClient;
 
         // Keyboard shortcuts
