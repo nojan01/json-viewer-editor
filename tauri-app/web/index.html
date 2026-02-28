@@ -3258,6 +3258,67 @@
             }
         }
         
+        // Robust JSON parsing: handles BOM, encoding issues, type safety
+        function parseJSON(input) {
+            // Step 1: Ensure we have a string
+            let text;
+            if (typeof input === 'string') {
+                text = input;
+            } else if (input instanceof ArrayBuffer) {
+                console.warn('[Parse] Input is ArrayBuffer, decoding...');
+                text = new TextDecoder('utf-8').decode(input);
+            } else if (input instanceof Uint8Array) {
+                console.warn('[Parse] Input is Uint8Array, decoding...');
+                text = new TextDecoder('utf-8').decode(input);
+            } else if (input && typeof input.toString === 'function') {
+                console.warn('[Parse] Input is', typeof input, '- converting to string');
+                text = String(input);
+            } else {
+                throw new Error('Keine gültige Eingabe (Typ: ' + typeof input + ')');
+            }
+            
+            // Step 2: Strip BOM (Byte Order Mark) — common in Windows UTF-8 files
+            if (text.charCodeAt(0) === 0xFEFF) {
+                console.log('[Parse] Stripped UTF-8 BOM');
+                text = text.slice(1);
+            }
+            
+            // Step 3: Trim whitespace
+            text = text.trim();
+            
+            // Step 4: Check for empty content
+            if (!text) {
+                throw new Error('Datei ist leer');
+            }
+            
+            // Step 5: Try standard JSON.parse
+            console.log(`[Parse] Parsing ${text.length} chars, starts with: ${JSON.stringify(text.slice(0, 80))}`);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.warn('[Parse] JSON.parse failed:', e.message);
+            }
+            
+            // Step 6: Try concatenated JSON (multiple JSON objects in one file)
+            try {
+                return parseConcatenated(text);
+            } catch (e2) {
+                // Step 7: Provide detailed error for debugging
+                const preview = text.slice(0, 200);
+                const charCodes = Array.from(text.slice(0, 20)).map(c => c.charCodeAt(0));
+                console.error('[Parse] All parse attempts failed.');
+                console.error('[Parse] Text length:', text.length);
+                console.error('[Parse] First 200 chars:', preview);
+                console.error('[Parse] First 20 char codes:', charCodes);
+                throw new Error(
+                    `Kein gültiges JSON gefunden.\n` +
+                    `Länge: ${text.length} Zeichen\n` +
+                    `Anfang: ${JSON.stringify(preview.slice(0, 100))}\n` +
+                    `Char-Codes: [${charCodes.join(', ')}]`
+                );
+            }
+        }
+        
         // Load file from path (used for "Open With" and drag & drop from Finder)
         async function loadFileFromPath(filePath) {
             if (!window.__TAURI__ || !filePath) return;
@@ -3289,11 +3350,7 @@
                 
                 const parseStart = performance.now();
                 
-                try {
-                    jsonData = JSON.parse(text);
-                } catch {
-                    jsonData = parseConcatenated(text);
-                }
+                jsonData = parseJSON(text);
                 
                 const parseTime = performance.now() - parseStart;
                 
@@ -3404,12 +3461,8 @@
                         
                         const parseStart = performance.now();
                         
-                        // Parse JSON
-                        try {
-                            jsonData = JSON.parse(text);
-                        } catch {
-                            jsonData = parseConcatenated(text);
-                        }
+                        // Parse JSON (handles BOM, encoding issues, concatenated JSON)
+                        jsonData = parseJSON(text);
                         
                         const parseTime = performance.now() - parseStart;
                         
@@ -3491,17 +3544,10 @@
         // Async JSON parsing for large files - yields to UI thread periodically
         async function parseJSONAsync(text, progressEl) {
             return new Promise((resolve, reject) => {
-                // Try standard parse first (it's faster for most cases)
                 try {
-                    const result = JSON.parse(text);
-                    resolve(result);
+                    resolve(parseJSON(text));
                 } catch (e) {
-                    // If standard parse fails, try concatenated
-                    try {
-                        resolve(parseConcatenated(text));
-                    } catch (e2) {
-                        reject(e2);
-                    }
+                    reject(e);
                 }
             });
         }
@@ -3575,12 +3621,7 @@
                 
                 const parseStart = performance.now();
                 
-                // Parse JSON
-                try {
-                    jsonData = JSON.parse(text);
-                } catch {
-                    jsonData = parseConcatenated(text);
-                }
+                jsonData = parseJSON(text);
                 
                 const parseTime = performance.now() - parseStart;
                 
