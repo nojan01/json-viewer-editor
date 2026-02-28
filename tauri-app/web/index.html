@@ -3209,32 +3209,52 @@
             }
         });
         
-        // Helper: Read file content, using raw bytes for large files to avoid IPC overhead
-        // For files >50MB, read_file_raw avoids JSON string escaping in Tauri IPC,
-        // saving ~200MB+ peak memory for a 300MB file (prevents Windows OOM/STATUS_BREAKPOINT)
+        // Helper: Read file content
+        // Strategy: always try read_file_fast first (proven, works on all platforms).
+        // Only for large files (>50MB), use read_file_raw to avoid IPC JSON escaping
+        // overhead that causes OOM on Windows.
         const RAW_READ_THRESHOLD = 50 * 1024 * 1024; // 50 MB
+        
+        // Extract filename from path (works with both / and \ separators)
+        function getFileName(filePath) {
+            return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
+        }
+        
         async function readFileContent(filePath) {
-            // Check file size first
+            console.log('[ReadFile] Loading:', filePath);
+            
+            // Step 1: Get file size (lightweight metadata call)
             let byteSize = 0;
             try {
-                byteSize = await window.__TAURI__.core.invoke('get_file_size', { path: filePath });
+                byteSize = Number(await window.__TAURI__.core.invoke('get_file_size', { path: filePath }));
+                console.log(`[ReadFile] File size: ${(byteSize / 1024 / 1024).toFixed(2)} MB`);
             } catch(e) {
-                // Fallback: read with read_file_fast (small files or error)
-                const text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
-                return { text, byteSize: text.length };
+                console.warn('[ReadFile] get_file_size failed, will read directly:', e);
             }
             
+            // Step 2: Read the file content
+            // For large files on Windows, read_file_raw avoids IPC string escaping overhead
             if (byteSize > RAW_READ_THRESHOLD) {
-                // Large file: use raw bytes to avoid IPC JSON escaping overhead
-                console.log(`[ReadFile] Using read_file_raw for ${(byteSize / 1024 / 1024).toFixed(1)} MB file`);
-                const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
-                // Decode bytes to string (buffer is ArrayBuffer from Tauri IPC)
-                const text = new TextDecoder('utf-8').decode(buffer);
-                return { text, byteSize };
-            } else {
-                // Small file: use standard string IPC (simpler, negligible overhead)
+                try {
+                    console.log('[ReadFile] Using read_file_raw (large file mode)');
+                    const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
+                    const text = new TextDecoder('utf-8').decode(buffer);
+                    console.log(`[ReadFile] Raw read OK, ${text.length} chars`);
+                    return { text, byteSize };
+                } catch(rawErr) {
+                    console.error('[ReadFile] read_file_raw failed, trying read_file_fast:', rawErr);
+                    // Fall through to read_file_fast
+                }
+            }
+            
+            // Default path: read_file_fast (works reliably on all platforms)
+            try {
                 const text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
+                console.log(`[ReadFile] Fast read OK, ${text.length} chars`);
                 return { text, byteSize: byteSize || text.length };
+            } catch(fastErr) {
+                console.error('[ReadFile] read_file_fast also failed:', fastErr);
+                throw new Error(`Datei konnte nicht gelesen werden: ${fastErr}`);
             }
         }
         
@@ -3243,7 +3263,7 @@
             if (!window.__TAURI__ || !filePath) return;
             
             try {
-                fileName = filePath.split('/').pop();
+                fileName = getFileName(filePath);
                 currentFilePath = filePath;
                 
                 status.textContent = `Lade ${fileName}...`;
@@ -3352,7 +3372,7 @@
                     
                     if (selected) {
                         const filePath = selected;
-                        fileName = filePath.split('/').pop();
+                        fileName = getFileName(filePath);
                         currentFilePath = filePath;
                         
                         status.textContent = `Lade ${fileName}...`;
@@ -5747,7 +5767,7 @@
                             path: filePath, 
                             content: jsonString 
                         });
-                        fileName = filePath.split('/').pop();
+                        fileName = getFileName(filePath);
                         isModified = false;
                         updateTitle();
                         showNotification(`Gespeichert: ${fileName}`);

@@ -454,9 +454,12 @@ pub fn run() {
   // Default V8 heap is ~1.7GB which isn't enough for 500MB+ files
   #[cfg(target_os = "windows")]
   {
+    // SAFETY: Called before any threads are spawned (main entry point)
+    // Only set --max-old-space-size; do NOT use --disable-features as it can
+    // break WebView2 under certain Windows security policies
     std::env::set_var(
       "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-      "--js-flags=--max-old-space-size=8192 --disable-features=RendererCodeIntegrity"
+      "--js-flags=--max-old-space-size=8192"
     );
   }
 
