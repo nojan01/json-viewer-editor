@@ -3432,6 +3432,134 @@
             }
         }
         
+        // Threshold for Rust-side JSON parsing (avoids JS JSON.parse on huge strings)
+        const RUST_PARSE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+        
+        // Read and parse a JSON file, using Rust for large files
+        // Returns { jsonData, fileSize, nodeCount, parseTime }
+        async function readAndParseFile(filePath) {
+            const startTime = performance.now();
+            
+            // Get file size first
+            let byteSize = 0;
+            try {
+                byteSize = Number(await window.__TAURI__.core.invoke('get_file_size', { path: filePath }));
+            } catch(e) {}
+            
+            const progressEl = document.getElementById('loadProgress');
+            
+            // ---- LARGE FILES: Parse in Rust (serde_json is ~5x faster than V8) ----
+            if (byteSize > RUST_PARSE_THRESHOLD) {
+                console.log(`[Parse] Large file (${formatSize(byteSize)}), using Rust parse_json_compact`);
+                if (progressEl) progressEl.textContent = `${formatSize(byteSize)} - Parsen in Rust (schneller als JS)...`;
+                await new Promise(r => setTimeout(r, 16));
+                
+                const parseStart = performance.now();
+                
+                // Step 1: Parse in Rust → compact temp file
+                const result = await window.__TAURI__.core.invoke('parse_json_compact', { path: filePath });
+                const rustParseTime = performance.now() - parseStart;
+                console.log(`[Parse] Rust parsed in ${(rustParseTime/1000).toFixed(1)}s: ${formatSize(result.original_size)} → ${formatSize(result.compact_size)} compact (${Math.round(100*result.compact_size/result.original_size)}%), ${result.node_count} nodes`);
+                
+                // Step 2: Read compact file (may use chunked reading)
+                if (progressEl) progressEl.textContent = `Lese kompakte Daten (${formatSize(result.compact_size)})...`;
+                await new Promise(r => setTimeout(r, 16));
+                
+                const readResult = await readFileContent(result.compact_path);
+                const text = readResult.text;
+                
+                // Step 3: JSON.parse on compact data (much faster than on formatted original)
+                if (progressEl) progressEl.textContent = `${formatSize(result.compact_size)} - JS-Parse (kompakt)...`;
+                await new Promise(r => setTimeout(r, 16));
+                
+                const jsParseStart = performance.now();
+                const data = parseJSON(text);
+                const totalParseTime = performance.now() - parseStart;
+                console.log(`[Parse] JS parse on compact: ${((performance.now()-jsParseStart)/1000).toFixed(1)}s, total: ${(totalParseTime/1000).toFixed(1)}s`);
+                
+                // Step 4: Clean up temp file
+                try {
+                    await window.__TAURI__.core.invoke('delete_temp_file', { path: result.compact_path });
+                } catch(e) {
+                    console.warn('[Parse] Could not delete temp file:', e);
+                }
+                
+                return {
+                    jsonData: data,
+                    fileSize: result.original_size,
+                    nodeCount: result.node_count,
+                    parseTime: totalParseTime
+                };
+            }
+            
+            // ---- SMALL/MEDIUM FILES: Read + parse in JS ----
+            if (progressEl) progressEl.textContent = 'Lese Datei...';
+            const readResult = await readFileContent(filePath);
+            let text = readResult.text;
+            const fileSz = readResult.byteSize;
+            
+            if (progressEl) progressEl.textContent = `${formatSize(fileSz)} - Parsen...`;
+            await new Promise(r => setTimeout(r, 16));
+            
+            const parseStart = performance.now();
+            const data = parseJSON(text);
+            const parseTime = performance.now() - parseStart;
+            text = null; // Free memory
+            
+            // Get node count
+            let nodeCount;
+            if (fileSz > RAW_READ_THRESHOLD) {
+                nodeCount = 0; // Will be set from subtree sizes later
+            } else {
+                try {
+                    if (progressEl) progressEl.textContent = 'Zähle Knoten (Rust)...';
+                    const stats = await window.__TAURI__.core.invoke('get_file_stats', { path: filePath });
+                    nodeCount = stats.node_count;
+                } catch(e) {
+                    nodeCount = countNodesSmart(data, fileSz);
+                }
+            }
+            
+            return { jsonData: data, fileSize: fileSz, nodeCount, parseTime };
+        }
+        
+        // Finalize loading: set up tree state and render
+        async function finalizeLoad(result, filePath, startTime) {
+            jsonData = result.jsonData;
+            fileSize = result.fileSize;
+            
+            const progressEl = document.getElementById('loadProgress');
+            const totalTime = performance.now() - startTime;
+            
+            expandedPaths = new Set(['root']);
+            expandAllMode = false;
+            window._collapsedInExpandAll = new Set();
+            searchMatches = [];
+            currentMatchIndex = -1;
+            isModified = false;
+            currentExpandLevel = 1;
+            maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20);
+            
+            // Precompute subtree sizes for virtual rendering
+            if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
+            await new Promise(r => setTimeout(r, 16));
+            totalExpandedCount = computeSubtreeSizes(jsonData);
+            console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
+            
+            let nodeCount = result.nodeCount;
+            if (nodeCount === 0) nodeCount = totalExpandedCount;
+            
+            updateTitle();
+            updateStatusBar(nodeCount, totalTime, result.parseTime);
+            enableButtons();
+            updateLevelDisplay();
+            
+            if (progressEl) progressEl.textContent = 'Rendere Ansicht...';
+            await new Promise(r => setTimeout(r, 16));
+            
+            renderTree();
+        }
+        
         // Load file from path (used for "Open With" and drag & drop from Finder)
         async function loadFileFromPath(filePath) {
             if (!window.__TAURI__ || !filePath) return;
@@ -3450,76 +3578,11 @@
                 `;
                 
                 await new Promise(r => setTimeout(r, 16));
-                
                 const startTime = performance.now();
-                const readResult = await readFileContent(filePath);
-                let text = readResult.text;
-                fileSize = readResult.byteSize;
                 
-                console.log(`[loadFileFromPath] readResult: type=${typeof text}, length=${text ? text.length : 'null'}, byteSize=${fileSize}`);
+                const result = await readAndParseFile(filePath);
+                await finalizeLoad(result, filePath, startTime);
                 
-                const progressEl = document.getElementById('loadProgress');
-                if (progressEl) progressEl.textContent = `${formatSize(fileSize)} - Parsen...`;
-                
-                await new Promise(r => setTimeout(r, 16));
-                
-                const parseStart = performance.now();
-                
-                jsonData = parseJSON(text);
-                
-                const parseTime = performance.now() - parseStart;
-                
-                // Release the raw text string to free memory (critical for large files on Windows)
-                text = null;
-                
-                // For large files (>50MB), skip Rust re-read to avoid OOM
-                // Use computeSubtreeSizes result as node count instead
-                let nodeCount;
-                if (fileSize > RAW_READ_THRESHOLD) {
-                    // Already have accurate byte size from readFileContent
-                    nodeCount = 0; // will be set after computeSubtreeSizes
-                } else {
-                    try {
-                        if (progressEl) progressEl.textContent = 'Zähle Knoten (Rust)...';
-                        const stats = await window.__TAURI__.core.invoke('get_file_stats', { path: filePath });
-                        nodeCount = stats.node_count;
-                        fileSize = stats.size_bytes;
-                        console.log(`[Verify] Rust nodes: ${stats.node_count}, File bytes: ${stats.size_bytes}`);
-                    } catch (e) {
-                        console.warn('Rust get_file_stats failed, using JS count:', e);
-                        nodeCount = countNodesSmart(jsonData, fileSize);
-                    }
-                }
-                
-                const totalTime = performance.now() - startTime;
-                
-                expandedPaths = new Set(['root']);
-                expandAllMode = false;
-                window._collapsedInExpandAll = new Set();
-                searchMatches = [];
-                currentMatchIndex = -1;
-                isModified = false;
-                currentExpandLevel = 1;
-                maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20);
-                
-                // Precompute subtree sizes for virtual rendering
-                if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
-                await new Promise(r => setTimeout(r, 16));
-                totalExpandedCount = computeSubtreeSizes(jsonData);
-                console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
-                
-                // For large files, use subtree size as node count
-                if (nodeCount === 0) nodeCount = totalExpandedCount;
-                
-                updateTitle();
-                updateStatusBar(nodeCount, totalTime, parseTime);
-                enableButtons();
-                updateLevelDisplay();
-                
-                if (progressEl) progressEl.textContent = 'Rendere Ansicht...';
-                await new Promise(r => setTimeout(r, 16));
-                
-                renderTree();
             } catch (err) {
                 console.error('Fehler beim Laden:', err);
                 treeContainer.innerHTML = `
@@ -3556,83 +3619,11 @@
                             </div>
                         `;
                         
-                        // Give UI time to update
                         await new Promise(r => setTimeout(r, 16));
-                        
                         const startTime = performance.now();
                         
-                        // Read file using optimized Rust commands
-                        // For large files (>50MB), uses raw bytes to avoid IPC overhead
-                        const readResult = await readFileContent(filePath);
-                        let text = readResult.text;
-                        fileSize = readResult.byteSize;
-                        
-                        // Update progress
-                        const progressEl = document.getElementById('loadProgress');
-                        if (progressEl) progressEl.textContent = `${formatSize(fileSize)} - Parsen...`;
-                        
-                        // Give UI time to update before heavy parsing
-                        await new Promise(r => setTimeout(r, 16));
-                        
-                        const parseStart = performance.now();
-                        
-                        // Parse JSON (handles BOM, encoding issues, concatenated JSON)
-                        jsonData = parseJSON(text);
-                        
-                        const parseTime = performance.now() - parseStart;
-                        
-                        // Release the raw text string to free memory (critical for large files on Windows)
-                        text = null;
-                        
-                        // For large files (>50MB), skip Rust re-read to avoid OOM on Windows
-                        let nodeCount;
-                        if (fileSize > RAW_READ_THRESHOLD) {
-                            // Already have accurate byte size from readFileContent
-                            nodeCount = 0; // will be set after computeSubtreeSizes
-                        } else {
-                            try {
-                                const progressEl2 = document.getElementById('loadProgress');
-                                if (progressEl2) progressEl2.textContent = 'Zähle Knoten (Rust)...';
-                                const stats = await window.__TAURI__.core.invoke('get_file_stats', { path: filePath });
-                                nodeCount = stats.node_count;
-                                fileSize = stats.size_bytes;
-                                console.log(`[Verify] Rust nodes: ${stats.node_count}, File bytes: ${stats.size_bytes}`);
-                            } catch (e) {
-                                console.warn('Rust get_file_stats failed, using JS count:', e);
-                                nodeCount = countNodesSmart(jsonData, fileSize);
-                            }
-                        }
-                        
-                        const totalTime = performance.now() - startTime;
-                        
-                        // Initialize with only root expanded - crucial for performance!
-                        expandedPaths = new Set(['root']);
-                        expandAllMode = false;
-                        window._collapsedInExpandAll = new Set();
-                        searchMatches = [];
-                        currentMatchIndex = -1;
-                        isModified = false;
-                        currentExpandLevel = 1;
-                        maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20); // Limit depth calculation
-                        
-                        // Precompute subtree sizes for virtual rendering
-                        if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
-                        await new Promise(r => setTimeout(r, 16));
-                        totalExpandedCount = computeSubtreeSizes(jsonData);
-                        console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
-                        
-                        // For large files, use subtree size as node count
-                        if (nodeCount === 0) nodeCount = totalExpandedCount;
-                        
-                        updateTitle();
-                        updateStatusBar(nodeCount, totalTime, parseTime);
-                        enableButtons();
-                        updateLevelDisplay();
-                        
-                        if (progressEl) progressEl.textContent = 'Rendere Ansicht...';
-                        await new Promise(r => setTimeout(r, 16));
-                        
-                        renderTree();
+                        const result = await readAndParseFile(filePath);
+                        await finalizeLoad(result, filePath, startTime);
                     }
                 } catch (err) {
                     console.error('Tauri open error:', err);

@@ -87,6 +87,81 @@ fn write_file_fast(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("Fehler beim Schreiben: {}", e))
 }
 
+// Parse JSON file in Rust (serde_json, ~5x faster than V8 JSON.parse)
+// Writes compact JSON to a temp file for chunked reading by JS
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CompactResult {
+    compact_path: String,
+    compact_size: u64,
+    original_size: u64,
+    node_count: u64,
+}
+
+#[tauri::command]
+fn parse_json_compact(path: String) -> Result<CompactResult, String> {
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    }
+    
+    let original_size = fs::metadata(&path)
+        .map_err(|e| format!("Metadaten-Fehler: {}", e))?.len();
+    
+    // Read raw bytes
+    let mut bytes = fs::read(&path)
+        .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+    
+    // Strip UTF-8 BOM if present
+    if bytes.len() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
+        bytes = bytes[3..].to_vec();
+    }
+    
+    // Parse with serde_json (streaming, fast, memory-efficient)
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("JSON-Parse-Fehler: {}", e))?;
+    
+    // Free the raw bytes
+    drop(bytes);
+    
+    // Count nodes
+    let node_count = count_json_value(&value);
+    
+    // Write compact JSON to temp file (removes all formatting whitespace)
+    let compact_path = format!("{}.compact.tmp", path);
+    let file = fs::File::create(&compact_path)
+        .map_err(|e| format!("Fehler beim Erstellen der Temp-Datei: {}", e))?;
+    let writer = std::io::BufWriter::with_capacity(8 * 1024 * 1024, file);
+    serde_json::to_writer(writer, &value)
+        .map_err(|e| format!("Fehler beim Schreiben der Compact-Datei: {}", e))?;
+    
+    // Free the parsed value
+    drop(value);
+    
+    let compact_size = fs::metadata(&compact_path)
+        .map_err(|e| format!("Compact-Metadaten-Fehler: {}", e))?.len();
+    
+    Ok(CompactResult {
+        compact_path,
+        compact_size,
+        original_size,
+        node_count,
+    })
+}
+
+// Delete a temp file (used to clean up compact JSON files)
+#[tauri::command]
+fn delete_temp_file(path: String) -> Result<(), String> {
+    // Only allow deleting .tmp files for safety
+    if !path.ends_with(".compact.tmp") {
+        return Err("Nur .compact.tmp Dateien dürfen gelöscht werden".to_string());
+    }
+    if std::path::Path::new(&path).exists() {
+        fs::remove_file(&path).map_err(|e| format!("Fehler beim Löschen: {}", e))?;
+    }
+    Ok(())
+}
+
 // Get file statistics: exact byte size and accurate JSON node count (Rust-side)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FileStats {
@@ -491,7 +566,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, parse_json_compact, delete_temp_file, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       
