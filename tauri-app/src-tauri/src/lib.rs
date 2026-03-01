@@ -128,12 +128,17 @@ fn parse_json_compact(path: String) -> Result<CompactResult, String> {
     let node_count = count_json_value(&value);
     
     // Write compact JSON to temp file (removes all formatting whitespace)
-    let compact_path = format!("{}.compact.tmp", path);
+    let compact_path = format!("{}.compact.json", path);
     let file = fs::File::create(&compact_path)
         .map_err(|e| format!("Fehler beim Erstellen der Temp-Datei: {}", e))?;
-    let writer = std::io::BufWriter::with_capacity(8 * 1024 * 1024, file);
-    serde_json::to_writer(writer, &value)
+    let mut writer = std::io::BufWriter::with_capacity(8 * 1024 * 1024, file);
+    serde_json::to_writer(&mut writer, &value)
         .map_err(|e| format!("Fehler beim Schreiben der Compact-Datei: {}", e))?;
+    
+    // Explicitly flush to ensure all data is written before we check size
+    use std::io::Write;
+    writer.flush()
+        .map_err(|e| format!("Fehler beim Flush der Compact-Datei: {}", e))?;
     
     // Free the parsed value
     drop(value);
@@ -152,9 +157,9 @@ fn parse_json_compact(path: String) -> Result<CompactResult, String> {
 // Delete a temp file (used to clean up compact JSON files)
 #[tauri::command]
 fn delete_temp_file(path: String) -> Result<(), String> {
-    // Only allow deleting .tmp files for safety
-    if !path.ends_with(".compact.tmp") {
-        return Err("Nur .compact.tmp Dateien dürfen gelöscht werden".to_string());
+    // Only allow deleting compact temp files for safety
+    if !path.ends_with(".compact.json") {
+        return Err("Nur .compact.json Dateien dürfen gelöscht werden".to_string());
     }
     if std::path::Path::new(&path).exists() {
         fs::remove_file(&path).map_err(|e| format!("Fehler beim Löschen: {}", e))?;
