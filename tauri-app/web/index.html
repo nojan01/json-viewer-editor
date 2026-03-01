@@ -1328,12 +1328,16 @@
         .stats-bar-track {
             flex: 1;
             height: 16px;
+            background: var(--bg-primary);
             border-radius: 4px;
+            overflow: hidden;
             margin: 0 8px;
         }
         .stats-bar-fill {
             height: 16px;
             border-radius: 4px;
+            min-width: 2px;
+            display: block;
         }
         .stats-bar-count {
             width: 60px;
@@ -6453,9 +6457,12 @@
             html += `<div class="stats-card"><div class="stats-card-label">Unique Keys</div><div class="stats-card-value">${stats.uniqueKeys.size.toLocaleString()}</div></div>`;
             html += '</div>';
             html += '<div class="stats-bar-chart">';
+            const barData = [];
             types.forEach(t => {
                 const pct = maxCount > 0 ? (t.count / maxCount * 100) : 0;
-                html += `<div class="stats-bar-row"><span class="stats-bar-label">${t.name}</span><div class="stats-bar-track" style="background:var(--bg-primary);overflow:hidden;"><div class="stats-bar-fill" style="width:${pct}%;min-width:2px;background:${t.color};display:block;"></div></div><span class="stats-bar-count">${t.count.toLocaleString()}</span></div>`;
+                const barId = 'stats-bar-' + t.name.toLowerCase();
+                barData.push({ id: barId, pct, color: t.color });
+                html += `<div class="stats-bar-row"><span class="stats-bar-label">${t.name}</span><div class="stats-bar-track"><div class="stats-bar-fill" id="${barId}"></div></div><span class="stats-bar-count">${t.count.toLocaleString()}</span></div>`;
             });
             html += '</div>';
             // Top keys
@@ -6468,6 +6475,14 @@
                 html += '</div>';
             }
             document.getElementById('statsContent').innerHTML = html;
+            // Apply bar styles via JS (bypasses CSP inline style restrictions)
+            barData.forEach(b => {
+                const el = document.getElementById(b.id);
+                if (el) {
+                    el.style.width = b.pct + '%';
+                    el.style.backgroundColor = b.color;
+                }
+            });
             document.getElementById('statsOverlay').classList.add('visible');
             document.getElementById('statsModal').classList.add('visible');
         }

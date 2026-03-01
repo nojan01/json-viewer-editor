@@ -2,7 +2,7 @@
 
 Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows** und **Linux**, gebaut mit [Tauri 2](https://tauri.app/).
 
-![Version](https://img.shields.io/badge/version-1.1.6-blue)
+![Version](https://img.shields.io/badge/version-1.1.7-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -183,6 +183,9 @@ MIT License — Frei verwendbar, auch kommerziell.
 Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
+
+### v1.1.7 (März 2026)
+- **Statistik-Balken Fix (Production Build)** — CSP blockierte inline style-Attribute im Tauri-Build; Styles werden jetzt per JavaScript gesetzt
 
 ### v1.1.6 (März 2026)
 - **Statistik-Balken Fix** — Inline-Styles für zuverlässige Anzeige auf allen Plattformen (macOS, Windows, Linux)
