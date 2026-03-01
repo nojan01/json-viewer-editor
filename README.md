@@ -2,7 +2,7 @@
 
 Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows** und **Linux**, gebaut mit [Tauri 2](https://tauri.app/).
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.4-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -13,6 +13,7 @@ Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows*
 - 🌳 **Baumansicht** — Hierarchische Darstellung mit auf-/zuklappbaren Knoten und virtuelles Scrolling für große Dateien (>100 MB)
 - ✏️ **Inline-Bearbeitung** — Werte direkt im Baum editieren mit Undo/Redo (⌘Z / ⌘⇧Z)
 - 💾 **Speichern** — Geänderte JSON-Dateien speichern (⌘S)
+- 🚀 **Große Dateien** — Optimiert für Dateien bis 500 MB+ (Rust-seitiges Parsen, Chunked Reading, In-Memory-Kompaktierung)
 
 ### Suche & Navigation
 - 🔍 **Volltextsuche** — Keys und Values durchsuchen mit RegEx-Unterstützung
@@ -180,3 +181,17 @@ json-viewer-editor/
 MIT License — Frei verwendbar, auch kommerziell.
 
 Das App-Icon ist eigen erstellt und lizenzfrei.
+
+## Changelog
+
+### v1.1.4 (März 2026)
+- **Große Dateien bis 500 MB+** — Rust-seitiges JSON-Parsen (serde_json) mit In-Memory-Kompaktierung, Chunked Reading (64 MB Blöcke), Raw-Byte IPC
+- **Ebene+/−** — Klappt jetzt exakt eine Ebene auf/zu (vorher wurden manchmal mehrere Ebenen gleichzeitig geändert)
+- **Tiefenerkennung** — Bis zu 50 Ebenen (vorher max. 5)
+- **Statistik-Balken** — Werden jetzt auch unter Windows (WebView2) korrekt angezeigt
+- **Windows-Stabilität** — BOM-Handling, Drag & Drop Race Condition, leere IPC-Antworten behoben
+- **Plattformübergreifend** — Pfadverarbeitung für Windows-Backslashes
+
+### v1.1.0
+- Erste stabile Release mit allen Kernfunktionen
+- macOS, Windows und Linux Support
