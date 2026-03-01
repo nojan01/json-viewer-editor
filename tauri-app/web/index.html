@@ -2806,6 +2806,7 @@
         let currentFilePath = null;
         let expandedPaths = new Set();
         let expandAllMode = false; // When true, ALL nodes are expanded without using expandedPaths
+        let expandAllDepthLimit = Infinity; // Depth limit for expandAllMode (Infinity = fully expanded)
         let totalExpandedCount = 0; // Total rows when all expanded (from __size)
         let visibleRows = [];
         let searchMatches = [];
@@ -4869,15 +4870,18 @@
         }
         
         // ── Virtual rendering helpers for expandAllMode ──────────────────
-        // Compute __size on every object/array via iterative post-order traversal.
+        // Compute __size and __depthSizes on every object/array via iterative post-order traversal.
         // __size = total number of nodes in the subtree INCLUDING the node itself.
+        // __depthSizes[d] = visible count when expanded to relative depth d (d=0 → collapsed = 1)
         function computeSubtreeSizes(root) {
             if (root === null || typeof root !== 'object') return 1;
             const stack = [{
                 value: root,
                 children: Array.isArray(root) ? root : Object.values(root),
                 childIndex: 0,
-                size: 1
+                size: 1,
+                primitiveChildCount: 0,
+                containerChildDs: []
             }];
             while (stack.length > 0) {
                 const frame = stack[stack.length - 1];
@@ -4886,18 +4890,44 @@
                     if (child !== null && typeof child === 'object') {
                         const ch = Array.isArray(child) ? child : Object.values(child);
                         if (ch.length > 0) {
-                            stack.push({ value: child, children: ch, childIndex: 0, size: 1 });
+                            stack.push({ value: child, children: ch, childIndex: 0, size: 1, primitiveChildCount: 0, containerChildDs: [] });
                         } else {
                             try { child.__size = 1; } catch {}
                             frame.size += 1;
+                            frame.primitiveChildCount++;
                         }
                     } else {
                         frame.size += 1;
+                        frame.primitiveChildCount++;
                     }
                 } else {
                     stack.pop();
-                    try { frame.value.__size = frame.size; } catch {}
-                    if (stack.length > 0) stack[stack.length - 1].size += frame.size;
+                    // Compute __depthSizes: ds[d] = visible count at relative depth d
+                    const refs = frame.containerChildDs;
+                    let maxChildLen = 0;
+                    for (let i = 0; i < refs.length; i++) {
+                        if (refs[i].length > maxChildLen) maxChildLen = refs[i].length;
+                    }
+                    const dsLen = maxChildLen + 1;
+                    const ds = new Array(dsLen);
+                    ds[0] = 1;
+                    for (let d = 1; d < dsLen; d++) {
+                        let sum = 1 + frame.primitiveChildCount;
+                        for (let i = 0; i < refs.length; i++) {
+                            const cds = refs[i];
+                            sum += (d - 1 < cds.length) ? cds[d - 1] : cds[cds.length - 1];
+                        }
+                        ds[d] = sum;
+                    }
+                    try {
+                        frame.value.__size = frame.size;
+                        frame.value.__depthSizes = ds;
+                    } catch {}
+                    if (stack.length > 0) {
+                        const parent = stack[stack.length - 1];
+                        parent.size += frame.size;
+                        parent.containerChildDs.push(ds);
+                    }
                 }
             }
             return root.__size || 1;
@@ -4908,15 +4938,48 @@
             return val.__size || 1;
         }
 
-        // Total visible rows – either visibleRows.length or computed from __size
+        // Get visible size of a node when expanded to a given remaining depth budget
+        function getNodeSizeAtDepth(val, remainingDepth) {
+            if (val === null || typeof val !== 'object') return 1;
+            if (remainingDepth <= 0) return 1;
+            const ds = val.__depthSizes;
+            if (ds) return ds[Math.min(remainingDepth, ds.length - 1)];
+            return val.__size || 1;
+        }
+
+        // Count depth segments in a path (e.g. "root.a[0].b" → 3)
+        function getPathDepth(path) {
+            if (path === 'root') return 0;
+            let depth = 0;
+            for (let i = 4; i < path.length; i++) {
+                if (path.charCodeAt(i) === 46 || path.charCodeAt(i) === 91) depth++; // '.' or '['
+            }
+            return depth;
+        }
+
+        // Total visible rows – either visibleRows.length or computed from __size/__depthSizes
         function getVisibleRowCount() {
             if (expandAllMode && jsonData) {
-                let count = totalExpandedCount;
+                let count;
+                const hasDepthLimit = expandAllDepthLimit !== Infinity;
+                if (hasDepthLimit && jsonData.__depthSizes) {
+                    count = jsonData.__depthSizes[Math.min(expandAllDepthLimit, jsonData.__depthSizes.length - 1)];
+                } else {
+                    count = totalExpandedCount;
+                }
                 if (window._collapsedInExpandAll && window._collapsedInExpandAll.size > 0) {
                     for (const cPath of window._collapsedInExpandAll) {
                         const val = getValueAtPath(cPath);
-                        if (val !== null && typeof val === 'object' && val.__size) {
-                            count -= (val.__size - 1);
+                        if (val !== null && typeof val === 'object') {
+                            if (hasDepthLimit) {
+                                const depth = getPathDepth(cPath);
+                                const remaining = expandAllDepthLimit - depth;
+                                if (remaining > 0) {
+                                    count -= (getNodeSizeAtDepth(val, remaining) - 1);
+                                }
+                            } else if (val.__size) {
+                                count -= (val.__size - 1);
+                            }
                         }
                     }
                 }
@@ -4947,6 +5010,7 @@
             if (!jsonData || targetPath === 'root') return 0;
             let idx = 0;
             let currentValue = jsonData;
+            const hasDepthLimit = expandAllDepthLimit !== Infinity;
             // Parse segments after "root"
             const rest = targetPath.substring(4);
             const segments = [];
@@ -4959,17 +5023,21 @@
                 else { seg += ch; }
             }
             if (seg) segments.push(seg);
-            for (const s of segments) {
+            for (let si = 0; si < segments.length; si++) {
+                const s = segments[si];
+                const childDepth = si + 1;
                 idx++; // move past current node
                 if (s.startsWith('[')) {
                     const arrIdx = parseInt(s.slice(1, -1));
-                    for (let i = 0; i < arrIdx; i++) idx += getNodeSize(currentValue[i]);
+                    for (let i = 0; i < arrIdx; i++) {
+                        idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[i], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[i]);
+                    }
                     currentValue = currentValue[arrIdx];
                 } else {
                     const keys = Object.keys(currentValue).sort();
                     for (const k of keys) {
                         if (k === s) break;
-                        idx += getNodeSize(currentValue[k]);
+                        idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[k], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[k]);
                     }
                     currentValue = currentValue[s];
                 }
@@ -4983,6 +5051,7 @@
             if (!jsonData) return rows;
             const rootKey = fileName || 'root';
             const hasCollapsed = window._collapsedInExpandAll && window._collapsedInExpandAll.size > 0;
+            const hasDepthLimit = expandAllDepthLimit !== Infinity;
             const stack = [{
                 key: rootKey, value: jsonData, path: 'root', depth: 0,
                 childIndex: -1, childKeys: null, childCount: 0
@@ -4992,8 +5061,10 @@
                 const frame = stack[stack.length - 1];
                 if (frame.childIndex === -1) {
                     // ── Process self ──
-                    const isCollapsed = hasCollapsed && window._collapsedInExpandAll.has(frame.path);
-                    const nodeSize = isCollapsed ? 1 : getNodeSize(frame.value);
+                    const isCollapsed = (hasCollapsed && window._collapsedInExpandAll.has(frame.path)) ||
+                                        (hasDepthLimit && frame.depth >= expandAllDepthLimit);
+                    const nodeSize = isCollapsed ? 1 :
+                        (hasDepthLimit ? getNodeSizeAtDepth(frame.value, expandAllDepthLimit - frame.depth) : getNodeSize(frame.value));
                     if (idx + nodeSize <= startIdx) { stack.pop(); idx += nodeSize; continue; }
                     if (idx >= endIdx) { break; }
                     if (idx >= startIdx) {
@@ -5020,9 +5091,10 @@
                     let childValue;
                     if (frame.childKeys) { childValue = frame.value[frame.childKeys[frame.childIndex]]; }
                     else { childValue = frame.value[frame.childIndex]; }
+                    const childDepth = frame.depth + 1;
                     // Fast skip without path construction when no collapsed nodes
                     if (!hasCollapsed) {
-                        const cs = getNodeSize(childValue);
+                        const cs = hasDepthLimit ? getNodeSizeAtDepth(childValue, expandAllDepthLimit - childDepth) : getNodeSize(childValue);
                         if (idx + cs <= startIdx) { frame.childIndex++; idx += cs; continue; }
                     }
                     let childKey, childPath;
@@ -5035,13 +5107,15 @@
                     }
                     frame.childIndex++;
                     if (hasCollapsed) {
-                        const cCollapsed = window._collapsedInExpandAll.has(childPath);
-                        const cs = cCollapsed ? 1 : getNodeSize(childValue);
+                        const cCollapsed = window._collapsedInExpandAll.has(childPath) ||
+                                           (hasDepthLimit && childDepth >= expandAllDepthLimit);
+                        const cs = cCollapsed ? 1 :
+                            (hasDepthLimit ? getNodeSizeAtDepth(childValue, expandAllDepthLimit - childDepth) : getNodeSize(childValue));
                         if (idx + cs <= startIdx) { idx += cs; continue; }
                     }
                     if (idx >= endIdx) { stack.pop(); continue; }
                     stack.push({ key: childKey, value: childValue, path: childPath,
-                                 depth: frame.depth + 1, childIndex: -1, childKeys: null, childCount: 0 });
+                                 depth: childDepth, childIndex: -1, childKeys: null, childCount: 0 });
                 } else { stack.pop(); }
             }
             return rows;
@@ -5352,7 +5426,8 @@
                 
                 if (row.hasChildren) {
                     const isCollapsedManually = expandAllMode && window._collapsedInExpandAll && window._collapsedInExpandAll.has(row.path);
-                    const expanded = !isCollapsedManually && (expandAllMode || expandedPaths.has(row.path));
+                    const isDepthLimited = expandAllMode && expandAllDepthLimit !== Infinity && row.depth >= expandAllDepthLimit;
+                    const expanded = !isCollapsedManually && !isDepthLimited && (expandAllMode || expandedPaths.has(row.path));
                     html += `<span class="toggle" data-toggle-path="${escapeHtml(row.path)}">${expanded ? '▼' : '▶'}</span>`;
                 } else {
                     html += '<span class="toggle"></span>';
@@ -5435,16 +5510,13 @@
         
         function toggle(path) {
             if (expandAllMode) {
-                // Switching from expandAllMode: need to populate expandedPaths with current state
-                // but only for ancestor paths that are currently expanded
-                // To toggle a single node, we turn off expandAllMode and mark this node as collapsed
-                // We use a collapsedPaths set to track exceptions in expandAllMode
-                expandAllMode = false;
-                // Since we're coming from expandAll, all paths were expanded
-                // We can't store them all - instead just collapse this one path
-                // and keep expandAllMode but with exceptions
-                expandAllMode = true;
                 if (!window._collapsedInExpandAll) window._collapsedInExpandAll = new Set();
+                // Check if this node is depth-limited (collapsed by depth, not manually)
+                const isDepthLimited = expandAllDepthLimit !== Infinity && getPathDepth(path) >= expandAllDepthLimit;
+                if (isDepthLimited && !window._collapsedInExpandAll.has(path)) {
+                    // Node is collapsed by depth limit – can't expand individually, use level+ button
+                    return;
+                }
                 if (window._collapsedInExpandAll.has(path)) {
                     window._collapsedInExpandAll.delete(path);
                 } else {
@@ -5464,6 +5536,7 @@
                 setTimeout(() => {
                     totalExpandedCount = computeSubtreeSizes(jsonData);
                     expandAllMode = true;
+                    expandAllDepthLimit = Infinity;
                     expandedPaths = new Set(['root']);
                     window._collapsedInExpandAll = new Set();
                     currentExpandLevel = maxDepth;
@@ -5474,6 +5547,7 @@
             } else {
                 totalExpandedCount = jsonData ? (jsonData.__size || 1) : 0;
                 expandAllMode = true;
+                expandAllDepthLimit = Infinity;
                 expandedPaths = new Set(['root']);
                 window._collapsedInExpandAll = new Set();
                 currentExpandLevel = maxDepth;
@@ -5484,6 +5558,7 @@
         
         function collapseAll() {
             expandAllMode = false;
+            expandAllDepthLimit = Infinity;
             window._collapsedInExpandAll = new Set();
             expandedPaths = new Set(['root']);
             currentExpandLevel = 1;
@@ -5494,19 +5569,29 @@
         function expandLevel() {
             if (currentExpandLevel >= maxDepth) return;
             currentExpandLevel++;
-            expandAllMode = false;
+            // Stay in expandAllMode with depth limit for O(1) level changes
+            if (!expandAllMode) {
+                expandAllMode = true;
+                if (!jsonData.__depthSizes) computeSubtreeSizes(jsonData);
+                totalExpandedCount = jsonData.__size || 1;
+            }
+            expandAllDepthLimit = currentExpandLevel >= maxDepth ? Infinity : currentExpandLevel;
             window._collapsedInExpandAll = new Set();
-            rebuildExpandedToLevel(currentExpandLevel);
             updateLevelDisplay();
             renderTree();
         }
-        
+
         function collapseLevel() {
             if (currentExpandLevel <= 1) return;
             currentExpandLevel--;
-            expandAllMode = false;
+            // Stay in expandAllMode with depth limit for O(1) level changes
+            if (!expandAllMode) {
+                expandAllMode = true;
+                if (!jsonData.__depthSizes) computeSubtreeSizes(jsonData);
+                totalExpandedCount = jsonData.__size || 1;
+            }
+            expandAllDepthLimit = currentExpandLevel;
             window._collapsedInExpandAll = new Set();
-            rebuildExpandedToLevel(currentExpandLevel);
             updateLevelDisplay();
             renderTree();
         }
@@ -6406,7 +6491,7 @@
                     for (let i = 0; i < val.length; i++) stack.push({ val: val[i], depth: depth + 1 });
                 } else if (typeof val === 'object') {
                     stats.objects++;
-                    const keys = Object.keys(val).filter(k => k !== '__size');
+                    const keys = Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes');
                     for (const k of keys) {
                         stats.uniqueKeys.add(k);
                         stats.keyCounts.set(k, (stats.keyCounts.get(k) || 0) + 1);
@@ -6586,7 +6671,7 @@
                 }
             } else {
                 // Objects: always expand fully (no depth limit)
-                const keys = Object.keys(obj).filter(k => k !== '__size');
+                const keys = Object.keys(obj).filter(k => k !== '__size' && k !== '__depthSizes');
                 for (const k of keys) {
                     const key = prefix ? `${prefix}.${k}` : k;
                     const val = obj[k];
@@ -6809,7 +6894,7 @@
         function showRawView() {
             if (!jsonData) return;
             const target = selectedPath ? getValueAtPath(selectedPath) : jsonData;
-            const json = JSON.stringify(target, (key, val) => key === '__size' ? undefined : val, 2);
+            const json = JSON.stringify(target, (key, val) => key === '__size' || key === '__depthSizes' ? undefined : val, 2);
             // Limit to 500K chars for performance
             const limited = json.length > 500000 ? json.substring(0, 500000) + '\n\n... (abgeschnitten bei 500 KB)' : json;
             document.getElementById('rawContent').innerHTML = syntaxHighlightJSON(limited);
@@ -6858,7 +6943,7 @@
                     for (let i = 0; i < val.length; i++) {
                         const child = val[i];
                         if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-                            const hash = JSON.stringify(child, (k, v) => k === '__size' ? undefined : v);
+                            const hash = JSON.stringify(child, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v);
                             if (hash.length < 10000) { // skip huge objects
                                 if (!hashMap.has(hash)) hashMap.set(hash, []);
                                 hashMap.get(hash).push(`${path}[${i}]`);
@@ -6867,7 +6952,7 @@
                         stack.push({ val: child, path: `${path}[${i}]` });
                     }
                 } else {
-                    const keys = Object.keys(val).filter(k => k !== '__size');
+                    const keys = Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes');
                     for (const k of keys) {
                         stack.push({ val: val[k], path: `${path}.${k}` });
                     }
@@ -6994,7 +7079,7 @@
                     if (Array.isArray(data)) {
                         for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx, `${path}[${i}]`, results);
                     } else {
-                        for (const k of Object.keys(data).filter(k => k !== '__size')) queryRecursive(data[k], segments, segIdx, `${path}.${k}`, results);
+                        for (const k of Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes')) queryRecursive(data[k], segments, segIdx, `${path}.${k}`, results);
                     }
                 }
             } else if (seg.type === 'key') {
@@ -7010,7 +7095,7 @@
                     if (Array.isArray(data)) {
                         for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx + 1, `${path}[${i}]`, results);
                     } else {
-                        for (const k of Object.keys(data).filter(k => k !== '__size')) queryRecursive(data[k], segments, segIdx + 1, `${path}.${k}`, results);
+                        for (const k of Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes')) queryRecursive(data[k], segments, segIdx + 1, `${path}.${k}`, results);
                     }
                 }
             }
@@ -7059,7 +7144,7 @@
             document.getElementById('diffModal').classList.add('visible');
             const leftPanel = document.getElementById('diffLeft');
             leftPanel.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">Aktuelle Datei: ' + (fileName || 'JSON') + '</div>' +
-                '<pre style="margin:0;">' + escapeHTML(JSON.stringify(jsonData, (k, v) => k === '__size' ? undefined : v, 2).substring(0, 500000)) + '</pre>';
+                '<pre style="margin:0;">' + escapeHTML(JSON.stringify(jsonData, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v, 2).substring(0, 500000)) + '</pre>';
             const rightPanel = document.getElementById('diffRight');
             if (diffSecondData) {
                 renderDiffPanels();
@@ -7093,7 +7178,7 @@
             input.click();
         }
         function renderDiffPanels() {
-            const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => k === '__size' ? undefined : v));
+            const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v));
             const left = clean(jsonData);
             const right = clean(diffSecondData);
             const diffs = computeDiffs(left, right, '$');
@@ -7208,7 +7293,7 @@
                 return { type: 'array', items: merged, count: data.length };
             }
             if (typeof data === 'object') {
-                const keys = Object.keys(data).filter(k => k !== '__size');
+                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
                 const properties = {};
                 for (const k of keys) {
                     properties[k] = inferSchema(data[k], depth + 1);
@@ -7339,7 +7424,7 @@
                     if (typeof item === 'object' && item !== null) countBulkMatches(item, op, key, count);
                 }
             } else {
-                const keys = Object.keys(data).filter(k => k !== '__size');
+                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
                 for (const k of keys) {
                     if (k === key) count.n++;
                     if (typeof data[k] === 'object' && data[k] !== null) countBulkMatches(data[k], op, key, count);
@@ -7361,7 +7446,7 @@
                     for (const item of data) walk(item);
                     return;
                 }
-                const keys = Object.keys(data).filter(k => k !== '__size');
+                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
                 for (const k of keys) {
                     if (k === keyFrom) {
                         if (op === 'renameKey' && keyTo) {
