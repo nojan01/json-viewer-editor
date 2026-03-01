@@ -3532,7 +3532,7 @@
             currentMatchIndex = -1;
             isModified = false;
             currentExpandLevel = 1;
-            maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20);
+            maxDepth = calculateMaxDepth(jsonData, 50);
             
             // Precompute subtree sizes for virtual rendering
             if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
@@ -3742,7 +3742,7 @@
                 currentMatchIndex = -1;
                 isModified = false;
                 currentExpandLevel = 1;
-                maxDepth = Math.min(calculateMaxDepth(jsonData, 5), 20);
+                maxDepth = calculateMaxDepth(jsonData, 50);
                 
                 updateTitle();
                 updateStatusBar(nodeCount, totalTime, parseTime);
@@ -5491,7 +5491,7 @@
             currentExpandLevel++;
             expandAllMode = false;
             window._collapsedInExpandAll = new Set();
-            expandToLevel(jsonData, 'root', 0);
+            rebuildExpandedToLevel(currentExpandLevel);
             updateLevelDisplay();
             renderTree();
         }
@@ -5501,18 +5501,22 @@
             currentExpandLevel--;
             expandAllMode = false;
             window._collapsedInExpandAll = new Set();
-            collapseToLevel(jsonData, 'root', 0);
+            rebuildExpandedToLevel(currentExpandLevel);
             updateLevelDisplay();
             renderTree();
         }
         
-        function expandToLevel(obj, path, depth) {
-            // Iterative approach to prevent stack overflow on large files
-            const stack = [{ obj, path, depth }];
+        // Rebuild expandedPaths from scratch: expand exactly all nodes at depth < targetLevel
+        // This ensures a clean, consistent state regardless of previous manual expand/collapse
+        function rebuildExpandedToLevel(targetLevel) {
+            expandedPaths = new Set(['root']);
+            if (targetLevel <= 1) return;
+            
+            const stack = [{ obj: jsonData, path: 'root', depth: 0 }];
             while (stack.length > 0) {
                 const { obj: cur, path: curPath, depth: curDepth } = stack.pop();
                 if (cur === null || typeof cur !== 'object') continue;
-                if (curDepth >= currentExpandLevel) continue;
+                if (curDepth >= targetLevel) continue;
                 expandedPaths.add(curPath);
                 if (Array.isArray(cur)) {
                     for (let i = cur.length - 1; i >= 0; i--) {
@@ -5527,40 +5531,25 @@
             }
         }
         
-        function collapseToLevel(obj, path, depth) {
-            // Iterative approach to prevent stack overflow on large files
-            const stack = [{ obj, path, depth }];
+        // Calculate max depth iteratively (safe for deep/large files)
+        // Samples a subset of children at each level for performance
+        function calculateMaxDepth(obj, maxLimit = 50) {
+            if (obj === null || typeof obj !== 'object') return 0;
+            let max = 0;
+            const stack = [{ obj, depth: 0 }];
             while (stack.length > 0) {
-                const { obj: cur, path: curPath, depth: curDepth } = stack.pop();
+                const { obj: cur, depth } = stack.pop();
+                if (depth > max) max = depth;
+                if (depth >= maxLimit) continue;
                 if (cur === null || typeof cur !== 'object') continue;
-                if (curDepth >= currentExpandLevel) {
-                    expandedPaths.delete(curPath);
-                }
-                if (Array.isArray(cur)) {
-                    for (let i = cur.length - 1; i >= 0; i--) {
-                        stack.push({ obj: cur[i], path: `${curPath}[${i}]`, depth: curDepth + 1 });
-                    }
-                } else {
-                    const keys = Object.keys(cur);
-                    for (let i = keys.length - 1; i >= 0; i--) {
-                        stack.push({ obj: cur[keys[i]], path: `${curPath}.${keys[i]}`, depth: curDepth + 1 });
+                const items = Array.isArray(cur) ? cur : Object.values(cur);
+                // Sample up to 20 children per node to keep it fast
+                const sampleSize = Math.min(items.length, 20);
+                for (let i = 0; i < sampleSize; i++) {
+                    if (items[i] !== null && typeof items[i] === 'object') {
+                        stack.push({ obj: items[i], depth: depth + 1 });
                     }
                 }
-            }
-        }
-        
-        // Calculate max depth with limit to prevent stack overflow on deep structures
-        function calculateMaxDepth(obj, maxSampleDepth = 10, currentDepth = 0) {
-            if (currentDepth >= maxSampleDepth) return currentDepth;
-            if (obj === null || typeof obj !== 'object') return currentDepth;
-            
-            let max = currentDepth;
-            const items = Array.isArray(obj) ? obj : Object.values(obj);
-            
-            // Only sample first few items for performance
-            const sampleSize = Math.min(items.length, 10);
-            for (let i = 0; i < sampleSize; i++) {
-                max = Math.max(max, calculateMaxDepth(items[i], maxSampleDepth, currentDepth + 1));
             }
             return max;
         }
