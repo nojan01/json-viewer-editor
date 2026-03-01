@@ -1336,7 +1336,8 @@
         .stats-bar-fill {
             height: 100%;
             border-radius: 4px;
-            transition: width 0.3s;
+            display: block;
+            min-width: 1px;
         }
         .stats-bar-count {
             width: 60px;
@@ -6373,7 +6374,7 @@
             html += '<div class="stats-bar-chart">';
             types.forEach(t => {
                 const pct = maxCount > 0 ? (t.count / maxCount * 100) : 0;
-                html += `<div class="stats-bar-row"><span class="stats-bar-label">${t.name}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${pct}%;background:${t.color}"></div></div><span class="stats-bar-count">${t.count.toLocaleString()}</span></div>`;
+                html += `<div class="stats-bar-row"><span class="stats-bar-label">${t.name}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${pct}%;background-color:${t.color}"></div></div><span class="stats-bar-count">${t.count.toLocaleString()}</span></div>`;
             });
             html += '</div>';
             // Top keys
