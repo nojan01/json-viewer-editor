@@ -2,7 +2,7 @@
 
 Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows** und **Linux**, gebaut mit [Tauri 2](https://tauri.app/).
 
-![Version](https://img.shields.io/badge/version-1.1.4-blue)
+![Version](https://img.shields.io/badge/version-1.1.5-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -183,6 +183,11 @@ MIT License — Frei verwendbar, auch kommerziell.
 Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
+
+### v1.1.5 (März 2026)
+- **Performance: O(1) Ebene auf-/zuklappen** — Ebene+/− nutzt jetzt expandAllMode mit Tiefenlimit statt alle Pfade zu materialisieren
+- **__depthSizes Vorberechnung** — Effiziente Größenberechnung pro Tiefenstufe für schnelles Scrolling
+- **Stats-Balken Fix** — Absolute Positionierung für zuverlässige Anzeige unter Windows WebView2
 
 ### v1.1.4 (März 2026)
 - **Große Dateien bis 500 MB+** — Rust-seitiges JSON-Parsen (serde_json) mit In-Memory-Kompaktierung, Chunked Reading (64 MB Blöcke), Raw-Byte IPC
