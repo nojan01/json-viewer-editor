@@ -3220,9 +3220,9 @@
         });
         
         // Helper: Read file content
-        // Strategy: always try read_file_fast first (proven, works on all platforms).
-        // Only for large files (>50MB), use read_file_raw to avoid IPC JSON escaping
-        // overhead that causes OOM on Windows.
+        // Strategy: try read_file_fast first (JSON IPC), validate result,
+        // fall back to read_file_raw (raw bytes, no JSON serialization) if empty.
+        // For large files (>50MB), start with read_file_raw to avoid OOM.
         const RAW_READ_THRESHOLD = 50 * 1024 * 1024; // 50 MB
         
         // Extract filename from path (works with both / and \ separators)
@@ -3242,30 +3242,74 @@
                 console.warn('[ReadFile] get_file_size failed, will read directly:', e);
             }
             
+            // Helper: read via raw bytes (avoids JSON IPC serialization entirely)
+            async function readRaw() {
+                const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
+                console.log(`[ReadFile] read_file_raw returned: type=${typeof buffer}, constructor=${buffer?.constructor?.name}, byteLength=${buffer?.byteLength}`);
+                const text = new TextDecoder('utf-8').decode(buffer);
+                return text;
+            }
+            
+            // Helper: read via fast string IPC
+            async function readFast() {
+                const result = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
+                console.log(`[ReadFile] read_file_fast returned: type=${typeof result}, length=${result?.length}`);
+                return (typeof result === 'string') ? result : String(result || '');
+            }
+            
+            // Helper: validate that text is non-empty
+            function isValidText(text) {
+                return typeof text === 'string' && text.length > 0;
+            }
+            
             // Step 2: Read the file content
-            // For large files on Windows, read_file_raw avoids IPC string escaping overhead
+            // For large files, start with raw bytes to avoid IPC JSON escaping overhead
             if (byteSize > RAW_READ_THRESHOLD) {
                 try {
                     console.log('[ReadFile] Using read_file_raw (large file mode)');
-                    const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
-                    const text = new TextDecoder('utf-8').decode(buffer);
-                    console.log(`[ReadFile] Raw read OK, ${text.length} chars`);
-                    return { text, byteSize };
+                    const text = await readRaw();
+                    if (isValidText(text)) {
+                        console.log(`[ReadFile] Raw read OK, ${text.length} chars`);
+                        return { text, byteSize };
+                    }
+                    console.warn('[ReadFile] read_file_raw returned empty, trying read_file_fast...');
                 } catch(rawErr) {
-                    console.error('[ReadFile] read_file_raw failed, trying read_file_fast:', rawErr);
-                    // Fall through to read_file_fast
+                    console.error('[ReadFile] read_file_raw failed:', rawErr);
                 }
             }
             
-            // Default path: read_file_fast (works reliably on all platforms)
+            // Step 3: Try fast string IPC (default for small/medium files)
             try {
-                const text = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
-                console.log(`[ReadFile] Fast read OK, ${text.length} chars`);
-                return { text, byteSize: byteSize || text.length };
+                const text = await readFast();
+                if (isValidText(text)) {
+                    console.log(`[ReadFile] Fast read OK, ${text.length} chars`);
+                    return { text, byteSize: byteSize || text.length };
+                }
+                console.warn(`[ReadFile] read_file_fast returned empty string! byteSize=${byteSize}`);
             } catch(fastErr) {
-                console.error('[ReadFile] read_file_fast also failed:', fastErr);
-                throw new Error(`Datei konnte nicht gelesen werden: ${fastErr}`);
+                console.error('[ReadFile] read_file_fast failed:', fastErr);
             }
+            
+            // Step 4: Fallback — try raw bytes even for small files
+            // (handles WebView2 IPC issues where JSON string transfer silently fails)
+            try {
+                console.log('[ReadFile] Fallback: trying read_file_raw for small file');
+                const text = await readRaw();
+                if (isValidText(text)) {
+                    console.log(`[ReadFile] Fallback raw read OK, ${text.length} chars`);
+                    return { text, byteSize: byteSize || text.length };
+                }
+                console.error('[ReadFile] Fallback raw read also returned empty!');
+            } catch(rawErr2) {
+                console.error('[ReadFile] Fallback read_file_raw failed:', rawErr2);
+            }
+            
+            // All strategies failed
+            throw new Error(
+                `Datei konnte nicht gelesen werden: ${filePath}\n` +
+                `Dateigröße laut Metadaten: ${byteSize} Bytes\n` +
+                `Beide Lesemethoden (IPC-String und Raw-Bytes) haben leere Daten zurückgegeben.`
+            );
         }
         
         // Robust JSON parsing: handles BOM, encoding issues, type safety

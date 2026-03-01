@@ -491,13 +491,22 @@ pub fn run() {
           }
       }
       
+      // Helper: check if a file path has a supported extension (case-insensitive)
+      fn is_supported_file(path: &str) -> bool {
+          let lower = path.to_lowercase();
+          lower.ends_with(".json") || lower.ends_with(".txt") || 
+          lower.ends_with(".geojson") || lower.ends_with(".jsonl")
+      }
+      
       // Check for file argument using CLI plugin
+      let mut file_opened = false;
       if let Ok(matches) = app.cli().matches() {
           if let Some(file_arg) = matches.args.get("file") {
               if let Some(file_path) = file_arg.value.as_str() {
-                  if file_path.ends_with(".json") && std::path::Path::new(file_path).exists() {
+                  if is_supported_file(file_path) && std::path::Path::new(file_path).exists() {
                       let path_clone = file_path.to_string();
                       let app_handle_clone = app_handle.clone();
+                      file_opened = true;
                       std::thread::spawn(move || {
                           std::thread::sleep(std::time::Duration::from_millis(800));
                           let _ = app_handle_clone.emit("open-file", &path_clone);
@@ -507,17 +516,19 @@ pub fn run() {
           }
       }
       
-      // Fallback: Check raw env args (for "Open With")
-      let args: Vec<String> = std::env::args().collect();
-      for arg in args.iter().skip(1) {
-          if arg.ends_with(".json") && std::path::Path::new(arg).exists() {
-              let path_clone = arg.clone();
-              let app_handle_clone = app_handle.clone();
-              std::thread::spawn(move || {
-                  std::thread::sleep(std::time::Duration::from_millis(800));
-                  let _ = app_handle_clone.emit("open-file", &path_clone);
-              });
-              break;
+      // Fallback: Check raw env args (for "Open With") — only if CLI plugin didn't find a file
+      if !file_opened {
+          let args: Vec<String> = std::env::args().collect();
+          for arg in args.iter().skip(1) {
+              if is_supported_file(arg) && std::path::Path::new(arg).exists() {
+                  let path_clone = arg.clone();
+                  let app_handle_clone = app_handle.clone();
+                  std::thread::spawn(move || {
+                      std::thread::sleep(std::time::Duration::from_millis(800));
+                      let _ = app_handle_clone.emit("open-file", &path_clone);
+                  });
+                  break;
+              }
           }
       }
       
