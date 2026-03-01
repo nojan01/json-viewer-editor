@@ -3452,7 +3452,7 @@
             // ---- LARGE FILES: Parse in Rust (serde_json is ~5x faster than V8) ----
             if (byteSize > RUST_PARSE_THRESHOLD) {
                 console.log(`[Parse] Large file (${formatSize(byteSize)}), using Rust parse_json_compact`);
-                if (progressEl) progressEl.textContent = `${formatSize(byteSize)} - Parsen in Rust (schneller als JS)...`;
+                if (progressEl) progressEl.textContent = `${formatSize(byteSize)} - Parsen...`;
                 await new Promise(r => setTimeout(r, 16));
                 
                 const parseStart = performance.now();
