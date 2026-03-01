@@ -6,7 +6,13 @@ use tauri_plugin_cli::CliExt;
 use std::fs;
 use std::path::PathBuf;
 use std::io::Read;
+use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
+
+// In-memory store for compact JSON bytes (avoids temp files on disk)
+struct CompactStore {
+    data: Mutex<Option<Vec<u8>>>,
+}
 
 // Optimized fast file reading command
 #[tauri::command]
@@ -88,17 +94,16 @@ fn write_file_fast(path: String, content: String) -> Result<(), String> {
 }
 
 // Parse JSON file in Rust (serde_json, ~5x faster than V8 JSON.parse)
-// Writes compact JSON to a temp file for chunked reading by JS
+// Stores compact JSON in memory for direct IPC transfer (no temp files)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CompactResult {
-    compact_path: String,
     compact_size: u64,
     original_size: u64,
     node_count: u64,
 }
 
 #[tauri::command]
-fn parse_json_compact(path: String) -> Result<CompactResult, String> {
+fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Result<CompactResult, String> {
     let path_obj = std::path::Path::new(&path);
     match path_obj.extension().and_then(|e| e.to_str()) {
         Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
@@ -127,44 +132,33 @@ fn parse_json_compact(path: String) -> Result<CompactResult, String> {
     // Count nodes
     let node_count = count_json_value(&value);
     
-    // Write compact JSON to temp file (removes all formatting whitespace)
-    let compact_path = format!("{}.compact.json", path);
-    let file = fs::File::create(&compact_path)
-        .map_err(|e| format!("Fehler beim Erstellen der Temp-Datei: {}", e))?;
-    let mut writer = std::io::BufWriter::with_capacity(8 * 1024 * 1024, file);
-    serde_json::to_writer(&mut writer, &value)
-        .map_err(|e| format!("Fehler beim Schreiben der Compact-Datei: {}", e))?;
-    
-    // Explicitly flush to ensure all data is written before we check size
-    use std::io::Write;
-    writer.flush()
-        .map_err(|e| format!("Fehler beim Flush der Compact-Datei: {}", e))?;
+    // Serialize compact JSON to memory (removes all formatting whitespace)
+    let compact_bytes = serde_json::to_vec(&value)
+        .map_err(|e| format!("Fehler beim Serialisieren: {}", e))?;
+    let compact_size = compact_bytes.len() as u64;
     
     // Free the parsed value
     drop(value);
     
-    let compact_size = fs::metadata(&compact_path)
-        .map_err(|e| format!("Compact-Metadaten-Fehler: {}", e))?.len();
+    // Store compact bytes in memory for retrieval via get_compact_bytes
+    *store.data.lock().map_err(|e| format!("Lock-Fehler: {}", e))? = Some(compact_bytes);
     
     Ok(CompactResult {
-        compact_path,
         compact_size,
         original_size,
         node_count,
     })
 }
 
-// Delete a temp file (used to clean up compact JSON files)
+// Retrieve compact JSON bytes from memory (stored by parse_json_compact)
+// Returns raw bytes via efficient IPC (avoids JSON string escaping overhead)
 #[tauri::command]
-fn delete_temp_file(path: String) -> Result<(), String> {
-    // Only allow deleting compact temp files for safety
-    if !path.ends_with(".compact.json") {
-        return Err("Nur .compact.json Dateien dürfen gelöscht werden".to_string());
-    }
-    if std::path::Path::new(&path).exists() {
-        fs::remove_file(&path).map_err(|e| format!("Fehler beim Löschen: {}", e))?;
-    }
-    Ok(())
+fn get_compact_bytes(store: tauri::State<'_, CompactStore>) -> Result<tauri::ipc::Response, String> {
+    let data = store.data.lock()
+        .map_err(|e| format!("Lock-Fehler: {}", e))?
+        .take()
+        .ok_or("Keine kompakten Daten vorhanden".to_string())?;
+    Ok(tauri::ipc::Response::new(data))
 }
 
 // Get file statistics: exact byte size and accurate JSON node count (Rust-side)
@@ -571,7 +565,8 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, parse_json_compact, delete_temp_file, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .manage(CompactStore { data: Mutex::new(None) })
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, parse_json_compact, get_compact_bytes, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       

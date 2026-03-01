@@ -3456,17 +3456,18 @@
                 
                 const parseStart = performance.now();
                 
-                // Step 1: Parse in Rust → compact temp file
+                // Step 1: Parse in Rust → compact bytes stored in memory
                 const result = await window.__TAURI__.core.invoke('parse_json_compact', { path: filePath });
                 const rustParseTime = performance.now() - parseStart;
                 console.log(`[Parse] Rust parsed in ${(rustParseTime/1000).toFixed(1)}s: ${formatSize(result.original_size)} → ${formatSize(result.compact_size)} compact (${Math.round(100*result.compact_size/result.original_size)}%), ${result.node_count} nodes`);
                 
-                // Step 2: Read compact file (may use chunked reading)
-                if (progressEl) progressEl.textContent = `Lese kompakte Daten (${formatSize(result.compact_size)})...`;
+                // Step 2: Fetch compact bytes from Rust memory (direct IPC, no temp file)
+                if (progressEl) progressEl.textContent = `Lade kompakte Daten (${formatSize(result.compact_size)})...`;
                 await new Promise(r => setTimeout(r, 16));
                 
-                const readResult = await readFileContent(result.compact_path);
-                const text = readResult.text;
+                const buffer = await window.__TAURI__.core.invoke('get_compact_bytes');
+                const text = new TextDecoder('utf-8').decode(buffer);
+                console.log(`[Parse] Got compact bytes: ${text.length} chars`);
                 
                 // Step 3: JSON.parse on compact data (much faster than on formatted original)
                 if (progressEl) progressEl.textContent = `${formatSize(result.compact_size)} - JS-Parse (kompakt)...`;
@@ -3476,13 +3477,6 @@
                 const data = parseJSON(text);
                 const totalParseTime = performance.now() - parseStart;
                 console.log(`[Parse] JS parse on compact: ${((performance.now()-jsParseStart)/1000).toFixed(1)}s, total: ${(totalParseTime/1000).toFixed(1)}s`);
-                
-                // Step 4: Clean up temp file
-                try {
-                    await window.__TAURI__.core.invoke('delete_temp_file', { path: result.compact_path });
-                } catch(e) {
-                    console.warn('[Parse] Could not delete temp file:', e);
-                }
                 
                 return {
                     jsonData: data,
