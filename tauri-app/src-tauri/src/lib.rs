@@ -51,6 +51,30 @@ fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// Chunked file reading: reads a byte range and returns raw bytes
+// For very large files (>200MB) where a single IPC transfer would hang
+#[tauri::command]
+fn read_file_chunk(path: String, offset: u64, length: u64) -> Result<tauri::ipc::Response, String> {
+    use std::io::{Seek, SeekFrom};
+    
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    }
+    
+    let mut file = fs::File::open(&path)
+        .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|e| format!("Fehler beim Seek: {}", e))?;
+    
+    let mut buffer = Vec::with_capacity(length as usize);
+    file.take(length).read_to_end(&mut buffer)
+        .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
+    
+    Ok(tauri::ipc::Response::new(buffer))
+}
+
 // Fast file writing command
 #[tauri::command]
 fn write_file_fast(path: String, content: String) -> Result<(), String> {
@@ -467,7 +491,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
-    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       

@@ -3220,10 +3220,14 @@
         });
         
         // Helper: Read file content
-        // Strategy: try read_file_fast first (JSON IPC), validate result,
-        // fall back to read_file_raw (raw bytes, no JSON serialization) if empty.
-        // For large files (>50MB), start with read_file_raw to avoid OOM.
+        // Strategy:
+        // - Small files (<50MB): read_file_fast (String IPC, simple)
+        // - Medium files (50-200MB): read_file_raw (raw bytes, avoids JSON escaping OOM)
+        // - Large files (>200MB): chunked reading (64MB chunks, avoids IPC transfer limit)
+        // Each step validates result; falls back to next strategy on empty/error.
         const RAW_READ_THRESHOLD = 50 * 1024 * 1024; // 50 MB
+        const CHUNK_THRESHOLD = 200 * 1024 * 1024; // 200 MB - chunked reading above this
+        const CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB per chunk
         
         // Extract filename from path (works with both / and \ separators)
         function getFileName(filePath) {
@@ -3242,32 +3246,60 @@
                 console.warn('[ReadFile] get_file_size failed, will read directly:', e);
             }
             
-            // Helper: read via raw bytes (avoids JSON IPC serialization entirely)
-            async function readRaw() {
-                const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
-                console.log(`[ReadFile] read_file_raw returned: type=${typeof buffer}, constructor=${buffer?.constructor?.name}, byteLength=${buffer?.byteLength}`);
-                const text = new TextDecoder('utf-8').decode(buffer);
-                return text;
-            }
-            
-            // Helper: read via fast string IPC
-            async function readFast() {
-                const result = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
-                console.log(`[ReadFile] read_file_fast returned: type=${typeof result}, length=${result?.length}`);
-                return (typeof result === 'string') ? result : String(result || '');
-            }
-            
             // Helper: validate that text is non-empty
             function isValidText(text) {
                 return typeof text === 'string' && text.length > 0;
             }
             
-            // Step 2: Read the file content
-            // For large files, start with raw bytes to avoid IPC JSON escaping overhead
+            // --- Strategy A: Chunked reading for very large files ---
+            if (byteSize > CHUNK_THRESHOLD) {
+                try {
+                    console.log(`[ReadFile] Using CHUNKED reading (${Math.ceil(byteSize / CHUNK_SIZE)} chunks of ${CHUNK_SIZE / 1024 / 1024} MB)`);
+                    const decoder = new TextDecoder('utf-8', { fatal: false });
+                    const chunks = [];
+                    let offset = 0;
+                    
+                    while (offset < byteSize) {
+                        const length = Math.min(CHUNK_SIZE, byteSize - offset);
+                        const buffer = await window.__TAURI__.core.invoke('read_file_chunk', {
+                            path: filePath, offset: offset, length: length
+                        });
+                        
+                        const isLast = (offset + length >= byteSize);
+                        chunks.push(decoder.decode(buffer, { stream: !isLast }));
+                        offset += length;
+                        
+                        const pct = Math.round(100 * offset / byteSize);
+                        const progressEl = document.getElementById('loadProgress');
+                        if (progressEl) {
+                            progressEl.textContent = `Lese Datei... ${pct}% (${formatSize(offset)} / ${formatSize(byteSize)})`;
+                        }
+                        console.log(`[ReadFile] Chunk ${chunks.length}: ${formatSize(length)}, total ${pct}%`);
+                        
+                        // Yield to UI thread between chunks
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                    
+                    const text = chunks.join('');
+                    console.log(`[ReadFile] Chunked read complete: ${text.length} chars from ${chunks.length} chunks`);
+                    
+                    if (isValidText(text)) {
+                        return { text, byteSize };
+                    }
+                    console.warn('[ReadFile] Chunked read returned empty!');
+                } catch(chunkErr) {
+                    console.error('[ReadFile] Chunked reading failed:', chunkErr);
+                    // Fall through to single-read strategies
+                }
+            }
+            
+            // --- Strategy B: Raw bytes for medium files ---
             if (byteSize > RAW_READ_THRESHOLD) {
                 try {
-                    console.log('[ReadFile] Using read_file_raw (large file mode)');
-                    const text = await readRaw();
+                    console.log('[ReadFile] Using read_file_raw (medium file mode)');
+                    const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
+                    console.log(`[ReadFile] read_file_raw returned: type=${typeof buffer}, constructor=${buffer?.constructor?.name}, byteLength=${buffer?.byteLength}`);
+                    const text = new TextDecoder('utf-8').decode(buffer);
                     if (isValidText(text)) {
                         console.log(`[ReadFile] Raw read OK, ${text.length} chars`);
                         return { text, byteSize };
@@ -3278,9 +3310,11 @@
                 }
             }
             
-            // Step 3: Try fast string IPC (default for small/medium files)
+            // --- Strategy C: Fast string IPC for small files ---
             try {
-                const text = await readFast();
+                const result = await window.__TAURI__.core.invoke('read_file_fast', { path: filePath });
+                console.log(`[ReadFile] read_file_fast returned: type=${typeof result}, length=${result?.length}`);
+                const text = (typeof result === 'string') ? result : String(result || '');
                 if (isValidText(text)) {
                     console.log(`[ReadFile] Fast read OK, ${text.length} chars`);
                     return { text, byteSize: byteSize || text.length };
@@ -3290,25 +3324,50 @@
                 console.error('[ReadFile] read_file_fast failed:', fastErr);
             }
             
-            // Step 4: Fallback — try raw bytes even for small files
-            // (handles WebView2 IPC issues where JSON string transfer silently fails)
+            // --- Strategy D: Fallback — raw bytes even for small files ---
             try {
-                console.log('[ReadFile] Fallback: trying read_file_raw for small file');
-                const text = await readRaw();
+                console.log('[ReadFile] Fallback: trying read_file_raw');
+                const buffer = await window.__TAURI__.core.invoke('read_file_raw', { path: filePath });
+                const text = new TextDecoder('utf-8').decode(buffer);
                 if (isValidText(text)) {
                     console.log(`[ReadFile] Fallback raw read OK, ${text.length} chars`);
                     return { text, byteSize: byteSize || text.length };
                 }
-                console.error('[ReadFile] Fallback raw read also returned empty!');
             } catch(rawErr2) {
                 console.error('[ReadFile] Fallback read_file_raw failed:', rawErr2);
+            }
+            
+            // --- Strategy E: Last resort — chunked reading for any size ---
+            if (byteSize > 0 && byteSize <= CHUNK_THRESHOLD) {
+                try {
+                    console.log('[ReadFile] Last resort: chunked reading for small file');
+                    const decoder = new TextDecoder('utf-8', { fatal: false });
+                    const chunks = [];
+                    let offset = 0;
+                    while (offset < byteSize) {
+                        const length = Math.min(CHUNK_SIZE, byteSize - offset);
+                        const buffer = await window.__TAURI__.core.invoke('read_file_chunk', {
+                            path: filePath, offset: offset, length: length
+                        });
+                        const isLast = (offset + length >= byteSize);
+                        chunks.push(decoder.decode(buffer, { stream: !isLast }));
+                        offset += length;
+                    }
+                    const text = chunks.join('');
+                    if (isValidText(text)) {
+                        console.log(`[ReadFile] Last resort chunked OK, ${text.length} chars`);
+                        return { text, byteSize };
+                    }
+                } catch(e) {
+                    console.error('[ReadFile] Last resort chunked failed:', e);
+                }
             }
             
             // All strategies failed
             throw new Error(
                 `Datei konnte nicht gelesen werden: ${filePath}\n` +
                 `Dateigröße laut Metadaten: ${byteSize} Bytes\n` +
-                `Beide Lesemethoden (IPC-String und Raw-Bytes) haben leere Daten zurückgegeben.`
+                `Alle Lesemethoden (String-IPC, Raw-Bytes, Chunked) haben leere Daten zurückgegeben.`
             );
         }
         
