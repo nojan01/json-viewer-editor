@@ -140,6 +140,103 @@ jobs:
         working-directory: tauri-app
         run: npm run build
         
+      - name: Repackage DMG with Installer script
+        working-directory: tauri-app
+        run: |
+          set -e
+          APP_NAME="JSON Viewer"
+          BUILD_DIR="src-tauri/target/release/bundle"
+          STAGING="$BUILD_DIR/dmg-staging"
+          
+          # Read version from tauri.conf.json
+          VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          DMG_NAME="${APP_NAME}_${VERSION}_aarch64.dmg"
+          
+          echo "Repackaging DMG v${VERSION} with installer script..."
+          
+          # Create staging directory
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          
+          # Copy the built .app
+          cp -R "$BUILD_DIR/macos/${APP_NAME}.app" "$STAGING/"
+          
+          # Create installer script that removes quarantine
+          cat > "$STAGING/Installieren.command" << 'SCRIPT'
+          #!/bin/bash
+          # JSON Viewer Installer – Doppelklicken zum Installieren
+          APP_NAME="JSON Viewer.app"
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          INSTALL_DIR="/Applications"
+          
+          clear
+          echo ""
+          echo "=========================================="
+          echo "  JSON Viewer – Installer"
+          echo "=========================================="
+          echo ""
+          
+          if [ ! -d "$SCRIPT_DIR/$APP_NAME" ]; then
+              echo "Fehler: $APP_NAME nicht gefunden."
+              echo "Bitte oeffnen Sie die DMG und fuehren Sie dieses Skript von dort aus."
+              read -p "Enter druecken zum Beenden..."
+              exit 1
+          fi
+          
+          echo "Installiere $APP_NAME nach $INSTALL_DIR..."
+          
+          # Remove old version
+          if [ -d "$INSTALL_DIR/$APP_NAME" ]; then
+              rm -rf "$INSTALL_DIR/$APP_NAME" 2>/dev/null || sudo rm -rf "$INSTALL_DIR/$APP_NAME"
+          fi
+          
+          # Copy app
+          cp -R "$SCRIPT_DIR/$APP_NAME" "$INSTALL_DIR/" 2>/dev/null || sudo cp -R "$SCRIPT_DIR/$APP_NAME" "$INSTALL_DIR/"
+          
+          # Remove quarantine attribute (fixes Gatekeeper "damaged" error)
+          xattr -cr "$INSTALL_DIR/$APP_NAME" 2>/dev/null || sudo xattr -cr "$INSTALL_DIR/$APP_NAME"
+          
+          echo ""
+          echo "Installation erfolgreich!"
+          echo ""
+          echo "Sie koennen JSON Viewer jetzt verwenden:"
+          echo "  - Starten Sie die App aus dem Applications-Ordner"
+          echo "  - Rechtsklick auf JSON-Dateien -> Oeffnen mit -> JSON Viewer"
+          echo ""
+          read -p "Enter druecken zum Beenden..."
+          SCRIPT
+          chmod +x "$STAGING/Installieren.command"
+          
+          # Symlink to Applications
+          ln -s /Applications "$STAGING/Applications"
+          
+          # Create README
+          cat > "$STAGING/LIESMICH.txt" << 'README'
+          JSON Viewer - Installation
+          
+          Option 1 (Empfohlen):
+            Doppelklicken Sie auf "Installieren.command"
+            Dies installiert die App und konfiguriert Gatekeeper automatisch.
+          
+          Option 2 (Manuell):
+            1. Ziehen Sie "JSON Viewer.app" in den Applications-Ordner
+            2. Oeffnen Sie Terminal und fuehren Sie aus:
+               xattr -cr "/Applications/JSON Viewer.app"
+          README
+          
+          # Remove old DMG and create new one with installer
+          rm -f "$BUILD_DIR/dmg/$DMG_NAME"
+          mkdir -p "$BUILD_DIR/dmg"
+          hdiutil create -volname "$APP_NAME" \
+              -srcfolder "$STAGING" \
+              -ov -format UDZO \
+              "$BUILD_DIR/dmg/$DMG_NAME"
+          
+          # Cleanup
+          rm -rf "$STAGING"
+          echo "DMG created: $BUILD_DIR/dmg/$DMG_NAME"
+          ls -la "$BUILD_DIR/dmg/"
+        
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
