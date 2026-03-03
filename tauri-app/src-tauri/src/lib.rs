@@ -123,11 +123,30 @@ fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Re
     }
     
     // Parse with serde_json (streaming, fast, memory-efficient)
-    let value: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|e| format!("JSON-Parse-Fehler: {}", e))?;
-    
-    // Free the raw bytes
-    drop(bytes);
+    // First try single JSON value; if trailing chars, try concatenated JSON objects
+    let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => {
+            drop(bytes);
+            v
+        }
+        Err(ref e) if e.classify() == serde_json::error::Category::Data
+            || e.to_string().contains("trailing") =>
+        {
+            // Concatenated JSON (multiple root objects) – parse all and wrap in array
+            let mut stream = serde_json::Deserializer::from_slice(&bytes).into_iter::<serde_json::Value>();
+            let mut objects: Vec<serde_json::Value> = Vec::new();
+            while let Some(result) = stream.next() {
+                let obj = result.map_err(|e2| format!("JSON-Parse-Fehler (Objekt {}): {}", objects.len() + 1, e2))?;
+                objects.push(obj);
+            }
+            drop(bytes);
+            if objects.is_empty() {
+                return Err("JSON-Datei enthält keine gültigen Objekte".to_string());
+            }
+            serde_json::Value::Array(objects)
+        }
+        Err(e) => return Err(format!("JSON-Parse-Fehler: {}", e)),
+    };
     
     // Count nodes
     let node_count = count_json_value(&value);
