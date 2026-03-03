@@ -140,34 +140,6 @@ jobs:
         working-directory: tauri-app
         run: npm run build
         
-      - name: Re-sign app with proper ad-hoc signature
-        run: |
-          APP_PATH="tauri-app/src-tauri/target/release/bundle/macos/JSON Viewer.app"
-          echo "Re-signing app..."
-          codesign --force --deep --sign - "$APP_PATH"
-          codesign --verify --deep --strict "$APP_PATH"
-          echo "Signature OK"
-          
-      - name: Rebuild DMG with signed app and Applications symlink
-        run: |
-          set -e
-          VERSION=$(python3 -c "import json; print(json.load(open('tauri-app/src-tauri/tauri.conf.json'))['version'])")
-          DMG_DIR="tauri-app/src-tauri/target/release/bundle/dmg"
-          APP_SRC="tauri-app/src-tauri/target/release/bundle/macos/JSON Viewer.app"
-          DMG_PATH="$DMG_DIR/JSON Viewer_${VERSION}_aarch64.dmg"
-          STAGING="/tmp/dmg-staging"
-          
-          rm -rf "$STAGING"
-          mkdir -p "$STAGING"
-          cp -R "$APP_SRC" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-          
-          rm -f "$DMG_PATH"
-          mkdir -p "$DMG_DIR"
-          hdiutil create -volname "JSON Viewer" -srcfolder "$STAGING" -ov -format UDZO "$DMG_PATH"
-          rm -rf "$STAGING"
-          ls -la "$DMG_PATH"
-        
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
