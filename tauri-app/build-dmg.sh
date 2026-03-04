@@ -10,7 +10,7 @@ TAURI_DIR="$SCRIPT_DIR/src-tauri"
 BUILD_DIR="$TAURI_DIR/target/release/bundle"
 DMG_STAGING="$BUILD_DIR/dmg-staging"
 APP_NAME="JSON Viewer"
-VERSION="1.0.0"
+VERSION=$(grep '"version"' "$TAURI_DIR/tauri.conf.json" | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 DMG_NAME="${APP_NAME}_${VERSION}_installer.dmg"
 
 echo "=========================================="

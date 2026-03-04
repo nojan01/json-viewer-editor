@@ -50,8 +50,9 @@
         /* Native-style toolbar */
         .toolbar {
             display: flex;
-            gap: 8px;
-            padding: 8px 12px;
+            flex-wrap: wrap;
+            gap: 4px 8px;
+            padding: 6px 10px;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
             align-items: center;
@@ -64,8 +65,9 @@
         
         .toolbar-group {
             display: flex;
-            gap: 4px;
-            padding: 0 8px;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 0 6px;
             border-right: 1px solid var(--border);
         }
         
@@ -74,7 +76,7 @@
         }
         
         .toolbar button {
-            padding: 5px 10px;
+            padding: 4px 8px;
             background: transparent;
             color: var(--text-primary);
             border: 1px solid transparent;
@@ -83,8 +85,9 @@
             font-size: 12px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             transition: all 0.15s;
+            white-space: nowrap;
         }
         
         .toolbar button:hover:not(:disabled) {
@@ -108,8 +111,9 @@
         /* Search bar row */
         .search-bar {
             display: flex;
-            gap: 8px;
-            padding: 6px 12px;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 6px 10px;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
             align-items: center;
@@ -136,7 +140,7 @@
         
         .search-container input {
             flex: 1;
-            min-width: 200px;
+            min-width: 80px;
             padding: 5px 8px;
             background: transparent;
             border: none;
@@ -211,8 +215,9 @@
         /* Replace bar */
         .replace-bar {
             display: none;
-            gap: 8px;
-            padding: 6px 12px;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 6px 10px;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
             align-items: center;
@@ -243,7 +248,7 @@
         
         .replace-container input {
             flex: 1;
-            min-width: 200px;
+            min-width: 80px;
             padding: 5px 8px;
             background: transparent;
             border: none;
@@ -311,7 +316,12 @@
             margin-left: auto;
             font-size: 11px;
             color: var(--text-secondary);
-            padding-left: 12px;
+            padding-left: 8px;
+            flex-shrink: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 40px;
         }
         
         .main {
@@ -638,8 +648,8 @@
             border-radius: 8px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             z-index: 1001;
-            min-width: 500px;
-            max-width: 80%;
+            min-width: min(500px, 90vw);
+            max-width: 90%;
             max-height: 70vh;
             display: none;
             flex-direction: column;
@@ -870,12 +880,13 @@
         /* Footer status bar */
         .statusbar {
             display: flex;
+            flex-wrap: wrap;
             padding: 4px 12px;
             background: var(--bg-secondary);
             border-top: 1px solid var(--border);
             font-size: 11px;
             color: var(--text-secondary);
-            gap: 20px;
+            gap: 4px 16px;
         }
         
         /* Breadcrumb */
@@ -1003,7 +1014,7 @@
             padding: 12px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             z-index: 1000;
-            min-width: 400px;
+            min-width: min(400px, 90vw);
         }
         
         .goto-container.visible {
@@ -1045,7 +1056,8 @@
             padding: 12px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             z-index: 1000;
-            min-width: 300px;
+            min-width: min(300px, 90vw);
+            max-width: 90vw;
         }
         
         .goto-line-container.visible {
@@ -1936,6 +1948,46 @@
         }
         .rest-eye-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
         .rest-eye-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        /* Responsive: kleine Bildschirme */
+        @media (max-width: 800px) {
+            .toolbar button span:not(.icon) {
+                display: none;
+            }
+            .toolbar button {
+                padding: 4px 6px;
+            }
+            .toolbar-group {
+                padding: 0 4px;
+            }
+            .search-info {
+                min-width: 50px;
+            }
+            .replace-info {
+                min-width: 60px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .toolbar {
+                padding: 4px 6px;
+                gap: 2px 4px;
+            }
+            .toolbar-group {
+                padding: 0 2px;
+                gap: 1px;
+            }
+            .toolbar button {
+                padding: 3px 5px;
+                font-size: 11px;
+            }
+            .toolbar button .icon {
+                font-size: 13px;
+            }
+            .search-bar, .replace-bar {
+                padding: 4px 6px;
+            }
+        }
     </style>
 </head>
 <body>
