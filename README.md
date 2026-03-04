@@ -2,7 +2,7 @@
 
 Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows** und **Linux**, gebaut mit [Tauri 2](https://tauri.app/).
 
-![Version](https://img.shields.io/badge/version-1.1.7-blue)
+![Version](https://img.shields.io/badge/version-1.1.9-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -58,11 +58,13 @@ Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows*
 
 ### macOS
 
-1. [DMG herunterladen](https://github.com/nojan01/json-viewer-editor/releases/latest)
-2. `JSON Viewer.app` in den Programme-Ordner ziehen
-3. App starten
+Terminal öffnen und diesen Befehl einfügen:
 
-> **Tipp:** Bei Gatekeeper-Warnung: Rechtsklick → "Öffnen" oder den enthaltenen Installer verwenden.
+```bash
+curl -fsSL https://raw.githubusercontent.com/nojan01/json-viewer-editor/main/tauri-app/install-macos.sh | bash
+```
+
+Das Script lädt die App herunter, installiert sie nach `/Applications` und konfiguriert Gatekeeper automatisch.
 
 ### Windows
 
@@ -183,6 +185,14 @@ MIT License — Frei verwendbar, auch kommerziell.
 Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
+
+### v1.1.9 (März 2026)
+- **Verkettete JSON-Dateien** — Unterstützt jetzt Dateien mit mehreren hintereinander stehenden JSON-Objekten (z.B. Server-Inventar-Exports mit 575+ Objekten)
+- **Parse-Fehler behoben** — "trailing characters" bei großen verketteten JSON-Dateien
+- **macOS Installer** — Neues curl-basiertes Install-Script (umgeht Gatekeeper-Quarantäne)
+
+### v1.1.8 (März 2026)
+- Build- und Release-Bereinigung
 
 ### v1.1.7 (März 2026)
 - **Statistik-Balken Fix (Production Build)** — CSP blockierte inline style-Attribute im Tauri-Build; Styles werden jetzt per JavaScript gesetzt
