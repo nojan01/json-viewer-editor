@@ -93,6 +93,284 @@ fn write_file_fast(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("Fehler beim Schreiben: {}", e))
 }
 
+// Create/truncate a file for chunked writing
+#[tauri::command]
+fn save_file_start(path: String) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
+    }
+    fs::File::create(&path).map_err(|e| format!("Fehler beim Erstellen: {}", e))?;
+    Ok(())
+}
+
+// Append a string chunk to an existing file, with optional LF→CRLF conversion
+#[tauri::command]
+fn save_file_chunk(path: String, content: String, crlf: Option<bool>) -> Result<(), String> {
+    use std::io::Write;
+    let file = fs::OpenOptions::new().append(true).open(&path)
+        .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
+    let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file);
+
+    if crlf.unwrap_or(false) {
+        let bytes = content.as_bytes();
+        let mut start = 0;
+        for i in 0..bytes.len() {
+            if bytes[i] == b'\n' {
+                writer.write_all(&bytes[start..i]).map_err(|e| format!("Schreibfehler: {}", e))?;
+                writer.write_all(b"\r\n").map_err(|e| format!("Schreibfehler: {}", e))?;
+                start = i + 1;
+            }
+        }
+        if start < bytes.len() {
+            writer.write_all(&bytes[start..]).map_err(|e| format!("Schreibfehler: {}", e))?;
+        }
+    } else {
+        writer.write_all(content.as_bytes()).map_err(|e| format!("Schreibfehler: {}", e))?;
+    }
+    writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
+    Ok(())
+}
+
+// Writer wrapper that converts LF to CRLF (for files that originally used Windows line endings)
+struct CrlfWriter<W: std::io::Write> {
+    inner: W,
+}
+
+impl<W: std::io::Write> std::io::Write for CrlfWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // serde_json only emits raw 0x0A for formatting newlines (string content is \n escaped)
+        // So every 0x0A byte in the output is a formatting newline we can convert to \r\n
+        let mut start = 0;
+        for (i, &b) in buf.iter().enumerate() {
+            if b == b'\n' {
+                if i > start {
+                    self.inner.write_all(&buf[start..i])?;
+                }
+                self.inner.write_all(b"\r\n")?;
+                start = i + 1;
+            }
+        }
+        if start < buf.len() {
+            self.inner.write_all(&buf[start..])?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+// Detect JSON formatting from raw bytes: indent string + CRLF flag
+fn detect_json_format(bytes: &[u8]) -> (String, bool) {
+    let sample_len = bytes.len().min(32768);
+    let sample = &bytes[..sample_len];
+
+    // Detect CRLF
+    let uses_crlf = sample.windows(2).any(|w| w == b"\r\n");
+
+    // Split into lines and measure indentation of each line
+    let newline = if uses_crlf { b"\r\n".as_slice() } else { b"\n".as_slice() };
+    let mut indent_levels: Vec<usize> = Vec::new();
+    let mut uses_tabs = false;
+    
+    let mut pos = 0;
+    while pos < sample_len {
+        // Find end of line
+        let line_end = if uses_crlf {
+            sample[pos..].windows(2).position(|w| w == b"\r\n")
+                .map(|p| pos + p)
+                .unwrap_or(sample_len)
+        } else {
+            sample[pos..].iter().position(|&b| b == b'\n')
+                .map(|p| pos + p)
+                .unwrap_or(sample_len)
+        };
+        
+        let line = &sample[pos..line_end];
+        if !line.is_empty() {
+            let first_char = line[0];
+            if first_char == b'\t' {
+                uses_tabs = true;
+                let count = line.iter().take_while(|&&b| b == b'\t').count();
+                indent_levels.push(count);
+            } else if first_char == b' ' {
+                let count = line.iter().take_while(|&&b| b == b' ').count();
+                if count > 0 {
+                    indent_levels.push(count);
+                }
+            }
+        }
+        
+        pos = line_end + newline.len();
+    }
+    
+    // Find the base indent unit using GCD of all positive indent diffs.
+    // This correctly detects 2-space even when most lines use 4-space increments
+    // (e.g. files with mixed indentation or reset patterns).
+    let indent = if uses_tabs {
+        "\t".to_string()
+    } else {
+        // Collect all positive differences between consecutive indent levels
+        let mut diffs: Vec<usize> = Vec::new();
+        for window in indent_levels.windows(2) {
+            let diff = if window[1] > window[0] { window[1] - window[0] } else { 0 };
+            if diff > 0 && diff <= 16 {
+                diffs.push(diff);
+            }
+        }
+        
+        if diffs.is_empty() {
+            // Fallback: find the smallest non-zero indent level
+            let min_indent = indent_levels.iter().copied().filter(|&x| x > 0).min().unwrap_or(2);
+            " ".repeat(min_indent)
+        } else {
+            // Compute GCD of all observed diffs — this finds the true base unit
+            fn gcd(a: usize, b: usize) -> usize {
+                if b == 0 { a } else { gcd(b, a % b) }
+            }
+            let base = diffs.iter().copied().fold(0usize, |acc, d| gcd(acc, d));
+            let base = if base == 0 { 2 } else { base };
+            " ".repeat(base)
+        }
+    };
+
+    (indent, uses_crlf)
+}
+
+// Helper: serialize JSON with custom indent into a writer
+fn serialize_with_indent<W: std::io::Write>(writer: W, data: &serde_json::Value, indent: &[u8]) -> Result<(), String> {
+    use serde::Serialize;
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(indent);
+    let mut serializer = serde_json::Serializer::with_formatter(writer, formatter);
+    data.serialize(&mut serializer)
+        .map_err(|e| format!("Fehler beim Schreiben: {}", e))
+}
+
+// Copy a file byte-for-byte (for saving unmodified files 1:1)
+#[tauri::command]
+fn copy_file(source: String, dest: String) -> Result<(), String> {
+    let dest_obj = std::path::Path::new(&dest);
+    match dest_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
+    }
+    // If source == dest, nothing to do (file is already there)
+    if source == dest {
+        return Ok(());
+    }
+    fs::copy(&source, &dest)
+        .map_err(|e| format!("Fehler beim Kopieren: {}", e))?;
+    Ok(())
+}
+
+// Save JSON data with streaming write (avoids OOM for large files)
+// Strips internal __size/__depthSizes metadata before writing.
+// Reproduces original formatting: indent style + line endings.
+#[tauri::command]
+fn write_json_pretty(
+    path: String,
+    data: serde_json::Value,
+    pretty: Option<bool>,
+    concatenated: Option<bool>,
+    indent: Option<String>,
+    crlf: Option<bool>,
+) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+    match path_obj.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
+        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
+    }
+
+    // Strip __size and __depthSizes metadata added by the viewer
+    let clean_data = strip_metadata(data);
+
+    let file = fs::File::create(&path)
+        .map_err(|e| format!("Fehler beim Erstellen: {}", e))?;
+    let buf_writer = std::io::BufWriter::with_capacity(64 * 1024, file);
+    let indent_bytes = indent.as_deref().unwrap_or("  ").as_bytes().to_vec();
+    let use_crlf = crlf.unwrap_or(false);
+
+    if concatenated.unwrap_or(false) {
+        if let serde_json::Value::Array(items) = &clean_data {
+            use std::io::Write;
+            if use_crlf {
+                let mut writer = CrlfWriter { inner: buf_writer };
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        writer.inner.write_all(b"\r\n").map_err(|e| format!("Schreibfehler: {}", e))?;
+                    }
+                    serialize_with_indent(&mut writer, item, &indent_bytes)?;
+                }
+                writer.inner.write_all(b"\r\n").map_err(|e| format!("Schreibfehler: {}", e))?;
+                writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
+            } else {
+                let mut writer = buf_writer;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        writer.write_all(b"\n").map_err(|e| format!("Schreibfehler: {}", e))?;
+                    }
+                    serialize_with_indent(&mut writer, item, &indent_bytes)?;
+                }
+                writer.write_all(b"\n").map_err(|e| format!("Schreibfehler: {}", e))?;
+                writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
+            }
+            Ok(())
+        } else {
+            write_single_value(buf_writer, &clean_data, &indent_bytes, use_crlf)
+        }
+    } else if pretty.unwrap_or(false) {
+        write_single_value(buf_writer, &clean_data, &indent_bytes, use_crlf)
+    } else {
+        serde_json::to_writer(buf_writer, &clean_data)
+            .map_err(|e| format!("Fehler beim Schreiben: {}", e))
+    }
+}
+
+fn write_single_value<W: std::io::Write>(writer: W, data: &serde_json::Value, indent: &[u8], use_crlf: bool) -> Result<(), String> {
+    if use_crlf {
+        serialize_with_indent(CrlfWriter { inner: writer }, data, indent)
+    } else {
+        serialize_with_indent(writer, data, indent)
+    }
+}
+
+// Strip __size and __depthSizes metadata from JSON data (iterative to avoid stack overflow on deep trees)
+fn strip_metadata(mut value: serde_json::Value) -> serde_json::Value {
+    let mut stack: Vec<*mut serde_json::Value> = vec![&mut value as *mut _];
+    while let Some(ptr) = stack.pop() {
+        let val = unsafe { &mut *ptr };
+        match val {
+            serde_json::Value::Object(map) => {
+                map.remove("__size");
+                map.remove("__depthSizes");
+                for (_, v) in map.iter_mut() {
+                    match v {
+                        serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
+                            stack.push(v as *mut _);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr.iter_mut() {
+                    match item {
+                        serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
+                            stack.push(item as *mut _);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    value
+}
+
 // Parse JSON file in Rust (serde_json, ~5x faster than V8 JSON.parse)
 // Stores compact JSON in memory for direct IPC transfer (no temp files)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +378,9 @@ struct CompactResult {
     compact_size: u64,
     original_size: u64,
     node_count: u64,
+    was_concatenated: bool,
+    indent: String,
+    uses_crlf: bool,
 }
 
 #[tauri::command]
@@ -122,8 +403,12 @@ fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Re
         bytes = bytes[3..].to_vec();
     }
     
+    // Detect original formatting (indent style + line endings) BEFORE parsing
+    let (indent, uses_crlf) = detect_json_format(&bytes);
+    
     // Parse with serde_json (streaming, fast, memory-efficient)
     // First try single JSON value; if trailing chars, try concatenated JSON objects
+    let mut was_concatenated = false;
     let value: serde_json::Value = match serde_json::from_slice(&bytes) {
         Ok(v) => {
             drop(bytes);
@@ -132,6 +417,7 @@ fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Re
         Err(ref e) if e.classify() == serde_json::error::Category::Data
             || e.to_string().contains("trailing") =>
         {
+            was_concatenated = true;
             // Concatenated JSON (multiple root objects) – parse all and wrap in array
             let mut stream = serde_json::Deserializer::from_slice(&bytes).into_iter::<serde_json::Value>();
             let mut objects: Vec<serde_json::Value> = Vec::new();
@@ -166,6 +452,9 @@ fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Re
         compact_size,
         original_size,
         node_count,
+        was_concatenated,
+        indent,
+        uses_crlf,
     })
 }
 
@@ -585,7 +874,7 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
     .manage(CompactStore { data: Mutex::new(None) })
-    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, parse_json_compact, get_compact_bytes, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, write_json_pretty, copy_file, save_file_start, save_file_chunk, parse_json_compact, get_compact_bytes, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       

@@ -11,6 +11,31 @@
             box-sizing: border-box;
         }
         
+        button {
+            -webkit-appearance: none !important;
+            appearance: none !important;
+            background: none;
+            border: none;
+            color: inherit;
+            font: inherit;
+        }
+        
+        .btn-accent {
+            -webkit-appearance: none !important;
+            appearance: none !important;
+            background-color: var(--accent) !important;
+            color: white !important;
+            border: 0 !important;
+            border-radius: 5px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1.2;
+        }
+        .btn-accent:hover {
+            background-color: var(--accent-hover) !important;
+        }
+        
         :root {
             --bg-primary: #1e1e1e;
             --bg-secondary: #252526;
@@ -477,6 +502,15 @@
         
         .light .tree-node.selected {
             background: #add6ff !important;
+        }
+        
+        @keyframes bookmark-flash {
+            0%   { box-shadow: inset 0 0 0 100px rgba(230, 168, 23, 0.7); }
+            30%  { box-shadow: inset 0 0 0 100px rgba(230, 168, 23, 0.5); }
+            100% { box-shadow: inset 0 0 0 100px transparent; }
+        }
+        .tree-node.bookmark-flash {
+            animation: bookmark-flash 1.5s ease-out;
         }
         
         .tree-node.search-match {
@@ -1528,16 +1562,20 @@
             overflow: auto;
             position: relative;
         }
+        .table-scroll-sizer {
+            position: relative;
+        }
         .table-scroll table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
             font-family: 'SF Mono', monospace;
-            position: relative;
-        }
-        .table-scroll thead {
             position: sticky;
             top: 0;
+            z-index: 1;
+        }
+        .table-scroll thead {
+            position: relative;
             z-index: 2;
         }
         .table-scroll th {
@@ -2163,7 +2201,7 @@
                 <p><strong>JSON Viewer/Editor</strong></p>
                 <p>JSON-Datei hierher ziehen oder</p>
                 <p>
-                    <button id="btnDropZoneOpen" style="padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 13px;">
+                    <button id="btnDropZoneOpen" class="btn-accent">
                         Datei öffnen
                     </button>
                 </p>
@@ -2851,6 +2889,9 @@
         let jsonData = null;
         let fileName = '';
         let fileSize = 0;
+        let wasConcatenated = false;
+        let originalIndent = '  ';  // detected indent from original file
+        let originalCrlf = false;    // detected CRLF from original file
         let currentFilePath = null;
         let expandedPaths = new Set();
         let expandAllMode = false; // When true, ALL nodes are expanded without using expandedPaths
@@ -2870,8 +2911,20 @@
         let currentExpandLevel = 1;
         let maxDepth = 0;
         
-        // Bookmarks
-        let bookmarks = JSON.parse(localStorage.getItem('json-viewer-bookmarks') || '[]');
+        // Bookmarks (per-file: { filePath: [path1, path2, ...] })
+        let allBookmarks = JSON.parse(localStorage.getItem('json-viewer-bookmarks-v2') || '{}');
+        let bookmarks = []; // active bookmarks for current file
+        // Migrate old global bookmarks (v1) — assign to first opened file, then remove
+        if (localStorage.getItem('json-viewer-bookmarks')) {
+            try {
+                const oldBm = JSON.parse(localStorage.getItem('json-viewer-bookmarks'));
+                if (Array.isArray(oldBm) && oldBm.length > 0) {
+                    allBookmarks['__migrated__'] = oldBm;
+                    localStorage.setItem('json-viewer-bookmarks-v2', JSON.stringify(allBookmarks));
+                }
+            } catch(e) {}
+            localStorage.removeItem('json-viewer-bookmarks');
+        }
         
         // Current language and theme
         let currentLang = localStorage.getItem('json-viewer-lang') || 'de';
@@ -3536,7 +3589,10 @@
                     jsonData: data,
                     fileSize: result.original_size,
                     nodeCount: result.node_count,
-                    parseTime: totalParseTime
+                    parseTime: totalParseTime,
+                    wasConcatenated: result.was_concatenated || false,
+                    indent: result.indent || '  ',
+                    crlf: result.uses_crlf || false
                 };
             }
             
@@ -3568,13 +3624,16 @@
                 }
             }
             
-            return { jsonData: data, fileSize: fileSz, nodeCount, parseTime };
+            return { jsonData: data, fileSize: fileSz, nodeCount, parseTime, wasConcatenated: false, indent: '  ', crlf: false };
         }
         
         // Finalize loading: set up tree state and render
         async function finalizeLoad(result, filePath, startTime) {
             jsonData = result.jsonData;
             fileSize = result.fileSize;
+            wasConcatenated = result.wasConcatenated || false;
+            originalIndent = result.indent || '  ';
+            originalCrlf = result.crlf || false;
             
             const progressEl = document.getElementById('loadProgress');
             const totalTime = performance.now() - startTime;
@@ -3587,6 +3646,9 @@
             isModified = false;
             currentExpandLevel = 1;
             maxDepth = calculateMaxDepth(jsonData, 50);
+            
+            // Load bookmarks for this specific file
+            loadBookmarksForFile();
             
             // Precompute subtree sizes for virtual rendering
             if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
@@ -3682,7 +3744,7 @@
                             <p><strong>Fehler beim Laden</strong></p>
                             <p style="color: #f44;">${escapeHtml(err.message || String(err))}</p>
                             <p style="margin-top: 20px;">
-                                <button class="btn-retry-open" style="padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                <button class="btn-retry-open btn-accent">
                                     Erneut versuchen
                                 </button>
                             </p>
@@ -3727,6 +3789,7 @@
                         }
                     } else {
                         for (const key in val) {
+                            if (key === '__size' || key === '__depthSizes') continue;
                             await countRecursive(val[key]);
                         }
                     }
@@ -3815,7 +3878,7 @@
                         <p><strong>Fehler beim Laden</strong></p>
                         <p style="color: #f44;">${escapeHtml(err.message)}</p>
                         <p style="margin-top: 20px;">
-                            <button class="btn-retry-open" style="padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            <button class="btn-retry-open btn-accent">
                                 Andere Datei wählen
                             </button>
                         </p>
@@ -3864,7 +3927,7 @@
                     if (Array.isArray(cur)) {
                         for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
                     } else {
-                        const keys = Object.keys(cur);
+                        const keys = Object.keys(cur).filter(k => k !== '__size' && k !== '__depthSizes');
                         for (let i = 0; i < keys.length; i++) stack.push(cur[keys[i]]);
                     }
                 }
@@ -3879,7 +3942,10 @@
             if (Array.isArray(obj)) {
                 for (const item of obj) count += countNodes(item);
             } else {
-                for (const key in obj) count += countNodes(obj[key]);
+                for (const key in obj) {
+                    if (key === '__size' || key === '__depthSizes') continue;
+                    count += countNodes(obj[key]);
+                }
             }
             return count;
         }
@@ -4817,6 +4883,7 @@
                     obj.forEach((item, i) => flattenForCSV(item, `${prefix}[${i}]`));
                 } else {
                     for (const [key, value] of Object.entries(obj)) {
+                        if (key === '__size' || key === '__depthSizes') continue;
                         flattenForCSV(value, prefix ? `${prefix}.${key}` : key);
                     }
                 }
@@ -4923,9 +4990,13 @@
         // __depthSizes[d] = visible count when expanded to relative depth d (d=0 → collapsed = 1)
         function computeSubtreeSizes(root) {
             if (root === null || typeof root !== 'object') return 1;
+            function getChildren(val) {
+                if (Array.isArray(val)) return val;
+                return Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').map(k => val[k]);
+            }
             const stack = [{
                 value: root,
-                children: Array.isArray(root) ? root : Object.values(root),
+                children: getChildren(root),
                 childIndex: 0,
                 size: 1,
                 primitiveChildCount: 0,
@@ -4936,7 +5007,7 @@
                 if (frame.childIndex < frame.children.length) {
                     const child = frame.children[frame.childIndex++];
                     if (child !== null && typeof child === 'object') {
-                        const ch = Array.isArray(child) ? child : Object.values(child);
+                        const ch = getChildren(child);
                         if (ch.length > 0) {
                             stack.push({ value: child, children: ch, childIndex: 0, size: 1, primitiveChildCount: 0, containerChildDs: [] });
                         } else {
@@ -5082,7 +5153,7 @@
                     }
                     currentValue = currentValue[arrIdx];
                 } else {
-                    const keys = Object.keys(currentValue).sort();
+                    const keys = Object.keys(currentValue).filter(k => k !== '__size' && k !== '__depthSizes').sort();
                     for (const k of keys) {
                         if (k === s) break;
                         idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[k], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[k]);
@@ -5118,7 +5189,7 @@
                     if (idx >= startIdx) {
                         const isObj = frame.value !== null && typeof frame.value === 'object';
                         const isArr = Array.isArray(frame.value);
-                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).length > 0);
+                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
                         rows.push({ key: frame.key, value: frame.value, path: frame.path,
                                     depth: frame.depth, hasChildren: hasKids, isArray: isArr, isObject: isObj });
                     }
@@ -5129,7 +5200,7 @@
                             frame.childKeys = null;
                             frame.childCount = frame.value.length;
                         } else {
-                            frame.childKeys = Object.keys(frame.value).sort();
+                            frame.childKeys = Object.keys(frame.value).filter(k => k !== '__size' && k !== '__depthSizes').sort();
                             frame.childCount = frame.childKeys.length;
                         }
                         frame.childIndex = 0;
@@ -5190,7 +5261,7 @@
                 
                 const isObject = value !== null && typeof value === 'object';
                 const isArray = Array.isArray(value);
-                const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).length > 0);
+                const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
                 
                 visibleRows.push({ key, value, path, depth, hasChildren, isArray, isObject });
                 
@@ -5208,7 +5279,7 @@
                             });
                         }
                     } else {
-                        const keys = Object.keys(value).sort().reverse();
+                        const keys = Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').sort().reverse();
                         for (const k of keys) {
                             stack.push({ 
                                 key: k, 
@@ -5226,7 +5297,7 @@
         function addRowOld(key, value, path, depth) {
             const isObject = value !== null && typeof value === 'object';
             const isArray = Array.isArray(value);
-            const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).length > 0);
+            const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
             
             visibleRows.push({ key, value, path, depth, hasChildren, isArray, isObject });
             
@@ -5236,7 +5307,7 @@
                         addRow(`[${idx}]`, item, `${path}[${idx}]`, depth + 1);
                     });
                 } else {
-                    Object.keys(value).sort().forEach(k => {
+                    Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').sort().forEach(k => {
                         addRow(k, value[k], `${path}.${k}`, depth + 1);
                     });
                 }
@@ -5443,6 +5514,10 @@
                 }
                 if (row.path === selectedPath) div.classList.add('selected');
                 if (i === selectedIndex) div.classList.add('selected');
+                if (window._flashPath && row.path === window._flashPath) {
+                    div.classList.add('bookmark-flash');
+                    div.addEventListener('animationend', () => div.classList.remove('bookmark-flash'), { once: true });
+                }
                 if (hierarchyPaths.has(row.path)) div.classList.add('in-path');
                 
                 // Drag & drop attributes
@@ -5484,7 +5559,7 @@
                 html += `<span class="key">${escapeHtml(row.key)}</span><span class="colon">: </span>`;
                 
                 if (row.isObject) {
-                    const count = row.isArray ? row.value.length : Object.keys(row.value).length;
+                    const count = row.isArray ? row.value.length : Object.keys(row.value).filter(k => k !== '__size' && k !== '__depthSizes').length;
                     const type = row.isArray ? 'Array' : 'Object';
                     const bracket = row.isArray ? '[]' : '{}';
                     html += `<span class="bracket">${bracket[0]}</span>`;
@@ -5521,7 +5596,13 @@
                     if (e.target.closest('.toggle[data-toggle-path]')) return;
                     if (!e.target.classList.contains('edit-input')) {
                         selectedPath = row.path;
-                        selectRow(i);
+                        // Update selection visually without full DOM rebuild
+                        // (full rebuild kills the target for dblclick)
+                        const prev = document.querySelector('.tree-node.selected');
+                        if (prev) prev.classList.remove('selected');
+                        div.classList.add('selected');
+                        selectedIndex = i;
+                        updateBreadcrumb();
                     }
                 };
                 
@@ -5661,7 +5742,7 @@
                         stack.push({ obj: cur[i], path: `${curPath}[${i}]`, depth: curDepth + 1 });
                     }
                 } else {
-                    const keys = Object.keys(cur);
+                    const keys = Object.keys(cur).filter(k => k !== '__size' && k !== '__depthSizes');
                     for (let i = keys.length - 1; i >= 0; i--) {
                         stack.push({ obj: cur[keys[i]], path: `${curPath}.${keys[i]}`, depth: curDepth + 1 });
                     }
@@ -5754,7 +5835,7 @@
                 if (Array.isArray(obj)) {
                     obj.forEach((item, idx) => searchInObject(item, `${path}[${idx}]`, query));
                 } else {
-                    Object.keys(obj).forEach(key => {
+                    Object.keys(obj).filter(k => k !== '__size' && k !== '__depthSizes').forEach(key => {
                         // Only check keys
                         if (!searchValuesOnly && matchText(key)) searchMatches.push(`${path}.${key}`);
                         searchInObject(obj[key], `${path}.${key}`, query);
@@ -6019,10 +6100,32 @@
             hideMatchList();
         }
         
+        // Strip __size and __depthSizes metadata from jsonData before saving
+        // Must be done in JS BEFORE Tauri IPC serialization to avoid sending bloated data
+        function stripViewerMetadata(obj) {
+            if (obj === null || typeof obj !== 'object') return;
+            const stack = [obj];
+            while (stack.length > 0) {
+                const val = stack.pop();
+                if (Array.isArray(val)) {
+                    for (let i = 0; i < val.length; i++) {
+                        const child = val[i];
+                        if (child !== null && typeof child === 'object') stack.push(child);
+                    }
+                } else {
+                    delete val.__size;
+                    delete val.__depthSizes;
+                    const keys = Object.keys(val);
+                    for (let i = 0; i < keys.length; i++) {
+                        const child = val[keys[i]];
+                        if (child !== null && typeof child === 'object') stack.push(child);
+                    }
+                }
+            }
+        }
+        
         async function saveFile() {
             if (!jsonData) return;
-            
-            const jsonString = JSON.stringify(jsonData, null, 2);
             
             if (window.__TAURI__) {
                 try {
@@ -6035,11 +6138,74 @@
                     });
                     
                     if (filePath) {
-                        // Use fast Rust command for saving
-                        await window.__TAURI__.core.invoke('write_file_fast', { 
-                            path: filePath, 
-                            content: jsonString 
-                        });
+                        if (!isModified && currentFilePath) {
+                            // Unmodified: copy original file 1:1 (preserves exact formatting + size)
+                            await window.__TAURI__.core.invoke('copy_file', {
+                                source: currentFilePath,
+                                dest: filePath
+                            });
+                        } else {
+                            // Modified: serialize with JSON.stringify in JS
+                            // This preserves: key order, user edits, correct values
+                            
+                            showNotification('Serialisiere JSON…', 'info');
+                            await new Promise(r => setTimeout(r, 100));
+                            
+                            // Replacer strips __size/__depthSizes without modifying jsonData in memory
+                            const replacer = (key, value) => {
+                                if (key === '__size' || key === '__depthSizes') return undefined;
+                                return value;
+                            };
+                            
+                            const indent = originalIndent || '  ';
+                            let jsonStr;
+                            
+                            if (wasConcatenated && Array.isArray(jsonData)) {
+                                const parts = [];
+                                for (let idx = 0; idx < jsonData.length; idx++) {
+                                    parts.push(JSON.stringify(jsonData[idx], replacer, indent));
+                                }
+                                jsonStr = parts.join('\n') + '\n';
+                            } else {
+                                jsonStr = JSON.stringify(jsonData, replacer, indent);
+                            }
+                            
+                            showNotification('Schreibe Datei (' + Math.round(jsonStr.length / 1024 / 1024) + ' MB)…', 'info');
+                            await new Promise(r => setTimeout(r, 50));
+                            
+                            // Create/truncate the target file
+                            await window.__TAURI__.core.invoke('save_file_start', { path: filePath });
+                            
+                            // Write in chunks (10 MB each) to stay within IPC limits
+                            const CHUNK_SIZE = 10 * 1024 * 1024;
+                            const useCrlf = originalCrlf || false;
+                            let totalBytesPlanned = jsonStr.length;
+                            let chunksWritten = 0;
+                            
+                            for (let i = 0; i < jsonStr.length; i += CHUNK_SIZE) {
+                                const chunk = jsonStr.substring(i, i + CHUNK_SIZE);
+                                await window.__TAURI__.core.invoke('save_file_chunk', {
+                                    path: filePath,
+                                    content: chunk,
+                                    crlf: useCrlf
+                                });
+                                chunksWritten++;
+                                const pct = Math.min(100, Math.round((i + chunk.length) / totalBytesPlanned * 100));
+                                showNotification(`Schreibe… ${pct}%`, 'info');
+                            }
+                            
+                            // Free the large string
+                            jsonStr = null;
+                            
+                            // Get file size for notification
+                            try {
+                                const savedSize = Number(await window.__TAURI__.core.invoke('get_file_size', { path: filePath }));
+                                showNotification(`Gespeichert: ${Math.round(savedSize / 1024 / 1024)} MB ✓`, 'info');
+                            } catch(vErr) {}
+                        }
+                        
+                        // Update state: the saved file is now the "current" file
+                        currentFilePath = filePath;
                         fileName = getFileName(filePath);
                         isModified = false;
                         updateTitle();
@@ -6050,7 +6216,8 @@
                     showNotification('Fehler beim Speichern: ' + (err.message || err));
                 }
             } else {
-                // Fallback for browser
+                // Fallback for browser — use streaming for large data
+                const jsonString = JSON.stringify(jsonData, null, 2);
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -6085,6 +6252,7 @@
             const lastKey = parts.pop();
             let current = jsonData;
             for (const part of parts) {
+                if (current === null || current === undefined) return;
                 current = current[part];
             }
             current[lastKey] = value;
@@ -6144,6 +6312,9 @@
             const value = getValueAtPath(path);
             if (value === undefined) return;
             
+            // Only primitive values can be edited inline
+            if (typeof value === 'object' && value !== null) return;
+            
             editingPath = path;
             const type = typeof value;
             const originalValue = JSON.stringify(value);
@@ -6202,6 +6373,7 @@
                     saveUndoState(getParentPath(path));
                 }
                 setValueAtPath(path, newValue);
+                
                 editingPath = null;
                 renderTree();
             };
@@ -6212,25 +6384,28 @@
                 else if (e.key === 'Escape') { finished = true; input.onblur = null; editingPath = null; renderTree(); }
             };
             
-            // Find the CURRENT element in the DOM (the passed element might be stale)
-            const currentElement = document.querySelector(`[data-path="${path}"].value-editable`);
-            
-            if (currentElement && document.body.contains(currentElement)) {
-                currentElement.innerHTML = '';
-                currentElement.appendChild(input);
-                
-                // Set up blur handler AFTER focusing to avoid immediate trigger
-                setTimeout(() => {
-                    input.focus();
-                    input.select();
-                    // Only add blur handler after focus is established
-                    setTimeout(() => {
-                        input.onblur = () => { finishEdit(); };
-                    }, 10);
-                }, 0);
-            } else {
-                editingPath = null;
+            // Use the passed element directly, or fall back to CSS.escape querySelector
+            let targetEl = (element && document.body.contains(element)) ? element : null;
+            if (!targetEl) {
+                const escaped = CSS.escape(path);
+                targetEl = document.querySelector(`[data-path="${escaped}"].value-editable`);
             }
+            if (!targetEl) {
+                editingPath = null;
+                return;
+            }
+            targetEl.innerHTML = '';
+            targetEl.appendChild(input);
+            
+            // Set up blur handler AFTER focusing to avoid immediate trigger
+            setTimeout(() => {
+                input.focus();
+                input.select();
+                // Only add blur handler after focus is established
+                setTimeout(() => {
+                    input.onblur = () => { finishEdit(); };
+                }, 10);
+            }, 0);
         }
         
         function startKeyEdit(path, element, currentKey) {
@@ -6278,27 +6453,30 @@
                 else if (e.key === 'Escape') { finished = true; input.onblur = null; editingKey = false; renderTree(); }
             };
             
-            // Find the CURRENT element in the DOM (the passed element might be stale)
-            const currentElement = document.querySelector(`[data-path="${path}"] .key`);
-            
-            if (currentElement && document.body.contains(currentElement)) {
-                currentElement.innerHTML = '';
-                currentElement.appendChild(input);
-                
-                // Set up blur handler AFTER focusing to avoid immediate trigger
-                setTimeout(() => {
-                    input.focus();
-                    input.select();
-                    // Only add blur handler after focus is established
-                    setTimeout(() => {
-                        input.onblur = () => {
-                            finishKeyEdit();
-                        };
-                    }, 10);
-                }, 0);
-            } else {
-                editingKey = false;
+            // Use the passed element directly, or fall back to CSS.escape querySelector
+            let targetEl = (element && document.body.contains(element)) ? element : null;
+            if (!targetEl) {
+                const escaped = CSS.escape(path);
+                targetEl = document.querySelector(`[data-path="${escaped}"] .key`);
             }
+            if (!targetEl) {
+                editingKey = false;
+                return;
+            }
+            targetEl.innerHTML = '';
+            targetEl.appendChild(input);
+            
+            // Set up blur handler AFTER focusing to avoid immediate trigger
+            setTimeout(() => {
+                input.focus();
+                input.select();
+                // Only add blur handler after focus is established
+                setTimeout(() => {
+                    input.onblur = () => {
+                        finishKeyEdit();
+                    };
+                }, 10);
+            }, 0);
         }
         
         // === CONTEXT MENU ===
@@ -6319,8 +6497,11 @@
             // Edit value
             if (canEdit) {
                 menu.appendChild(createMenuItem(t('ctxEditValue'), () => {
-                    const el = document.querySelector(`[data-path="${row.path}"]`);
+                    // Use CSS.escape for paths with special chars like [ ] .
+                    const escapedPath = CSS.escape(row.path);
+                    const el = document.querySelector(`[data-path="${escapedPath}"] .value-editable`);
                     if (el) startEdit(row.path, el);
+                    else showNotification('Element nicht gefunden', 'info');
                 }, 'Doppelklick'));
             }
             
@@ -6328,7 +6509,8 @@
             if (canRenameKey) {
                 menu.appendChild(createMenuItem(t('ctxRenameKey'), () => {
                     setTimeout(() => {
-                        const el = document.querySelector(`[data-path="${row.path}"] .key`);
+                        const escapedPath = CSS.escape(row.path);
+                        const el = document.querySelector(`[data-path="${escapedPath}"] .key`);
                         if (el) startKeyEdit(row.path, el, row.key);
                     }, 10);
                 }));
@@ -6571,8 +6753,15 @@
         document.getElementById('btnStats').onclick = () => showStatistics();
 
         // ============ BOOKMARKS ============
+        function getBookmarkKey() {
+            return currentFilePath || '__no_file__';
+        }
+        function loadBookmarksForFile() {
+            bookmarks = allBookmarks[getBookmarkKey()] || [];
+        }
         function saveBookmarks() {
-            localStorage.setItem('json-viewer-bookmarks', JSON.stringify(bookmarks));
+            allBookmarks[getBookmarkKey()] = bookmarks;
+            localStorage.setItem('json-viewer-bookmarks-v2', JSON.stringify(allBookmarks));
         }
         function addBookmark(path) {
             if (!path || bookmarks.includes(path)) return;
@@ -6608,7 +6797,7 @@
                 try {
                     const val = getValueAtPath(path);
                     if (val !== undefined) {
-                        if (typeof val === 'object' && val !== null) valuePreview = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`;
+                        if (typeof val === 'object' && val !== null) valuePreview = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').length}}`;
                         else valuePreview = String(val).substring(0, 30);
                     }
                 } catch(e) {}
@@ -6619,11 +6808,30 @@
             });
         }
         function navigateToPath(path) {
+            // Verify path exists in current data before navigating
+            const val = getValueAtPath(path);
+            if (val === undefined) {
+                showNotification('Lesezeichen-Pfad nicht gefunden: ' + path, true);
+                return;
+            }
+            
+            function selectAndFlash(idx) {
+                selectedIndex = idx;
+                selectedPath = path;
+                window._flashPath = path;
+                scrollToIndex(idx);
+                updateBreadcrumb();
+                renderVisibleItems();
+                // Clear flashPath after animation starts
+                setTimeout(() => { window._flashPath = null; }, 200);
+            }
+            
             // Find row index for this path and scroll to it
             if (expandAllMode) {
-                // Need to expand to this path
-                const idx = findRowIndexForPath(path);
-                if (idx >= 0) scrollToIndex(idx);
+                // Use getFlatIndexForPath for O(depth) lookup instead of linear scan
+                const idx = getFlatIndexForPath(path);
+                if (idx >= 0) selectAndFlash(idx);
+                else showNotification('Pfad konnte nicht angezeigt werden', true);
             } else {
                 // Ensure ancestors are expanded
                 let p = getParentPath(path);
@@ -6635,18 +6843,10 @@
                 renderTree();
                 setTimeout(() => {
                     const idx = visibleRows.findIndex(r => r.path === path);
-                    if (idx >= 0) scrollToIndex(idx);
+                    if (idx >= 0) selectAndFlash(idx);
+                    else showNotification('Pfad konnte nicht angezeigt werden', true);
                 }, 50);
             }
-        }
-        function findRowIndexForPath(path) {
-            // Linear search in expand-all mode for a specific path
-            const totalRows = getVisibleRowCount();
-            for (let i = 0; i < totalRows; i++) {
-                const row = getVisibleRow(i);
-                if (row && row.path === path) return i;
-            }
-            return -1;
         }
         document.getElementById('btnBookmarksClose').onclick = hideBookmarks;
         document.getElementById('bookmarksOverlay').onclick = hideBookmarks;
@@ -6761,7 +6961,7 @@
                 // Collect all columns from flattened data
                 const colSet = new Set();
                 tableData.forEach(item => {
-                    Object.keys(item).forEach(k => colSet.add(k));
+                    Object.keys(item).filter(k => k !== '__size' && k !== '__depthSizes').forEach(k => colSet.add(k));
                 });
                 // Sort: flat columns first, then nested columns alphabetically
                 let cols = [...colSet].sort((a, b) => {
@@ -6808,7 +7008,7 @@
             if (typeof val === 'string') return { cls: 'string', display: '"' + (val.length > 50 ? val.substring(0, 50) + '…' : val) + '"' };
             if (typeof val === 'number') return { cls: 'number', display: String(val) };
             if (typeof val === 'boolean') return { cls: 'boolean', display: String(val) };
-            if (typeof val === 'object') return { cls: '', display: Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}` };
+            if (typeof val === 'object') return { cls: '', display: Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').length}}` };
             return { cls: '', display: String(val) };
         }
         let _tableScrollHandler = null;
@@ -6825,12 +7025,14 @@
                 headerHtml += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
             });
             headerHtml += '</tr>';
-            // Single table: sticky thead + spacer rows for virtual scrolling
+            // Use a sizer div for total scroll height, table is sticky inside it
             container.innerHTML = `
-                <table>
-                    <thead>${headerHtml}</thead>
-                    <tbody></tbody>
-                </table>`;
+                <div class="table-scroll-sizer" style="height:${totalHeight}px">
+                    <table>
+                        <thead>${headerHtml}</thead>
+                        <tbody></tbody>
+                    </table>
+                </div>`;
             const table = container.querySelector('table');
             const tbody = table.querySelector('tbody');
             let lastStart = -1, lastEnd = -1;
@@ -6842,13 +7044,7 @@
                 if (start === lastStart && end === lastEnd) return;
                 lastStart = start;
                 lastEnd = end;
-                const topPad = start * TABLE_ROW_HEIGHT;
-                const bottomPad = (totalRows - end) * TABLE_ROW_HEIGHT;
                 let html = '';
-                // Top spacer row
-                if (topPad > 0) {
-                    html += `<tr style="height:${topPad}px"><td colspan="${tableColumns.length + 1}"></td></tr>`;
-                }
                 for (let i = start; i < end; i++) {
                     html += `<tr style="height:${TABLE_ROW_HEIGHT}px">`;
                     html += `<td style="color:var(--text-secondary);min-width:60px">${i + 1}</td>`;
@@ -6858,10 +7054,6 @@
                         html += `<td class="${cls}">${escapeHtml(display)}</td>`;
                     }
                     html += '</tr>';
-                }
-                // Bottom spacer row
-                if (bottomPad > 0) {
-                    html += `<tr style="height:${bottomPad}px"><td colspan="${tableColumns.length + 1}"></td></tr>`;
                 }
                 tbody.innerHTML = html;
             }
