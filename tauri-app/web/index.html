@@ -6128,6 +6128,7 @@
             if (!jsonData) return;
             
             if (window.__TAURI__) {
+                let chunkedSavePath = null;
                 try {
                     const filePath = await window.__TAURI__.dialog.save({
                         defaultPath: fileName || 'data.json',
@@ -6173,27 +6174,40 @@
                             showNotification('Schreibe Datei (' + Math.round(jsonStr.length / 1024 / 1024) + ' MB)…', 'info');
                             await new Promise(r => setTimeout(r, 50));
                             
-                            // Create/truncate the target file
+                            // Start writing to a temporary sibling file. The backend replaces the
+                            // target only after every chunk was successfully written.
                             await window.__TAURI__.core.invoke('save_file_start', { path: filePath });
+                            chunkedSavePath = filePath;
                             
                             // Write in chunks (10 MB each) to stay within IPC limits
                             const CHUNK_SIZE = 10 * 1024 * 1024;
                             const useCrlf = originalCrlf || false;
-                            let totalBytesPlanned = jsonStr.length;
-                            let chunksWritten = 0;
+                            const totalBytesPlanned = jsonStr.length;
                             
-                            for (let i = 0; i < jsonStr.length; i += CHUNK_SIZE) {
-                                const chunk = jsonStr.substring(i, i + CHUNK_SIZE);
+                            for (let i = 0; i < jsonStr.length;) {
+                                let end = Math.min(i + CHUNK_SIZE, jsonStr.length);
+                                // Never split a UTF-16 surrogate pair; doing so would turn a
+                                // supplementary Unicode character (for example an emoji) into
+                                // replacement characters during IPC serialization.
+                                if (end < jsonStr.length &&
+                                    jsonStr.charCodeAt(end - 1) >= 0xD800 && jsonStr.charCodeAt(end - 1) <= 0xDBFF &&
+                                    jsonStr.charCodeAt(end) >= 0xDC00 && jsonStr.charCodeAt(end) <= 0xDFFF) {
+                                    end--;
+                                }
+                                const chunk = jsonStr.slice(i, end);
                                 await window.__TAURI__.core.invoke('save_file_chunk', {
                                     path: filePath,
                                     content: chunk,
                                     crlf: useCrlf
                                 });
-                                chunksWritten++;
-                                const pct = Math.min(100, Math.round((i + chunk.length) / totalBytesPlanned * 100));
+                                const pct = Math.min(100, Math.round(end / totalBytesPlanned * 100));
                                 showNotification(`Schreibe… ${pct}%`, 'info');
+                                i = end;
                             }
                             
+                            await window.__TAURI__.core.invoke('save_file_finish', { path: filePath });
+                            chunkedSavePath = null;
+
                             // Free the large string
                             jsonStr = null;
                             
@@ -6212,6 +6226,13 @@
                         showNotification(`Gespeichert: ${fileName}`);
                     }
                 } catch (err) {
+                    if (chunkedSavePath) {
+                        try {
+                            await window.__TAURI__.core.invoke('save_file_cancel', { path: chunkedSavePath });
+                        } catch (cleanupErr) {
+                            console.warn('Temporary save cleanup failed:', cleanupErr);
+                        }
+                    }
                     console.error('Save error:', err);
                     showNotification('Fehler beim Speichern: ' + (err.message || err));
                 }
@@ -7730,9 +7751,8 @@
                 }
             }
             walk(jsonData);
-            computeSubtreeSize(jsonData);
-            buildFlatList(jsonData);
-            renderVisibleItems();
+            totalExpandedCount = computeSubtreeSizes(jsonData);
+            renderTree();
             isModified = true;
             document.title = '● ' + fileName + ' – JSON Viewer';
             showNotification(`${count} Änderungen angewendet`);
@@ -7787,6 +7807,59 @@
         const restAuthToken = document.getElementById('restAuthToken');
         const restApiKeyName = document.getElementById('restApiKeyName');
         const restApiKeyValue = document.getElementById('restApiKeyValue');
+        const MAX_REST_RESPONSE_BYTES = 100 * 1024 * 1024;
+        const REST_REQUEST_TIMEOUT_MS = 30_000;
+        let activeRestController = null;
+
+        function abortActiveRestRequest() {
+            if (activeRestController) {
+                activeRestController.abort();
+                activeRestController = null;
+            }
+        }
+
+        function isLocalApiHost(hostname) {
+            return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+        }
+
+        function encodeBasicAuth(user, pass) {
+            const bytes = new TextEncoder().encode(`${user}:${pass}`);
+            let binary = '';
+            for (const byte of bytes) binary += String.fromCharCode(byte);
+            return btoa(binary);
+        }
+
+        async function readRestResponse(response, maxBytes) {
+            const declaredSize = Number(response.headers.get('content-length'));
+            if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+                throw new Error(`Antwort ist zu groß (${formatSize(declaredSize)}; Maximum: ${formatSize(maxBytes)})`);
+            }
+
+            if (!response.body) {
+                throw new Error('Antwort konnte nicht als Datenstrom gelesen werden');
+            }
+
+            const reader = response.body.getReader();
+            const chunks = [];
+            let size = 0;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    size += value.byteLength;
+                    if (size > maxBytes) {
+                        await reader.cancel();
+                        throw new Error(`Antwort ist größer als ${formatSize(maxBytes)}`);
+                    }
+                    chunks.push(value);
+                }
+            } finally {
+                reader.releaseLock();
+            }
+
+            const text = await new Blob(chunks).text();
+            return { text, size };
+        }
 
         function showRestClient() {
             restOverlay.classList.add('visible');
@@ -7797,6 +7870,7 @@
             updateBodyVisibility();
         }
         function hideRestClient() {
+            abortActiveRestRequest();
             restOverlay.classList.remove('visible');
             restModal.classList.remove('visible');
         }
@@ -7830,8 +7904,20 @@
             const url = restUrlInput.value.trim();
             if (!url) { restStatus.textContent = '⚠ Bitte URL eingeben'; return; }
 
+            let parsedUrl;
+            try {
+                parsedUrl = new URL(url);
+            } catch {
+                restStatus.textContent = '⚠ Ungültige URL';
+                return;
+            }
+            if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+                restStatus.textContent = '⚠ Nur HTTP(S)-URLs werden unterstützt';
+                return;
+            }
+
             const method = restMethod.value;
-            const fetchOpts = { method, headers: { 'Accept': 'application/json' } };
+            const fetchOpts = { method, headers: new Headers({ 'Accept': 'application/json' }) };
 
             // Apply authentication
             const authType = restAuthType.value;
@@ -7839,16 +7925,16 @@
                 const user = restAuthUser.value.trim();
                 const pass = restAuthPass.value;
                 if (!user) { restStatus.textContent = '⚠ Benutzername erforderlich'; return; }
-                fetchOpts.headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+                fetchOpts.headers.set('Authorization', 'Basic ' + encodeBasicAuth(user, pass));
             } else if (authType === 'bearer') {
                 const token = restAuthToken.value.trim();
                 if (!token) { restStatus.textContent = '⚠ Token erforderlich'; return; }
-                fetchOpts.headers['Authorization'] = 'Bearer ' + token;
+                fetchOpts.headers.set('Authorization', 'Bearer ' + token);
             } else if (authType === 'apikey') {
                 const keyName = restApiKeyName.value.trim();
                 const keyValue = restApiKeyValue.value.trim();
                 if (!keyName || !keyValue) { restStatus.textContent = '⚠ API Key Name und Wert erforderlich'; return; }
-                fetchOpts.headers[keyName] = keyValue;
+                fetchOpts.headers.set(keyName, keyValue);
             }
 
             // Parse custom headers
@@ -7856,11 +7942,26 @@
             if (hdrText) {
                 try {
                     const customHeaders = JSON.parse(hdrText);
-                    Object.assign(fetchOpts.headers, customHeaders);
+                    if (!customHeaders || Array.isArray(customHeaders) || typeof customHeaders !== 'object') {
+                        throw new Error('Header müssen ein JSON-Objekt sein');
+                    }
+                    for (const [name, value] of Object.entries(customHeaders)) {
+                        if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+                            throw new Error(`Ungültiger Wert für Header ${name}`);
+                        }
+                        fetchOpts.headers.set(name, String(value));
+                    }
                 } catch(e) {
                     restStatus.textContent = '⚠ Header-JSON ungültig: ' + e.message;
                     return;
                 }
+            }
+
+            const hasCredentials = authType !== 'none' || [...fetchOpts.headers.keys()]
+                .some(name => ['authorization', 'proxy-authorization', 'x-api-key', 'api-key'].includes(name.toLowerCase()));
+            if (hasCredentials && parsedUrl.protocol === 'http:' && !isLocalApiHost(parsedUrl.hostname)) {
+                restStatus.textContent = '⚠ Zugangsdaten dürfen nur über HTTPS gesendet werden';
+                return;
             }
 
             // Parse body for POST/PUT/PATCH
@@ -7870,7 +7971,7 @@
                     try {
                         JSON.parse(bodyText); // validate
                         fetchOpts.body = bodyText;
-                        fetchOpts.headers['Content-Type'] = 'application/json';
+                        fetchOpts.headers.set('Content-Type', 'application/json');
                     } catch(e) {
                         restStatus.textContent = '⚠ Body-JSON ungültig: ' + e.message;
                         return;
@@ -7881,36 +7982,77 @@
             btnRestSend.disabled = true;
             btnRestSend.textContent = '⏳ Lade...';
             restStatus.textContent = `${method} ${url} ...`;
+            abortActiveRestRequest();
+            const controller = new AbortController();
+            activeRestController = controller;
+            fetchOpts.signal = controller.signal;
+            let timedOut = false;
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                controller.abort();
+            }, REST_REQUEST_TIMEOUT_MS);
 
             try {
                 const response = await fetch(url, fetchOpts);
-                const text = await response.text();
-                restStatus.textContent = `HTTP ${response.status} ${response.statusText} – ${formatBytes(text.length)}`;
-
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const { text, size } = await readRestResponse(response, MAX_REST_RESPONSE_BYTES);
+                if (activeRestController !== controller) return;
+                restStatus.textContent = `HTTP ${response.status} ${response.statusText} – ${formatSize(size)}`;
 
-                const data = JSON.parse(text);
+                const startTime = performance.now();
+                const data = parseJSON(text);
                 jsonData = data;
-                computeSubtreeSize(jsonData);
-                fileName = new URL(url).pathname.split('/').pop() || 'api-response.json';
-                fileSize = text.length;
-                document.title = fileName + ' – JSON Viewer';
-                expandedPaths.clear();
+                currentFilePath = null;
+                fileName = parsedUrl.pathname.split('/').filter(Boolean).pop() || 'api-response.json';
+                fileSize = size;
+                wasConcatenated = false;
+                originalIndent = '  ';
+                originalCrlf = false;
+                expandedPaths = new Set(['root']);
                 expandAllMode = false;
-                buildFlatList(jsonData);
+                window._collapsedInExpandAll = new Set();
+                searchMatches = [];
+                currentMatchIndex = -1;
+                selectedPath = null;
+                selectedIndex = -1;
+                isModified = false;
+                currentExpandLevel = 1;
+                maxDepth = calculateMaxDepth(jsonData, 50);
+                undoStack = [];
+                redoStack = [];
+                updateUndoButtons();
+                loadBookmarksForFile();
+                totalExpandedCount = computeSubtreeSizes(jsonData);
+                const parseTime = performance.now() - startTime;
+                updateTitle();
+                updateStatusBar(totalExpandedCount, parseTime, parseTime);
                 enableButtons();
                 scrollTop = 0;
-                renderVisibleItems();
-                let nodeCount = jsonData.__size || 0;
-                status.textContent = `${fileName} (${formatBytes(fileSize)}) – ${nodeCount.toLocaleString()} Knoten – Geladen von URL`;
+                updateLevelDisplay();
+                renderTree();
                 showNotification('JSON von URL geladen');
+                activeRestController = null;
                 hideRestClient();
             } catch(err) {
-                restStatus.textContent = '❌ ' + err.message;
-                showNotification('Laden fehlgeschlagen: ' + err.message);
+                if (err.name === 'AbortError') {
+                    if (timedOut) {
+                        restStatus.textContent = '❌ Zeitüberschreitung nach 30 Sekunden';
+                        showNotification('Laden fehlgeschlagen: Zeitüberschreitung');
+                    }
+                } else {
+                    restStatus.textContent = '❌ ' + err.message;
+                    showNotification('Laden fehlgeschlagen: ' + err.message);
+                }
             } finally {
-                btnRestSend.disabled = false;
-                btnRestSend.textContent = 'Senden';
+                clearTimeout(timeout);
+                const isCurrentRequest = activeRestController === controller;
+                if (isCurrentRequest) activeRestController = null;
+                // A cancelled older request must not re-enable the button while
+                // a newer request is still in progress.
+                if (isCurrentRequest || activeRestController === null) {
+                    btnRestSend.disabled = false;
+                    btnRestSend.textContent = 'Senden';
+                }
             }
         }
 

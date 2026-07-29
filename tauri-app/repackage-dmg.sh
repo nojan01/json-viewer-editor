@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 APP_NAME="JSON Viewer"
 BUILD_DIR="src-tauri/target/release/bundle"
 STAGING="$BUILD_DIR/dmg-staging"
-VERSION="1.2.0"
+VERSION="1.3.5"
 DMG_NAME="${APP_NAME}_${VERSION}_aarch64.dmg"
 
 echo "=== Creating clean DMG v${VERSION} ==="

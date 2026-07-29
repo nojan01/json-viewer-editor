@@ -3,8 +3,9 @@ use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
 use tauri::menu::AboutMetadata;
 use tauri::{Manager, AppHandle, Emitter};
 use tauri_plugin_cli::CliExt;
+use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::io::Read;
 use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
@@ -14,15 +15,38 @@ struct CompactStore {
     data: Mutex<Option<Vec<u8>>>,
 }
 
+// Files being written in chunks are staged in the target directory. The
+// original is replaced only after every chunk has been written successfully.
+struct ChunkedSaveStore {
+    files: Mutex<HashMap<PathBuf, PathBuf>>,
+}
+
+const MAX_READ_CHUNK_SIZE: u64 = 64 * 1024 * 1024;
+
+fn is_supported_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("json")
+                || extension.eq_ignore_ascii_case("txt")
+                || extension.eq_ignore_ascii_case("geojson")
+                || extension.eq_ignore_ascii_case("jsonl")
+        })
+}
+
+fn ensure_supported_file(path: &Path, action: &str) -> Result<(), String> {
+    if is_supported_file(path) {
+        Ok(())
+    } else {
+        Err(format!("Nur JSON/TXT-Dateien können {} werden", action))
+    }
+}
+
 // Optimized fast file reading command
 #[tauri::command]
 fn read_file_fast(path: String) -> Result<String, String> {
     // Validate file path: only allow JSON/TXT files
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "gelesen")?;
     
     let metadata = fs::metadata(&path)
         .map_err(|e| format!("Fehler beim Lesen der Metadaten: {}", e))?;
@@ -45,11 +69,7 @@ fn read_file_fast(path: String) -> Result<String, String> {
 // For a 500MB file, this saves ~200MB+ of IPC overhead
 #[tauri::command]
 fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "gelesen")?;
     
     let bytes = fs::read(&path)
         .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
@@ -63,18 +83,28 @@ fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
 fn read_file_chunk(path: String, offset: u64, length: u64) -> Result<tauri::ipc::Response, String> {
     use std::io::{Seek, SeekFrom};
     
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
+    ensure_supported_file(Path::new(&path), "gelesen")?;
+
+    if length > MAX_READ_CHUNK_SIZE {
+        return Err(format!("Ein Lese-Chunk darf höchstens {} MB groß sein", MAX_READ_CHUNK_SIZE / 1024 / 1024));
     }
+
+    let file_size = fs::metadata(&path)
+        .map_err(|e| format!("Fehler beim Lesen der Metadaten: {}", e))?
+        .len();
+    if offset > file_size {
+        return Err("Der Lese-Offset liegt hinter dem Dateiende".to_string());
+    }
+    let length = length.min(file_size - offset);
     
     let mut file = fs::File::open(&path)
         .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
     file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("Fehler beim Seek: {}", e))?;
     
-    let mut buffer = Vec::with_capacity(length as usize);
+    let capacity = usize::try_from(length)
+        .map_err(|_| "Ungültige Chunk-Größe".to_string())?;
+    let mut buffer = Vec::with_capacity(capacity);
     file.take(length).read_to_end(&mut buffer)
         .map_err(|e| format!("Fehler beim Lesen: {}", e))?;
     
@@ -85,31 +115,47 @@ fn read_file_chunk(path: String, offset: u64, length: u64) -> Result<tauri::ipc:
 #[tauri::command]
 fn write_file_fast(path: String, content: String) -> Result<(), String> {
     // Validate file path: only allow JSON files for writing
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "geschrieben")?;
     fs::write(&path, content).map_err(|e| format!("Fehler beim Schreiben: {}", e))
 }
 
-// Create/truncate a file for chunked writing
+// Start an atomic chunked save in a temporary sibling file.
 #[tauri::command]
-fn save_file_start(path: String) -> Result<(), String> {
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
+fn save_file_start(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+    let target = PathBuf::from(path);
+    ensure_supported_file(&target, "geschrieben")?;
+
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = target.file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Ungültiger Dateiname".to_string())?;
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Systemzeit-Fehler: {}", e))?
+        .as_nanos();
+    let temporary = parent.join(format!(".{}.{}.{}.tmp", file_name, std::process::id(), unique));
+
+    fs::OpenOptions::new().write(true).create_new(true).open(&temporary)
+        .map_err(|e| format!("Temporäre Datei konnte nicht erstellt werden: {}", e))?;
+
+    let mut files = store.files.lock().map_err(|e| format!("Lock-Fehler: {}", e))?;
+    if let Some(previous) = files.insert(target, temporary) {
+        let _ = fs::remove_file(previous);
     }
-    fs::File::create(&path).map_err(|e| format!("Fehler beim Erstellen: {}", e))?;
     Ok(())
 }
 
-// Append a string chunk to an existing file, with optional LF→CRLF conversion
+// Append a string chunk to the staged file, with optional LF→CRLF conversion.
 #[tauri::command]
-fn save_file_chunk(path: String, content: String, crlf: Option<bool>) -> Result<(), String> {
+fn save_file_chunk(path: String, content: String, crlf: Option<bool>, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
     use std::io::Write;
-    let file = fs::OpenOptions::new().append(true).open(&path)
+    let target = PathBuf::from(path);
+    ensure_supported_file(&target, "geschrieben")?;
+    let temporary = store.files.lock().map_err(|e| format!("Lock-Fehler: {}", e))?
+        .get(&target)
+        .cloned()
+        .ok_or("Kein aktiver Speichervorgang für diese Datei".to_string())?;
+    let file = fs::OpenOptions::new().append(true).open(&temporary)
         .map_err(|e| format!("Fehler beim Öffnen: {}", e))?;
     let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file);
 
@@ -130,6 +176,33 @@ fn save_file_chunk(path: String, content: String, crlf: Option<bool>) -> Result<
         writer.write_all(content.as_bytes()).map_err(|e| format!("Schreibfehler: {}", e))?;
     }
     writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
+    Ok(())
+}
+
+// Commit a fully written staged file by replacing the target with its sibling.
+#[tauri::command]
+fn save_file_finish(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+    let target = PathBuf::from(path);
+    ensure_supported_file(&target, "geschrieben")?;
+    let temporary = store.files.lock().map_err(|e| format!("Lock-Fehler: {}", e))?
+        .get(&target)
+        .cloned()
+        .ok_or("Kein aktiver Speichervorgang für diese Datei".to_string())?;
+
+    fs::rename(&temporary, &target)
+        .map_err(|e| format!("Temporäre Datei konnte nicht übernommen werden: {}", e))?;
+    store.files.lock().map_err(|e| format!("Lock-Fehler: {}", e))?.remove(&target);
+    Ok(())
+}
+
+#[tauri::command]
+fn save_file_cancel(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+    let target = PathBuf::from(path);
+    let temporary = store.files.lock().map_err(|e| format!("Lock-Fehler: {}", e))?
+        .remove(&target);
+    if let Some(temporary) = temporary {
+        fs::remove_file(temporary).map_err(|e| format!("Temporäre Datei konnte nicht entfernt werden: {}", e))?;
+    }
     Ok(())
 }
 
@@ -252,11 +325,8 @@ fn serialize_with_indent<W: std::io::Write>(writer: W, data: &serde_json::Value,
 // Copy a file byte-for-byte (for saving unmodified files 1:1)
 #[tauri::command]
 fn copy_file(source: String, dest: String) -> Result<(), String> {
-    let dest_obj = std::path::Path::new(&dest);
-    match dest_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
-    }
+    ensure_supported_file(Path::new(&source), "gelesen")?;
+    ensure_supported_file(Path::new(&dest), "geschrieben")?;
     // If source == dest, nothing to do (file is already there)
     if source == dest {
         return Ok(());
@@ -278,11 +348,7 @@ fn write_json_pretty(
     indent: Option<String>,
     crlf: Option<bool>,
 ) -> Result<(), String> {
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien können geschrieben werden".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "geschrieben")?;
 
     // Strip __size and __depthSizes metadata added by the viewer
     let clean_data = strip_metadata(data);
@@ -385,11 +451,7 @@ struct CompactResult {
 
 #[tauri::command]
 fn parse_json_compact(path: String, store: tauri::State<'_, CompactStore>) -> Result<CompactResult, String> {
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "gelesen")?;
     
     let original_size = fs::metadata(&path)
         .map_err(|e| format!("Metadaten-Fehler: {}", e))?.len();
@@ -502,6 +564,7 @@ fn count_json_value(val: &serde_json::Value) -> u64 {
 // Get file size only (without re-reading and re-parsing the file)
 #[tauri::command]
 fn get_file_size(path: String) -> Result<u64, String> {
+    ensure_supported_file(Path::new(&path), "gelesen")?;
     let metadata = fs::metadata(&path)
         .map_err(|e| format!("Fehler Metadaten: {}", e))?;
     Ok(metadata.len())
@@ -509,11 +572,7 @@ fn get_file_size(path: String) -> Result<u64, String> {
 
 #[tauri::command]
 fn get_file_stats(path: String) -> Result<FileStats, String> {
-    let path_obj = std::path::Path::new(&path);
-    match path_obj.extension().and_then(|e| e.to_str()) {
-        Some("json") | Some("txt") | Some("geojson") | Some("jsonl") => {},
-        _ => return Err("Nur JSON/TXT-Dateien sind erlaubt".to_string()),
-    }
+    ensure_supported_file(Path::new(&path), "gelesen")?;
 
     let metadata = fs::metadata(&path)
         .map_err(|e| format!("Fehler Metadaten: {}", e))?;
@@ -874,7 +933,8 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_cli::init())
     .manage(CompactStore { data: Mutex::new(None) })
-    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, write_json_pretty, copy_file, save_file_start, save_file_chunk, parse_json_compact, get_compact_bytes, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
+    .manage(ChunkedSaveStore { files: Mutex::new(HashMap::new()) })
+    .invoke_handler(tauri::generate_handler![read_file_fast, read_file_raw, read_file_chunk, write_file_fast, write_json_pretty, copy_file, save_file_start, save_file_chunk, save_file_finish, save_file_cancel, parse_json_compact, get_compact_bytes, get_file_stats, get_file_size, set_menu_language, get_window_state, save_window_state])
     .setup(|app| {
       let app_handle = app.handle();
       
@@ -898,19 +958,12 @@ pub fn run() {
           }
       }
       
-      // Helper: check if a file path has a supported extension (case-insensitive)
-      fn is_supported_file(path: &str) -> bool {
-          let lower = path.to_lowercase();
-          lower.ends_with(".json") || lower.ends_with(".txt") || 
-          lower.ends_with(".geojson") || lower.ends_with(".jsonl")
-      }
-      
       // Check for file argument using CLI plugin
       let mut file_opened = false;
       if let Ok(matches) = app.cli().matches() {
           if let Some(file_arg) = matches.args.get("file") {
               if let Some(file_path) = file_arg.value.as_str() {
-                  if is_supported_file(file_path) && std::path::Path::new(file_path).exists() {
+                  if is_supported_file(Path::new(file_path)) && Path::new(file_path).exists() {
                       let path_clone = file_path.to_string();
                       let app_handle_clone = app_handle.clone();
                       file_opened = true;
@@ -927,7 +980,7 @@ pub fn run() {
       if !file_opened {
           let args: Vec<String> = std::env::args().collect();
           for arg in args.iter().skip(1) {
-              if is_supported_file(arg) && std::path::Path::new(arg).exists() {
+              if is_supported_file(Path::new(arg)) && Path::new(arg).exists() {
                   let path_clone = arg.clone();
                   let app_handle_clone = app_handle.clone();
                   std::thread::spawn(move || {
@@ -984,14 +1037,9 @@ pub fn run() {
       // Handle file drop events (drag & drop from File Explorer)
       if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
         if let Some(path) = paths.first() {
-          if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            match ext {
-              "json" | "txt" | "geojson" | "jsonl" => {
-                let path_str = path.to_string_lossy().to_string();
-                let _ = window.emit("open-file", &path_str);
-              },
-              _ => {}
-            }
+          if is_supported_file(path) {
+            let path_str = path.to_string_lossy().to_string();
+            let _ = window.emit("open-file", &path_str);
           }
         }
       }
@@ -999,8 +1047,30 @@ pub fn run() {
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, event| {
-      // Handle run events - RunEvent::Opened doesn't exist in Tauri v2
-      // File associations are handled via CLI args and drag & drop events
+      // On macOS, file associations (double-click in Finder, "Open With…") are
+      // delivered via Apple Events, surfaced by Tauri as RunEvent::Opened { urls }.
+      // CLI/env args are NOT populated in this case, so we must handle it here.
+      #[cfg(target_os = "macos")]
+      if let tauri::RunEvent::Opened { urls } = &event {
+        for url in urls {
+          // Tauri delivers a file:// URL; convert to a local path.
+          let path_opt = url.to_file_path().ok()
+            .or_else(|| Some(std::path::PathBuf::from(url.path())));
+          if let Some(path) = path_opt {
+            let path_str = path.to_string_lossy().to_string();
+            if is_supported_file(&path) && path.exists() {
+              let app_handle_clone = _app_handle.clone();
+              // Delay slightly so the frontend listener is ready when the app
+              // is being launched cold by the OS via this event.
+              std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                let _ = app_handle_clone.emit("open-file", &path_str);
+              });
+            }
+          }
+        }
+      }
+
       if let tauri::RunEvent::ExitRequested { .. } = event {
         // Application exit event
       }
