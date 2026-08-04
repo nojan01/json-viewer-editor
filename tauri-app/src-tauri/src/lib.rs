@@ -867,11 +867,17 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
     )?;
     
     // Window menu
-    let minimize = PredefinedMenuItem::minimize(
-        app_handle, 
-        Some(if is_en { "Minimize" } else { "Minimieren" })
+    // Use application-owned items instead of the predefined minimize role.
+    // The predefined role is not rendered as an actionable menu entry by all
+    // Linux GTK menu backends, leaving this submenu empty.
+    let minimize = MenuItem::with_id(
+        app_handle,
+        "minimize",
+        if is_en { "Minimize" } else { "Minimieren" },
+        true,
+        Some("CmdOrCtrl+M"),
     )?;
-    
+
     let window_menu = Submenu::with_items(
         app_handle,
         if is_en { "Window" } else { "Fenster" },
@@ -1006,6 +1012,7 @@ pub fn run() {
             "collapse_all" => { let _ = window.eval("collapseAll()"); }
             "goto_line" => { let _ = window.eval("showGotoLineDialog()"); }
             "show_help" => { let _ = window.eval("showHelp()"); }
+            "minimize" => { let _ = window.minimize(); }
             // Edit menu handlers
             "undo" => { let _ = window.eval("document.execCommand('undo')"); }
             "redo" => { let _ = window.eval("document.execCommand('redo')"); }
