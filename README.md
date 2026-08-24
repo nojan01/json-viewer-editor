@@ -202,7 +202,7 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 ### v1.3.6 (August 2026)
 - **Linux** — Das Menü „Fenster“ enthält nun einen funktionierenden Eintrag zum Minimieren des App-Fensters
 - **macOS** — Das DMG ist mit einer Apple Developer ID signiert, von Apple notarisiert und Gatekeeper-geprüft
-- **Lizenz** — Der „Über JSON Viewer“-Dialog nennt die MIT-Lizenz; Paket- und Repository-Metadaten wurden vervollständigt
+- **Lizenz** — Der „Über JSON Viewer“-Dialog nennt die MIT-Lizenz auf allen Desktop-Plattformen; Paket- und Repository-Metadaten wurden vervollständigt
 - **Hilfe** — Veraltete feste Versionsnummer aus dem Hilfe-Fußtext entfernt
 
 ### v1.3.5 (Juli 2026)

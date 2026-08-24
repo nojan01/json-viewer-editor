@@ -1,6 +1,4 @@
-use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
-#[cfg(target_os = "macos")]
-use tauri::menu::AboutMetadata;
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Manager, AppHandle, Emitter};
 use tauri_plugin_cli::CliExt;
 use std::collections::HashMap;
@@ -672,33 +670,35 @@ fn set_menu_language(app: AppHandle, lang: String) -> Result<(), String> {
     build_menu(&app, &lang).map_err(|e| e.to_string())
 }
 
+fn json_viewer_about_metadata(is_en: bool) -> AboutMetadata<'static> {
+    AboutMetadata {
+        name: Some("JSON Viewer/Editor".to_string()),
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+        copyright: Some("© 2026 Norbert Jander · MIT License".to_string()),
+        authors: Some(vec!["Norbert Jander".to_string()]),
+        license: Some("MIT License".to_string()),
+        website: Some("https://github.com/nojan01/json-viewer-editor".to_string()),
+        website_label: Some("GitHub".to_string()),
+        credits: Some("Licensed under the MIT License".to_string()),
+        comments: Some(if is_en {
+            "A powerful JSON viewer and editor".to_string()
+        } else {
+            "Ein leistungsstarker JSON Viewer und Editor".to_string()
+        }),
+        ..Default::default()
+    }
+}
+
 fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::error::Error>> {
     let is_en = lang == "en";
     
     // App menu (macOS-specific)
     #[cfg(target_os = "macos")]
     let app_menu = {
-        let about_metadata = AboutMetadata {
-            name: Some("JSON Viewer/Editor".to_string()),
-            version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            copyright: Some("© 2026 Norbert Jander · MIT License".to_string()),
-            authors: Some(vec!["Norbert Jander".to_string()]),
-            license: Some("MIT License".to_string()),
-            website: Some("https://github.com/nojan01/json-viewer-editor".to_string()),
-            website_label: Some("GitHub".to_string()),
-            credits: Some("Licensed under the MIT License".to_string()),
-            comments: Some(if is_en { 
-                "A powerful JSON viewer and editor".to_string() 
-            } else { 
-                "Ein leistungsstarker JSON Viewer und Editor".to_string() 
-            }),
-            ..Default::default()
-        };
-        
         let about = PredefinedMenuItem::about(
             app_handle, 
             Some(if is_en { "About JSON Viewer" } else { "Über JSON Viewer" }), 
-            Some(about_metadata)
+            Some(json_viewer_about_metadata(is_en))
         )?;
         let separator = PredefinedMenuItem::separator(app_handle)?;
         let hide = PredefinedMenuItem::hide(
@@ -898,12 +898,28 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         Some("F1")
     )?;
     
+    #[cfg(target_os = "macos")]
     let help_menu = Submenu::with_items(
         app_handle,
         if is_en { "Help" } else { "Hilfe" },
         true,
         &[&help_item],
     )?;
+
+    #[cfg(not(target_os = "macos"))]
+    let help_menu = {
+        let about_item = PredefinedMenuItem::about(
+            app_handle,
+            Some(if is_en { "About JSON Viewer" } else { "Über JSON Viewer" }),
+            Some(json_viewer_about_metadata(is_en)),
+        )?;
+        Submenu::with_items(
+            app_handle,
+            if is_en { "Help" } else { "Hilfe" },
+            true,
+            &[&help_item, &PredefinedMenuItem::separator(app_handle)?, &about_item],
+        )?
+    };
     
     // Build menu - macOS has app menu, Windows/Linux don't
     #[cfg(target_os = "macos")]
