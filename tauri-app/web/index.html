@@ -1557,24 +1557,44 @@
             white-space: nowrap; transition: background 0.15s;
         }
         .table-export-btn:hover { background: var(--accent-hover); }
+        .table-scroll-wrapper {
+            flex: 1 1 0;
+            min-height: 0;
+            min-width: 0;
+            display: flex;
+            position: relative;
+        }
         .table-scroll {
             flex: 1 1 0;
             min-height: 0;
             min-width: 0;
-            overflow: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
             position: relative;
+            outline: none;
         }
-        .table-scroll-sizer {
-            position: relative;
+        .table-scroll:focus-visible {
+            box-shadow: inset 0 0 0 1px var(--accent);
+        }
+        .table-vertical-scrollbar {
+            flex: 0 0 18px;
+            width: 18px;
+            height: 100%;
+            margin: 0 2px;
+            padding: 0;
+            writing-mode: vertical-lr;
+            direction: rtl;
+            -webkit-appearance: slider-vertical;
+            appearance: slider-vertical;
+            accent-color: var(--accent);
         }
         .table-scroll table {
-            width: 100%;
+            width: max-content;
+            min-width: 100%;
             border-collapse: collapse;
             font-size: 12px;
             font-family: 'SF Mono', monospace;
-            position: sticky;
-            top: 0;
-            z-index: 1;
+            position: relative;
         }
         .table-scroll thead {
             position: relative;
@@ -2737,7 +2757,10 @@
             <button class="table-export-btn" id="btnTableExport" title="Als Excel exportieren">📥 Excel</button>
             <button class="table-close" id="btnTableClose">✕</button>
         </div>
-        <div class="table-scroll" id="tableScroll"></div>
+        <div class="table-scroll-wrapper">
+            <div class="table-scroll" id="tableScroll" tabindex="0"></div>
+            <input class="table-vertical-scrollbar" id="tableVerticalScrollbar" type="range" min="0" max="0" value="0" step="1" orient="vertical" aria-label="Tabellenzeilen vertikal scrollen">
+        </div>
         <div class="table-info" id="tableInfo"></div>
     </div>
     
@@ -6969,7 +6992,8 @@
         const MAX_TABLE_COLUMNS = 200;
         let tableFilteredData = []; // current filtered/sorted view
         const TABLE_ROW_HEIGHT = 28; // px per row
-        const TABLE_OVERSCAN = 20; // extra rows rendered above/below viewport
+        const TABLE_HEADER_HEIGHT = 35; // px reserved for the header
+        let tableVirtualStart = 0;
         function renderTableView(arr, path) {
             const rawData = arr.filter(item => typeof item === 'object' && item !== null);
             document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${rawData.length} Zeilen) — lade…`;
@@ -7037,9 +7061,9 @@
         let _tableScrollHandler = null;
         function renderVirtualTable() {
             const container = document.getElementById('tableScroll');
+            const scrollbar = document.getElementById('tableVerticalScrollbar');
             const data = tableFilteredData;
             const totalRows = data.length;
-            const totalHeight = totalRows * TABLE_ROW_HEIGHT;
             // Build header
             let headerHtml = '<tr>';
             headerHtml += '<th style="min-width:60px">#</th>';
@@ -7048,22 +7072,24 @@
                 headerHtml += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
             });
             headerHtml += '</tr>';
-            // Use a sizer div for total scroll height, table is sticky inside it
             container.innerHTML = `
-                <div class="table-scroll-sizer" style="height:${totalHeight}px">
-                    <table>
-                        <thead>${headerHtml}</thead>
-                        <tbody></tbody>
-                    </table>
-                </div>`;
+                <table>
+                    <thead>${headerHtml}</thead>
+                    <tbody></tbody>
+                </table>`;
             const table = container.querySelector('table');
             const tbody = table.querySelector('tbody');
             let lastStart = -1, lastEnd = -1;
-            function updateVisibleRows() {
-                const scrollTop = container.scrollTop;
+            function updateVisibleRows(requestedStart = tableVirtualStart) {
                 const viewHeight = container.clientHeight;
-                const start = Math.max(0, Math.floor(scrollTop / TABLE_ROW_HEIGHT) - TABLE_OVERSCAN);
-                const end = Math.min(totalRows, Math.ceil((scrollTop + viewHeight) / TABLE_ROW_HEIGHT) + TABLE_OVERSCAN);
+                const visibleRows = Math.max(1, Math.floor((viewHeight - TABLE_HEADER_HEIGHT) / TABLE_ROW_HEIGHT));
+                const maxStart = Math.max(0, totalRows - visibleRows);
+                const start = Math.max(0, Math.min(maxStart, Math.round(requestedStart)));
+                const end = Math.min(totalRows, start + visibleRows);
+                tableVirtualStart = start;
+                scrollbar.max = String(maxStart);
+                scrollbar.value = String(start);
+                scrollbar.disabled = maxStart === 0;
                 if (start === lastStart && end === lastEnd) return;
                 lastStart = start;
                 lastEnd = end;
@@ -7079,14 +7105,38 @@
                     html += '</tr>';
                 }
                 tbody.innerHTML = html;
+                const filterActive = data.length !== tableData.length;
+                document.getElementById('tableInfo').textContent = totalRows === 0
+                    ? (filterActive ? `0 von ${tableData.length} Zeilen gefiltert` : '0 Zeilen insgesamt')
+                    : `Zeilen ${start + 1}–${end} von ${totalRows}${filterActive ? ` (gefiltert aus ${tableData.length})` : ''}`;
             }
             // Remove old scroll handler if any
             if (_tableScrollHandler) {
-                container.removeEventListener('scroll', _tableScrollHandler);
+                container.removeEventListener('wheel', _tableScrollHandler);
             }
-            _tableScrollHandler = () => requestAnimationFrame(updateVisibleRows);
-            container.addEventListener('scroll', _tableScrollHandler);
-            updateVisibleRows();
+            _tableScrollHandler = (event) => {
+                if (event.deltaY === 0) return;
+                event.preventDefault();
+                const deltaRows = Math.max(1, Math.round(Math.abs(event.deltaY) / TABLE_ROW_HEIGHT));
+                updateVisibleRows(tableVirtualStart + Math.sign(event.deltaY) * deltaRows);
+            };
+            container.addEventListener('wheel', _tableScrollHandler, { passive: false });
+            scrollbar.oninput = () => updateVisibleRows(Number(scrollbar.value));
+            container.onkeydown = (event) => {
+                const visibleRows = Math.max(1, Math.floor((container.clientHeight - TABLE_HEADER_HEIGHT) / TABLE_ROW_HEIGHT));
+                let nextStart = tableVirtualStart;
+                if (event.key === 'ArrowDown') nextStart += 1;
+                else if (event.key === 'ArrowUp') nextStart -= 1;
+                else if (event.key === 'PageDown') nextStart += visibleRows;
+                else if (event.key === 'PageUp') nextStart -= visibleRows;
+                else if (event.key === 'Home') nextStart = 0;
+                else if (event.key === 'End') nextStart = totalRows;
+                else return;
+                event.preventDefault();
+                updateVisibleRows(nextStart);
+            };
+            tableVirtualStart = 0;
+            updateVisibleRows(0);
             // Sort handlers
             container.querySelectorAll('th[data-col]').forEach(th => {
                 th.onclick = () => {
@@ -7097,10 +7147,6 @@
                     renderVirtualTable();
                 };
             });
-            document.getElementById('tableInfo').textContent =
-                data.length === tableData.length
-                    ? `${data.length} Zeilen insgesamt`
-                    : `${data.length} von ${tableData.length} Zeilen gefiltert`;
         }
         // Keep old renderTable as alias for filter updates
         function renderTable(filter) {

@@ -199,6 +199,10 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
 
+### v1.3.7 (August 2026)
+- **Große Tabellen** — Segmentierter virtueller Scroller zeigt auch in macOS-WKWebView alle Zeilen großer Datensätze an
+- **Orientierung** — Die Tabellenfußzeile zeigt den aktuell sichtbaren Zeilenbereich und die Gesamtzahl an
+
 ### v1.3.6 (August 2026)
 - **Linux** — Das Menü „Fenster“ enthält nun einen funktionierenden Eintrag zum Minimieren des App-Fensters
 - **macOS** — Das DMG ist mit einer Apple Developer ID signiert, von Apple notarisiert und Gatekeeper-geprüft

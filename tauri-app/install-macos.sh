@@ -9,7 +9,7 @@
 set -e
 
 APP_NAME="JSON Viewer"
-VERSION="1.3.6"
+VERSION="1.3.7"
 DMG_URL="https://github.com/nojan01/json-viewer-editor/releases/download/v${VERSION}/JSON.Viewer_${VERSION}_aarch64.dmg"
 DMG_PATH="/tmp/JSON_Viewer_${VERSION}.dmg"
 MOUNT_POINT="/Volumes/${APP_NAME}"
