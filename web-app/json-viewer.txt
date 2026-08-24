@@ -1632,7 +1632,7 @@
             </div>
             
             <div class="help-version">
-                JSON Viewer/Editor v1.0.0 • Progressive Web App
+                JSON Viewer/Editor • Progressive Web App
             </div>
         </div>
     </div>

@@ -1,10 +1,23 @@
 # JSON Viewer/Editor
 
-Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows** und **Linux**, gebaut mit [Tauri 2](https://tauri.app/).
+Ein schneller, plattformübergreifender JSON Viewer und Editor für **macOS**, **Windows** und **Linux**. Große Dateien lassen sich durchsuchen, bearbeiten, vergleichen, als Tabelle darstellen und in verschiedene Formate exportieren.
 
-![Version](https://img.shields.io/badge/version-1.3.6-blue)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![Latest release](https://img.shields.io/github/v/release/nojan01/json-viewer-editor?label=Release)](https://github.com/nojan01/json-viewer-editor/releases/latest)
+[![Build and Release](https://github.com/nojan01/json-viewer-editor/actions/workflows/build-release.yml/badge.svg)](https://github.com/nojan01/json-viewer-editor/actions/workflows/build-release.yml)
+[![Platforms](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-supported-4c8bf5)](#download)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## Download
+
+Die aktuellen Installationsdateien befinden sich unter [GitHub Releases](https://github.com/nojan01/json-viewer-editor/releases/latest).
+
+| Plattform | Pakete |
+|---|---|
+| macOS (Apple Silicon) | Signiertes und von Apple notarisiertes DMG |
+| Windows x64 / ARM64 | NSIS-Installer (`.exe`) und MSI-Paket |
+| Linux x64 | AppImage, DEB und RPM |
+
+Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 
 ## Features
 
@@ -58,13 +71,11 @@ Ein moderner, leistungsstarker JSON Viewer und Editor für **macOS**, **Windows*
 
 ### macOS
 
-Terminal öffnen und diesen Befehl einfügen:
+1. Das aktuelle macOS-DMG unter [Releases](https://github.com/nojan01/json-viewer-editor/releases/latest) herunterladen.
+2. DMG öffnen und **JSON Viewer** in den Ordner **Programme** ziehen.
+3. JSON Viewer aus dem Programme-Ordner starten.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nojan01/json-viewer-editor/main/tauri-app/install-macos.sh | bash
-```
-
-Das Script lädt die App herunter, installiert sie nach `/Applications` und konfiguriert Gatekeeper automatisch.
+Das macOS-Paket ist mit einer Apple Developer ID signiert und von Apple notarisiert. Das Entfernen von Gatekeeper- oder Quarantäneattributen ist nicht erforderlich.
 
 ### Windows
 
@@ -139,12 +150,14 @@ npm run build
 Oder mit den plattformspezifischen Build-Skripten:
 
 ```bash
-# macOS (erstellt DMG mit Installer)
-bash build-dmg.sh
+# macOS: Developer-ID-Signierung, Apple-Notarisierung und DMG
+./release-macos.sh
 
 # Linux (installiert Abhängigkeiten & baut DEB/AppImage/RPM)
 bash build-linux.sh
 ```
+
+Der macOS-Release-Befehl erwartet ein gültiges `Developer ID Application`-Zertifikat und ein mit `notarytool` gespeichertes Schlüsselbundprofil. Der Profilname kann über `NOTARYTOOL_PROFILE` überschrieben werden.
 
 ## Projektstruktur
 
@@ -160,7 +173,8 @@ json-viewer-editor/
 │   │   │   └── main.rs         # Entry Point
 │   │   ├── icons/              # App Icons
 │   │   └── tauri.conf.json     # Tauri Konfiguration
-│   ├── build-dmg.sh            # macOS DMG Builder
+│   ├── release-macos.sh        # Signierter und notarisierter macOS-Release
+│   ├── repackage-dmg.sh        # DMG mit angeheftetem App-Ticket erzeugen
 │   ├── build-linux.sh          # Linux Build Script
 │   └── package.json
 ├── .github/
@@ -180,7 +194,7 @@ json-viewer-editor/
 
 ## Lizenz
 
-MIT License — Frei verwendbar, auch kommerziell.
+Dieses Projekt steht unter der [MIT License](LICENSE). Der Quellcode darf damit unter den Bedingungen der Lizenz frei verwendet, verändert und weitergegeben werden, auch kommerziell.
 
 Das App-Icon ist eigen erstellt und lizenzfrei.
 
@@ -188,6 +202,9 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ### v1.3.6 (August 2026)
 - **Linux** — Das Menü „Fenster“ enthält nun einen funktionierenden Eintrag zum Minimieren des App-Fensters
+- **macOS** — Das DMG ist mit einer Apple Developer ID signiert, von Apple notarisiert und Gatekeeper-geprüft
+- **Lizenz** — Der „Über JSON Viewer“-Dialog nennt die MIT-Lizenz; Paket- und Repository-Metadaten wurden vervollständigt
+- **Hilfe** — Veraltete feste Versionsnummer aus dem Hilfe-Fußtext entfernt
 
 ### v1.3.5 (Juli 2026)
 - **Robustes Speichern** — Große Dateien werden atomar gespeichert und Unicode-Zeichen an Chunk-Grenzen sicher behandelt

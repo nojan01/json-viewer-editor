@@ -9,9 +9,14 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "author": "Norbert Jander",
+  "license": "MIT",
+  "description": "A fast, cross-platform JSON viewer and editor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nojan01/json-viewer-editor.git"
+  },
+  "homepage": "https://github.com/nojan01/json-viewer-editor",
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.6"
   }

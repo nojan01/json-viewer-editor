@@ -680,9 +680,13 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
     let app_menu = {
         let about_metadata = AboutMetadata {
             name: Some("JSON Viewer/Editor".to_string()),
-            version: Some("1.3.6".to_string()),
-            copyright: Some("© 2026 Norbert Jander".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            copyright: Some("© 2026 Norbert Jander · MIT License".to_string()),
             authors: Some(vec!["Norbert Jander".to_string()]),
+            license: Some("MIT License".to_string()),
+            website: Some("https://github.com/nojan01/json-viewer-editor".to_string()),
+            website_label: Some("GitHub".to_string()),
+            credits: Some("Licensed under the MIT License".to_string()),
             comments: Some(if is_en { 
                 "A powerful JSON viewer and editor".to_string() 
             } else { 

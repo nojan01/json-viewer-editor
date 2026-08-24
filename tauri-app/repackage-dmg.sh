@@ -1,21 +1,31 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")"
 
 APP_NAME="JSON Viewer"
 BUILD_DIR="src-tauri/target/release/bundle"
 STAGING="$BUILD_DIR/dmg-staging"
-VERSION="1.3.6"
-DMG_NAME="${APP_NAME}_${VERSION}_aarch64.dmg"
+VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+
+case "$(uname -m)" in
+    arm64) DMG_ARCH="aarch64" ;;
+    x86_64) DMG_ARCH="x64" ;;
+    *)
+        echo "Unsupported macOS architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+
+DMG_NAME="${APP_NAME}_${VERSION}_${DMG_ARCH}.dmg"
 
 echo "=== Creating clean DMG v${VERSION} ==="
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 
-# Copy the built app
-cp -R "$BUILD_DIR/macos/${APP_NAME}.app" "$STAGING/"
+# Preserve the stapled notarization ticket and all extended attributes.
+ditto "$BUILD_DIR/macos/${APP_NAME}.app" "$STAGING/${APP_NAME}.app"
 
 # Applications symlink for drag & drop
 ln -s /Applications "$STAGING/Applications"
