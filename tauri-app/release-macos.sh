@@ -38,6 +38,12 @@ export APPLE_SIGNING_IDENTITY
 echo "Building and signing ${APP_NAME} ${VERSION}..."
 npm run build
 
+echo "Applying final Developer ID signature after bundling..."
+codesign --force --options runtime --timestamp \
+    --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH/Contents/MacOS/app"
+codesign --force --options runtime --timestamp \
+    --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+
 echo "Verifying Developer ID signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "Authority=Developer ID Application:"
@@ -52,6 +58,7 @@ xcrun notarytool submit "$APP_ARCHIVE" \
 echo "Stapling and validating app ticket..."
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 echo "Rebuilding DMG with the stapled app..."
 bash ./repackage-dmg.sh
