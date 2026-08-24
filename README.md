@@ -3,7 +3,6 @@
 Ein schneller, plattformübergreifender JSON Viewer und Editor für **macOS**, **Windows** und **Linux**. Große Dateien lassen sich durchsuchen, bearbeiten, vergleichen, als Tabelle darstellen und in verschiedene Formate exportieren.
 
 [![Latest release](https://img.shields.io/github/v/release/nojan01/json-viewer-editor?label=Release)](https://github.com/nojan01/json-viewer-editor/releases/latest)
-[![Build and Release](https://github.com/nojan01/json-viewer-editor/actions/workflows/build-release.yml/badge.svg)](https://github.com/nojan01/json-viewer-editor/actions/workflows/build-release.yml)
 [![Platforms](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-supported-4c8bf5)](#download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
