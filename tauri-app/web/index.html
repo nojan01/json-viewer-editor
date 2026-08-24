@@ -1558,7 +1558,9 @@
         }
         .table-export-btn:hover { background: var(--accent-hover); }
         .table-scroll {
-            flex: 1;
+            flex: 1 1 0;
+            min-height: 0;
+            min-width: 0;
             overflow: auto;
             position: relative;
         }
@@ -7097,8 +7099,8 @@
             });
             document.getElementById('tableInfo').textContent =
                 data.length === tableData.length
-                    ? `${data.length} Zeilen angezeigt`
-                    : `${data.length} von ${tableData.length} Zeilen angezeigt`;
+                    ? `${data.length} Zeilen insgesamt`
+                    : `${data.length} von ${tableData.length} Zeilen gefiltert`;
         }
         // Keep old renderTable as alias for filter updates
         function renderTable(filter) {
