@@ -1590,8 +1590,48 @@
             appearance: slider-vertical;
             accent-color: var(--accent);
         }
+        .table-vertical-scrollbar-visual {
+            display: none;
+            grid-column: 2;
+            grid-row: 1;
+            position: relative;
+            width: 18px;
+            height: 100%;
+            margin: 0 2px;
+            pointer-events: none;
+        }
+        .table-vertical-scrollbar-visual::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 7px;
+            width: 4px;
+            border-radius: 999px;
+            background: var(--border);
+        }
+        .table-vertical-scrollbar-visual-thumb {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 18px;
+            height: 18px;
+            border: 1px solid var(--bg-primary);
+            border-radius: 50%;
+            background: var(--text-primary);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        }
         .platform-linux .table-vertical-scrollbar {
-            direction: rtl;
+            position: relative;
+            z-index: 2;
+            opacity: 0;
+        }
+        .platform-linux .table-vertical-scrollbar-visual {
+            display: block;
+        }
+        .platform-linux .table-vertical-scrollbar:focus-visible + .table-vertical-scrollbar-visual {
+            border-radius: 9px;
+            box-shadow: 0 0 0 1px var(--accent);
         }
         .table-horizontal-scrollbar {
             grid-column: 1;
@@ -2778,6 +2818,7 @@
         <div class="table-scroll-wrapper">
             <div class="table-scroll" id="tableScroll" tabindex="0"></div>
             <input class="table-vertical-scrollbar" id="tableVerticalScrollbar" type="range" min="0" max="0" value="0" step="1" orient="vertical" aria-label="Tabellenzeilen vertikal scrollen">
+            <div class="table-vertical-scrollbar-visual" id="tableVerticalScrollbarVisual" aria-hidden="true"><div class="table-vertical-scrollbar-visual-thumb" id="tableVerticalScrollbarVisualThumb"></div></div>
             <input class="table-horizontal-scrollbar" id="tableHorizontalScrollbar" type="range" min="0" max="0" value="0" step="1" aria-label="Tabellenspalten horizontal scrollen">
             <div class="table-scrollbar-corner"></div>
         </div>
@@ -7014,10 +7055,28 @@
         const TABLE_ROW_HEIGHT = 28; // px per row
         const TABLE_HEADER_HEIGHT = 35; // px reserved for the header
         // WebKitGTK places the minimum of a vertical range at the bottom.
-        // Reverse only the native Linux control so row 1 is at the top while
-        // the value still starts at 0 (and the track is not fully accented).
-        if (navigator.platform.toLowerCase().includes('linux')) {
+        // Translate the invisible native Linux control at the UI boundary and
+        // draw a separate neutral track so its accent fill cannot cover it.
+        const TABLE_VERTICAL_SCROLLBAR_INVERTED = navigator.platform.toLowerCase().includes('linux');
+        if (TABLE_VERTICAL_SCROLLBAR_INVERTED) {
             document.documentElement.classList.add('platform-linux');
+        }
+        function tableStartToScrollbarValue(start, maxStart) {
+            return TABLE_VERTICAL_SCROLLBAR_INVERTED ? maxStart - start : start;
+        }
+        function scrollbarValueToTableStart(value, maxStart) {
+            return TABLE_VERTICAL_SCROLLBAR_INVERTED ? maxStart - value : value;
+        }
+        function updateLinuxTableScrollbarVisual(start, maxStart) {
+            if (!TABLE_VERTICAL_SCROLLBAR_INVERTED) return;
+            const track = document.getElementById('tableVerticalScrollbarVisual');
+            const thumb = document.getElementById('tableVerticalScrollbarVisualThumb');
+            if (!track || !thumb) return;
+            requestAnimationFrame(() => {
+                const maxThumbTop = Math.max(0, track.clientHeight - thumb.offsetHeight);
+                const ratio = maxStart > 0 ? start / maxStart : 0;
+                thumb.style.top = `${ratio * maxThumbTop}px`;
+            });
         }
         let tableVirtualStart = 0;
         function renderTableView(arr, path) {
@@ -7115,8 +7174,9 @@
                 const end = Math.min(totalRows, start + visibleRows);
                 tableVirtualStart = start;
                 scrollbar.max = String(maxStart);
-                scrollbar.value = String(start);
+                scrollbar.value = String(tableStartToScrollbarValue(start, maxStart));
                 scrollbar.disabled = maxStart === 0;
+                updateLinuxTableScrollbarVisual(start, maxStart);
                 if (start === lastStart && end === lastEnd) return;
                 lastStart = start;
                 lastEnd = end;
@@ -7162,7 +7222,9 @@
                 updateVisibleRows(tableVirtualStart + Math.sign(event.deltaY) * deltaRows);
             };
             container.addEventListener('wheel', _tableScrollHandler, { passive: false });
-            scrollbar.oninput = () => updateVisibleRows(Number(scrollbar.value));
+            scrollbar.oninput = () => {
+                updateVisibleRows(scrollbarValueToTableStart(Number(scrollbar.value), Number(scrollbar.max)));
+            };
             horizontalScrollbar.oninput = () => {
                 container.scrollLeft = Number(horizontalScrollbar.value);
             };
