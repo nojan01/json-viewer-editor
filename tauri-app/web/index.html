@@ -7010,6 +7010,17 @@
         let tableFilteredData = []; // current filtered/sorted view
         const TABLE_ROW_HEIGHT = 28; // px per row
         const TABLE_HEADER_HEIGHT = 35; // px reserved for the header
+        // WebKitGTK renders vertical range values in the opposite visual
+        // direction: min is at the bottom, while macOS/Windows place it at
+        // the top. Keep the table row model identical and translate only the
+        // Linux slider value at the UI boundary.
+        const TABLE_VERTICAL_SCROLLBAR_INVERTED = navigator.platform.toLowerCase().includes('linux');
+        function tableStartToScrollbarValue(start, maxStart) {
+            return TABLE_VERTICAL_SCROLLBAR_INVERTED ? maxStart - start : start;
+        }
+        function scrollbarValueToTableStart(value, maxStart) {
+            return TABLE_VERTICAL_SCROLLBAR_INVERTED ? maxStart - value : value;
+        }
         let tableVirtualStart = 0;
         function renderTableView(arr, path) {
             const rawData = arr.filter(item => typeof item === 'object' && item !== null);
@@ -7106,7 +7117,7 @@
                 const end = Math.min(totalRows, start + visibleRows);
                 tableVirtualStart = start;
                 scrollbar.max = String(maxStart);
-                scrollbar.value = String(start);
+                scrollbar.value = String(tableStartToScrollbarValue(start, maxStart));
                 scrollbar.disabled = maxStart === 0;
                 if (start === lastStart && end === lastEnd) return;
                 lastStart = start;
@@ -7153,7 +7164,9 @@
                 updateVisibleRows(tableVirtualStart + Math.sign(event.deltaY) * deltaRows);
             };
             container.addEventListener('wheel', _tableScrollHandler, { passive: false });
-            scrollbar.oninput = () => updateVisibleRows(Number(scrollbar.value));
+            scrollbar.oninput = () => {
+                updateVisibleRows(scrollbarValueToTableStart(Number(scrollbar.value), Number(scrollbar.max)));
+            };
             horizontalScrollbar.oninput = () => {
                 container.scrollLeft = Number(horizontalScrollbar.value);
             };
