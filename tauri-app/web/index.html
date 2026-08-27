@@ -1578,16 +1578,26 @@
         .table-scroll:focus-visible {
             box-shadow: inset 0 0 0 1px var(--accent);
         }
-        .table-vertical-scrollbar {
+        .table-vertical-scrollbar-shell {
             grid-column: 2;
             grid-row: 1;
+            position: relative;
             width: 18px;
             height: 100%;
+            min-height: 0;
             margin: 0 2px;
+            overflow: visible;
+        }
+        .table-vertical-scrollbar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100px;
+            height: 18px;
+            margin: 0;
             padding: 0;
-            writing-mode: vertical-lr;
-            -webkit-appearance: slider-vertical;
-            appearance: slider-vertical;
+            transform: translate(-50%, -50%) rotate(90deg);
+            transform-origin: center;
             accent-color: var(--accent);
         }
         .table-horizontal-scrollbar {
@@ -2774,7 +2784,9 @@
         </div>
         <div class="table-scroll-wrapper">
             <div class="table-scroll" id="tableScroll" tabindex="0"></div>
-            <input class="table-vertical-scrollbar" id="tableVerticalScrollbar" type="range" min="0" max="0" value="0" step="1" orient="vertical" aria-label="Tabellenzeilen vertikal scrollen">
+            <div class="table-vertical-scrollbar-shell" id="tableVerticalScrollbarShell">
+                <input class="table-vertical-scrollbar" id="tableVerticalScrollbar" type="range" min="0" max="0" value="0" step="1" aria-label="Tabellenzeilen vertikal scrollen">
+            </div>
             <input class="table-horizontal-scrollbar" id="tableHorizontalScrollbar" type="range" min="0" max="0" value="0" step="1" aria-label="Tabellenspalten horizontal scrollen">
             <div class="table-scrollbar-corner"></div>
         </div>
@@ -7010,6 +7022,14 @@
         let tableFilteredData = []; // current filtered/sorted view
         const TABLE_ROW_HEIGHT = 28; // px per row
         const TABLE_HEADER_HEIGHT = 35; // px reserved for the header
+        // Use the same native horizontal range as the lower scrollbar and rotate
+        // it by 90 degrees. This keeps direction, thumb and accent fill identical.
+        function updateTableVerticalScrollbarGeometry() {
+            const shell = document.getElementById('tableVerticalScrollbarShell');
+            const scrollbar = document.getElementById('tableVerticalScrollbar');
+            if (!shell || !scrollbar || shell.clientHeight <= 0) return;
+            scrollbar.style.width = `${shell.clientHeight}px`;
+        }
         let tableVirtualStart = 0;
         function renderTableView(arr, path) {
             const rawData = arr.filter(item => typeof item === 'object' && item !== null);
@@ -7080,6 +7100,7 @@
             const container = document.getElementById('tableScroll');
             const scrollbar = document.getElementById('tableVerticalScrollbar');
             const horizontalScrollbar = document.getElementById('tableHorizontalScrollbar');
+            requestAnimationFrame(updateTableVerticalScrollbarGeometry);
             const data = tableFilteredData;
             const totalRows = data.length;
             // Build header
@@ -8220,6 +8241,7 @@
         window.addEventListener('resize', () => {
             containerHeight = treeContainer.clientHeight;
             renderVisibleItems();
+            updateTableVerticalScrollbarGeometry();
         });
 
         // Platform-aware shortcut labels: replace ⌘/⇧ with Ctrl/Shift on Windows/Linux
