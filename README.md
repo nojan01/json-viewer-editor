@@ -199,11 +199,6 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
 
-### v1.3.8 (August 2026)
-- **Release-Pakete** — Plattformpakete mit aktualisierten Versionsmetadaten neu erstellt
-- **macOS** — Apple-Silicon-DMG erneut mit Developer ID signiert, von Apple notarisiert und Gatekeeper-validiert
-- **Distribution** — Release-Workflow und macOS-Installer auf Version 1.3.8 aktualisiert
-
 ### v1.3.7 (August 2026)
 - **Große Tabellen** — Segmentierter virtueller Scroller zeigt auch in macOS-WKWebView alle Zeilen großer Datensätze an
 - **Navigation** — Einheitliche vertikale und horizontale Regler sowie Mausrad-, Trackpad- und Tastatursteuerung
