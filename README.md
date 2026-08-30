@@ -8,13 +8,13 @@ Ein schneller, plattformübergreifender JSON Viewer und Editor für **macOS**, *
 
 ## Download
 
-Die aktuellen Installationsdateien befinden sich unter [GitHub Releases](https://github.com/nojan01/json-viewer-editor/releases/latest).
+Die Installationsdateien befinden sich unter [GitHub Releases](https://github.com/nojan01/json-viewer-editor/releases). Version 1.3.8 ist ein macOS-Release; die weiterhin verfügbaren Windows- und Linux-Pakete stammen aus Version 1.3.7.
 
 | Plattform | Pakete |
 |---|---|
-| macOS (Apple Silicon) | Signiertes und von Apple notarisiertes DMG |
-| Windows x64 / ARM64 | NSIS-Installer (`.exe`) und MSI-Paket |
-| Linux x64 | AppImage, DEB und RPM |
+| macOS (Apple Silicon) | [v1.3.8](https://github.com/nojan01/json-viewer-editor/releases/tag/v1.3.8) – signiertes und von Apple notarisiertes DMG |
+| Windows x64 / ARM64 | [v1.3.7](https://github.com/nojan01/json-viewer-editor/releases/tag/v1.3.7) – NSIS-Installer (`.exe`) und MSI-Paket |
+| Linux x64 | [v1.3.7](https://github.com/nojan01/json-viewer-editor/releases/tag/v1.3.7) – AppImage, DEB und RPM |
 
 Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 
@@ -78,7 +78,7 @@ Das macOS-Paket ist mit einer Apple Developer ID signiert und von Apple notarisi
 
 ### Windows
 
-1. [NSIS-Installer (.exe) oder MSI herunterladen](https://github.com/nojan01/json-viewer-editor/releases/latest)
+1. [NSIS-Installer (.exe) oder MSI aus Version 1.3.7 herunterladen](https://github.com/nojan01/json-viewer-editor/releases/tag/v1.3.7)
 2. Installer ausführen
 3. App starten
 
@@ -86,7 +86,7 @@ Siehe auch [INSTALL-WINDOWS.md](tauri-app/INSTALL-WINDOWS.md) für Details.
 
 ### Linux
 
-1. [DEB, RPM oder AppImage herunterladen](https://github.com/nojan01/json-viewer-editor/releases/latest)
+1. [DEB, RPM oder AppImage aus Version 1.3.7 herunterladen](https://github.com/nojan01/json-viewer-editor/releases/tag/v1.3.7)
 2. Installieren:
    ```bash
    # Debian/Ubuntu
@@ -200,7 +200,7 @@ Das App-Icon ist eigen erstellt und lizenzfrei.
 ## Changelog
 
 ### v1.3.8 (August 2026)
-- **Release-Pakete** — Plattformpakete mit aktualisierten Versionsmetadaten neu erstellt
+- **macOS-Release** — Apple-Silicon-Paket mit aktualisierten Versionsmetadaten neu erstellt
 - **macOS** — Apple-Silicon-DMG erneut mit Developer ID signiert, von Apple notarisiert und Gatekeeper-validiert
 - **Distribution** — Release-Workflow und macOS-Installer auf Version 1.3.8 aktualisiert
 
