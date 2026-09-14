@@ -10,7 +10,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         button {
             -webkit-appearance: none !important;
             appearance: none !important;
@@ -2074,6 +2074,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="workspace.css">
 </head>
 <body>
     <div class="toolbar">
@@ -2105,7 +2106,7 @@
             <button id="btnLevelDown" disabled title="Eine Ebene zuklappen (-)">
                 <span>Ebene−</span>
             </button>
-            <button id="btnCollapse" disabled title="Alle zuklappen (⌘W)">
+            <button id="btnCollapse" disabled title="Alle zuklappen">
                 <span class="icon">⊟</span>
                 <span>Zuklappen</span>
             </button>
@@ -2178,6 +2179,10 @@
         <div class="toolbar-group">
             <button id="btnHelp" title="Hilfe (F1)">
                 <span class="icon">❓</span>
+            </button>
+            <button id="btnCheckUpdates" title="Nach Updates suchen">
+                <span class="icon">⟳</span>
+                <span>Update</span>
             </button>
         </div>
         
@@ -2272,7 +2277,7 @@
         <div class="statusbar-item" id="levelInfo"></div>
     </div>
     
-    <input type="file" id="fileInput" accept=".json,.txt,application/json">
+    <input type="file" id="fileInput" multiple accept=".json,.txt,application/json">
     
     <!-- Match List Panel -->
     <div class="match-list-overlay" id="matchListOverlay"></div>
@@ -2341,7 +2346,7 @@
                     </div>
                     <div class="help-shortcut">
                         <span class="help-shortcut-key">⌘W</span>
-                        <span>Alle zuklappen</span>
+                        <span>Tab schließen</span>
                     </div>
                     <div class="help-shortcut">
                         <span class="help-shortcut-key">⌘Z</span>
@@ -2567,7 +2572,7 @@
                     </div>
                     <div class="help-feature">
                         <strong>Öffnen</strong>
-                        <p>Klick auf den {} Button oder Tastaturkürzel ⌘R. Interne __size-Metadaten werden automatisch ausgeblendet.</p>
+                        <p>Klick auf den {} Button oder Tastaturkürzel ⌘R. Alle JSON-Felder werden unverändert dargestellt.</p>
                     </div>
                 </div>
             </div>
@@ -2779,9 +2784,11 @@
         <div class="table-header">
             <h3 id="tableTitle">Tabellenansicht</h3>
             <input type="text" class="table-filter-input" id="tableFilterInput" placeholder="Filter...">
+            <button id="btnTableColumns">Spalten &amp; Filter</button>
             <button class="table-export-btn" id="btnTableExport" title="Als Excel exportieren">📥 Excel</button>
             <button class="table-close" id="btnTableClose">✕</button>
         </div>
+        <div class="column-panel" id="columnPanel" hidden></div>
         <div class="table-scroll-wrapper">
             <div class="table-scroll" id="tableScroll" tabindex="0"></div>
             <div class="table-vertical-scrollbar-shell" id="tableVerticalScrollbarShell">
@@ -2937,10 +2944,20 @@
         </div>
     </div>
 
+    <script src="json-core.js"></script>
+    <script src="workspace-core.js"></script>
     <script src="xlsx.full.min.js"></script>
     <script>
         // State
-        let jsonData = null;
+        const { appendPath } = JsonCore;
+        // Symbols keep renderer metadata collision-free and JSON-invisible without
+        // the considerable per-entry overhead of a WeakMap on multi-million-node files.
+        const nodeSizeSymbol = Symbol('nodeSize');
+        const nodeDepthsSymbol = Symbol('nodeDepths');
+        let metadataDirty = true;
+        const metadataSize = value => value !== null && typeof value === 'object' ? value[nodeSizeSymbol] : undefined;
+        const metadataDepths = value => value !== null && typeof value === 'object' ? value[nodeDepthsSymbol] : undefined;
+        let jsonData = undefined;
         let fileName = '';
         let fileSize = 0;
         let wasConcatenated = false;
@@ -2950,7 +2967,7 @@
         let expandedPaths = new Set();
         let expandAllMode = false; // When true, ALL nodes are expanded without using expandedPaths
         let expandAllDepthLimit = Infinity; // Depth limit for expandAllMode (Infinity = fully expanded)
-        let totalExpandedCount = 0; // Total rows when all expanded (from __size)
+        let totalExpandedCount = 0; // Total rows when all expanded
         let visibleRows = [];
         let searchMatches = [];
         let currentMatchIndex = -1;
@@ -3187,6 +3204,9 @@
                 
                 const btnSave = document.getElementById('btnSave');
                 if (btnSave) btnSave.title = t('saveTooltip');
+
+                const btnCheckUpdates = document.getElementById('btnCheckUpdates');
+                if (btnCheckUpdates) btnCheckUpdates.title = currentLang === 'de' ? 'Nach Updates suchen' : 'Check for updates';
                 
                 const btnExpand = document.getElementById('btnExpand');
                 if (btnExpand) btnExpand.title = t('expandAllTooltip');
@@ -3257,7 +3277,7 @@
                 
                 // Status bar - only update if no file loaded
                 const nodeCount = document.getElementById('nodeCount');
-                if (nodeCount && !jsonData) {
+                if (nodeCount && (jsonData === undefined)) {
                     nodeCount.textContent = t('noFileLoaded');
                 }
                 
@@ -3267,6 +3287,7 @@
                     status.textContent = currentLang === 'de' ? 'Bereit' : 'Ready';
                 }
                 
+                if (typeof renderDocumentTabs === 'function') renderDocumentTabs();
                 console.log('Language updated to:', currentLang);
             } catch (e) {
                 console.error('Error updating language:', e);
@@ -3534,67 +3555,15 @@
         
         // Robust JSON parsing: handles BOM, encoding issues, type safety
         function parseJSON(input) {
-            // Step 1: Ensure we have a string
-            let text;
-            if (typeof input === 'string') {
-                text = input;
-            } else if (input instanceof ArrayBuffer) {
-                console.warn('[Parse] Input is ArrayBuffer, decoding...');
-                text = new TextDecoder('utf-8').decode(input);
-            } else if (input instanceof Uint8Array) {
-                console.warn('[Parse] Input is Uint8Array, decoding...');
-                text = new TextDecoder('utf-8').decode(input);
-            } else if (input && typeof input.toString === 'function') {
-                console.warn('[Parse] Input is', typeof input, '- converting to string');
-                text = String(input);
-            } else {
-                throw new Error('Keine gültige Eingabe (Typ: ' + typeof input + ')');
-            }
-            
-            // Step 2: Strip BOM (Byte Order Mark) — common in Windows UTF-8 files
-            if (text.charCodeAt(0) === 0xFEFF) {
-                console.log('[Parse] Stripped UTF-8 BOM');
-                text = text.slice(1);
-            }
-            
-            // Step 3: Trim whitespace
-            text = text.trim();
-            
-            // Step 4: Check for empty content
-            if (!text) {
-                throw new Error('Datei ist leer (nach BOM-Strip/Trim). Eingabe-Typ: ' + typeof input + ', Eingabe-Länge: ' + (input ? (input.length || input.byteLength || '?') : 'null/undefined'));
-            }
-            
-            // Step 5: Try standard JSON.parse
-            console.log(`[Parse] Parsing ${text.length} chars, starts with: ${JSON.stringify(text.slice(0, 80))}`);
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                console.warn('[Parse] JSON.parse failed:', e.message);
-            }
-            
-            // Step 6: Try concatenated JSON (multiple JSON objects in one file)
-            try {
-                return parseConcatenated(text);
-            } catch (e2) {
-                // Step 7: Provide detailed error for debugging
-                const preview = text.slice(0, 200);
-                const charCodes = Array.from(text.slice(0, 20)).map(c => c.charCodeAt(0));
-                console.error('[Parse] All parse attempts failed.');
-                console.error('[Parse] Text length:', text.length);
-                console.error('[Parse] First 200 chars:', preview);
-                console.error('[Parse] First 20 char codes:', charCodes);
-                throw new Error(
-                    `Kein gültiges JSON gefunden.\n` +
-                    `Länge: ${text.length} Zeichen\n` +
-                    `Anfang: ${JSON.stringify(preview.slice(0, 100))}\n` +
-                    `Char-Codes: [${charCodes.join(', ')}]`
-                );
-            }
+            if (input instanceof ArrayBuffer || input instanceof Uint8Array) input = new TextDecoder("utf-8", { fatal: true }).decode(input);
+            return JsonCore.parseDocument(input).data;
         }
-        
-        // Threshold for Rust-side JSON parsing (avoids JS JSON.parse on huge strings)
-        const RUST_PARSE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+
+        // The Rust path parses, compacts, transfers and then parses the document a
+        // second time in JavaScript. Direct binary IPC plus one JS parse is much
+        // faster while the original text still fits comfortably in the WebView.
+        // Keep the Rust path only as a lower-memory fallback near the 1 GB limit.
+        const RUST_PARSE_THRESHOLD = 768 * 1024 * 1024; // 768 MiB
         
         // Read and parse a JSON file, using Rust for large files
         // Returns { jsonData, fileSize, nodeCount, parseTime }
@@ -3645,7 +3614,7 @@
                     nodeCount: result.node_count,
                     parseTime: totalParseTime,
                     wasConcatenated: result.was_concatenated || false,
-                    indent: result.indent || '  ',
+                    indent: result.indent ?? '  ',
                     crlf: result.uses_crlf || false
                 };
             }
@@ -3660,7 +3629,8 @@
             await new Promise(r => setTimeout(r, 16));
             
             const parseStart = performance.now();
-            const data = parseJSON(text);
+            const parsedDocument = JsonCore.parseDocument(text);
+            const data = parsedDocument.data;
             const parseTime = performance.now() - parseStart;
             text = null; // Free memory
             
@@ -3678,20 +3648,24 @@
                 }
             }
             
-            return { jsonData: data, fileSize: fileSz, nodeCount, parseTime, wasConcatenated: false, indent: '  ', crlf: false };
+            return { jsonData: data, fileSize: fileSz, nodeCount, parseTime, wasConcatenated: parsedDocument.wasConcatenated, indent: parsedDocument.indent, crlf: parsedDocument.crlf };
         }
         
         // Finalize loading: set up tree state and render
         async function finalizeLoad(result, filePath, startTime) {
+            if (typeof beginDocument === 'function') beginDocument();
             jsonData = result.jsonData;
+            currentFilePath = filePath;
+            fileName = result.name || getFileName(filePath);
+            undoStack = []; redoStack = [];
+            selectedPath = null; selectedIndex = -1;
+            scrollTop = 0;
             fileSize = result.fileSize;
             wasConcatenated = result.wasConcatenated || false;
-            originalIndent = result.indent || '  ';
+            originalIndent = result.indent ?? '  ';
             originalCrlf = result.crlf || false;
             
             const progressEl = document.getElementById('loadProgress');
-            const totalTime = performance.now() - startTime;
-            
             expandedPaths = new Set(['root']);
             expandAllMode = false;
             window._collapsedInExpandAll = new Set();
@@ -3709,6 +3683,7 @@
             await new Promise(r => setTimeout(r, 16));
             totalExpandedCount = computeSubtreeSizes(jsonData);
             console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
+            const totalTime = performance.now() - startTime;
             
             let nodeCount = result.nodeCount;
             if (nodeCount === 0) nodeCount = totalExpandedCount;
@@ -3721,96 +3696,36 @@
             if (progressEl) progressEl.textContent = 'Rendere Ansicht...';
             await new Promise(r => setTimeout(r, 16));
             
+            metadataDirty = false;
             renderTree();
+            if (typeof finishDocument === 'function') finishDocument();
         }
         
         // Load file from path (used for "Open With" and drag & drop from Finder)
         async function loadFileFromPath(filePath) {
             if (!window.__TAURI__ || !filePath) return;
-            
             try {
-                fileName = getFileName(filePath);
-                currentFilePath = filePath;
-                
-                status.textContent = `Lade ${fileName}...`;
-                treeContainer.innerHTML = `
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <div>Lade ${escapeHtml(fileName)}...</div>
-                        <div id="loadProgress" style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Lese Datei...</div>
-                    </div>
-                `;
-                
-                await new Promise(r => setTimeout(r, 16));
+                status.textContent = `Lade ${getFileName(filePath)}…`;
                 const startTime = performance.now();
-                
                 const result = await readAndParseFile(filePath);
                 await finalizeLoad(result, filePath, startTime);
-                
+                return true;
             } catch (err) {
-                console.error('Fehler beim Laden:', err);
-                treeContainer.innerHTML = `
-                    <div style="color: #f48771; padding: 20px;">
-                        Fehler beim Laden: ${escapeHtml(String(err.message || err))}
-                    </div>
-                `;
+                showNotification('Fehler beim Laden: ' + (err.message || err));
+                status.textContent = fileName || 'Bereit';
+                return false;
             }
         }
-        
         async function openFile() {
-            // Check if Tauri is available
             if (window.__TAURI__) {
                 try {
-                    const selected = await window.__TAURI__.dialog.open({
-                        multiple: false,
-                        filters: [{
-                            name: 'JSON',
-                            extensions: ['json', 'txt']
-                        }]
-                    });
-                    
-                    if (selected) {
-                        const filePath = selected;
-                        fileName = getFileName(filePath);
-                        currentFilePath = filePath;
-                        
-                        status.textContent = `Lade ${fileName}...`;
-                        treeContainer.innerHTML = `
-                            <div class="loading">
-                                <div class="spinner"></div>
-                                <div>Lade ${escapeHtml(fileName)}...</div>
-                                <div id="loadProgress" style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Lese Datei...</div>
-                            </div>
-                        `;
-                        
-                        await new Promise(r => setTimeout(r, 16));
-                        const startTime = performance.now();
-                        
-                        const result = await readAndParseFile(filePath);
-                        await finalizeLoad(result, filePath, startTime);
-                    }
-                } catch (err) {
-                    console.error('Tauri open error:', err);
-                    showNotification('Fehler beim Öffnen: ' + (err.message || err));
-                    treeContainer.innerHTML = `
-                        <div class="drop-zone">
-                            <div class="drop-icon" style="color: #f44;">✕</div>
-                            <p><strong>Fehler beim Laden</strong></p>
-                            <p style="color: #f44;">${escapeHtml(err.message || String(err))}</p>
-                            <p style="margin-top: 20px;">
-                                <button class="btn-retry-open btn-accent">
-                                    Erneut versuchen
-                                </button>
-                            </p>
-                        </div>
-                    `;
-                }
-            } else {
-                // Fallback to HTML file input
-                document.getElementById('fileInput').click();
-            }
+                    const selected = await window.__TAURI__.dialog.open({ multiple: true,
+                        filters: [{ name: 'JSON', extensions: ['json', 'jsonl', 'ndjson', 'txt'] }] });
+                    for (const path of (Array.isArray(selected) ? selected : selected ? [selected] : [])) await loadFileFromPath(path);
+                } catch (err) { showNotification('Fehler beim Öffnen: ' + (err.message || err)); }
+            } else document.getElementById('fileInput').click();
         }
-        
+
         // Async JSON parsing for large files - yields to UI thread periodically
         async function parseJSONAsync(text, progressEl) {
             return new Promise((resolve, reject) => {
@@ -3843,7 +3758,7 @@
                         }
                     } else {
                         for (const key in val) {
-                            if (key === '__size' || key === '__depthSizes') continue;
+
                             await countRecursive(val[key]);
                         }
                     }
@@ -3855,119 +3770,27 @@
         }
         
         function handleFile(e) {
-            const file = e.target.files[0];
-            if (file) loadFile(file);
+            for (const file of e.target.files) loadFile(file);
             e.target.value = '';
         }
         
         async function loadFile(file) {
-            const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
-            if (file.size > MAX_FILE_SIZE) {
-                showNotification(`Datei zu groß (${formatSize(file.size)}). Maximum: ${formatSize(MAX_FILE_SIZE)}`, 'error');
-                return;
+            if (!file.size || file.size > 1024 * 1024 * 1024) {
+                showNotification('Datei ist leer oder größer als 1 GB', 'error'); return false;
             }
-            if (file.size === 0) {
-                showNotification('Datei ist leer (0 Bytes)', 'error');
-                return;
-            }
-            console.log(`[loadFile] Browser File API: ${file.name}, size: ${file.size}`);
-            fileName = file.name;
-            fileSize = file.size;
-            status.textContent = `Lade ${fileName}...`;
-            
-            treeContainer.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <div>Lade ${fileName}...</div>
-                    <div id="loadProgress" style="margin-top: 8px; font-size: 11px; opacity: 0.7;">${formatSize(fileSize)} - Lese Datei...</div>
-                </div>
-            `;
-            
-            // Give UI time to update
-            await new Promise(r => setTimeout(r, 16));
-            
-            const startTime = performance.now();
-            
             try {
-                const text = await file.text();
-                
-                const progressEl = document.getElementById('loadProgress');
-                if (progressEl) progressEl.textContent = `${formatSize(fileSize)} - Parsen...`;
-                await new Promise(r => setTimeout(r, 16));
-                
-                const parseStart = performance.now();
-                
-                jsonData = parseJSON(text);
-                
-                const parseTime = performance.now() - parseStart;
-                
-                // Use smart counting (estimation for large files)
-                const nodeCount = countNodesSmart(jsonData, fileSize);
-                const totalTime = performance.now() - startTime;
-                
-                // Initialize with only root expanded - crucial for performance!
-                expandedPaths = new Set(['root']);
-                expandAllMode = false;
-                window._collapsedInExpandAll = new Set();
-                searchMatches = [];
-                currentMatchIndex = -1;
-                isModified = false;
-                currentExpandLevel = 1;
-                maxDepth = calculateMaxDepth(jsonData, 50);
-                
-                updateTitle();
-                updateStatusBar(nodeCount, totalTime, parseTime);
-                enableButtons();
-                updateLevelDisplay();
-                
-                if (progressEl) progressEl.textContent = 'Rendere Ansicht...';
-                await new Promise(r => setTimeout(r, 16));
-                
-                renderTree();
-                
-            } catch (err) {
-                treeContainer.innerHTML = `
-                    <div class="drop-zone">
-                        <div class="drop-icon" style="color: #f44;">✕</div>
-                        <p><strong>Fehler beim Laden</strong></p>
-                        <p style="color: #f44;">${escapeHtml(err.message)}</p>
-                        <p style="margin-top: 20px;">
-                            <button class="btn-retry-open btn-accent">
-                                Andere Datei wählen
-                            </button>
-                        </p>
-                    </div>
-                `;
-                status.textContent = 'Fehler';
-            }
+                const start = performance.now();
+                const parsed = JsonCore.parseDocument(await file.text());
+                await finalizeLoad({ jsonData: parsed.data, name: file.name, fileSize: file.size,
+                    nodeCount: 0, parseTime: performance.now() - start, ...parsed }, null, start);
+                return true;
+            } catch (err) { showNotification('Fehler beim Laden: ' + err.message); return false; }
         }
-        
+
         function parseConcatenated(text) {
-            const results = [];
-            let depth = 0, inString = false, escaped = false, start = -1;
-            
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i];
-                if (inString) {
-                    if (escaped) escaped = false;
-                    else if (ch === '\\') escaped = true;
-                    else if (ch === '"') inString = false;
-                    continue;
-                }
-                if (ch === '"') inString = true;
-                else if (ch === '{' || ch === '[') {
-                    if (depth === 0) start = i;
-                    depth++;
-                } else if (ch === '}' || ch === ']') {
-                    depth--;
-                    if (depth === 0 && start >= 0) {
-                        try { results.push(JSON.parse(text.substring(start, i + 1))); } catch {}
-                        start = -1;
-                    }
-                }
-            }
-            if (results.length === 0) throw new Error('Kein gültiges JSON gefunden');
-            return results.length === 1 ? results[0] : results;
+            const result = JsonCore.parseDocument(text);
+            if (!result.wasConcatenated) throw new Error("Keine verkettete JSON-Datei");
+            return result.data;
         }
         
         // Fast node count - iterative to prevent stack overflow
@@ -3981,7 +3804,7 @@
                     if (Array.isArray(cur)) {
                         for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
                     } else {
-                        const keys = Object.keys(cur).filter(k => k !== '__size' && k !== '__depthSizes');
+                        const keys = Object.keys(cur);
                         for (let i = 0; i < keys.length; i++) stack.push(cur[keys[i]]);
                     }
                 }
@@ -3997,7 +3820,7 @@
                 for (const item of obj) count += countNodes(item);
             } else {
                 for (const key in obj) {
-                    if (key === '__size' || key === '__depthSizes') continue;
+
                     count += countNodes(obj[key]);
                 }
             }
@@ -4017,6 +3840,7 @@
         }
         
         function updateTitle() {
+            if (typeof renderDocumentTabs === 'function') { renderDocumentTabs(); persistWorkspace(); }
             document.title = `${isModified ? '● ' : ''}${fileName} - JSON Viewer/Editor`;
         }
         
@@ -4081,7 +3905,7 @@
         let minimapDragging = false;
         
         function updateMinimap() {
-            if (!showMinimap || !jsonData) return;
+            if (!showMinimap || (jsonData === undefined)) return;
             const content = document.getElementById('minimapContent');
             const viewport = document.getElementById('minimapViewport');
             const minimap = document.getElementById('minimap');
@@ -4425,6 +4249,7 @@
             if (entry.path === 'root') {
                 redoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
                 jsonData = entry.snapshot;
+                markModified();
             } else {
                 const currentValue = getValueAtPath(entry.path);
                 redoStack.push({ path: entry.path, snapshot: JSON.parse(JSON.stringify(currentValue)) });
@@ -4440,6 +4265,7 @@
             if (entry.path === 'root') {
                 undoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
                 jsonData = entry.snapshot;
+                markModified();
             } else {
                 const currentValue = getValueAtPath(entry.path);
                 undoStack.push({ path: entry.path, snapshot: JSON.parse(JSON.stringify(currentValue)) });
@@ -4496,17 +4322,12 @@
             
             const row = getVisibleRow(selectedIndex);
             if (!row) return;
-            const parts = row.path.split(/\.|\[/).filter(p => p);
             let html = '<span class="breadcrumb-item" data-path="root">root</span>';
             let currentPath = 'root';
-            
-            for (const part of parts) {
-                const clean = part.replace(']', '');
-                const isIndex = /^\d+$/.test(clean);
-                currentPath += isIndex ? `[${clean}]` : `.${clean}`;
-                html += ` › <span class="breadcrumb-item" data-path="${escapeHtml(currentPath)}">${escapeHtml(clean)}</span>`;
+            for (const segment of parsePath(row.path)) {
+                currentPath = appendPath(currentPath, segment);
+                html += ` › <span class="breadcrumb-item" data-path="${escapeHtml(currentPath)}">${escapeHtml(segment)}</span>`;
             }
-            
             bar.innerHTML = html;
         }
         
@@ -4522,20 +4343,7 @@
         }
         
         function expandToPath(path) {
-            const parts = [];
-            let current = 'root';
-            const regex = /\.([^.\[\]]+)|\[(\d+)\]/g;
-            let match;
-            while ((match = regex.exec(path)) !== null) {
-                if (match[1]) current += `.${match[1]}`;
-                else if (match[2]) current += `[${match[2]}]`;
-                parts.push(current);
-            }
-            
-            for (const p of parts) {
-                expandedPaths.add(p.replace(/\[\d+\]$/, '').replace(/\.[^.]+$/, '') || 'root');
-            }
-            expandedPaths.add(path);
+            expandPathTo(path);
             buildVisibleRows();
             renderVisibleItems();
             
@@ -4597,13 +4405,13 @@
         }
         
         function goToLine(lineNumber) {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             
             // Compute subtree sizes if needed
-            if (!jsonData.__size || jsonData.__size <= 0) {
+            if (!metadataSize(jsonData) || metadataSize(jsonData) <= 0) {
                 totalExpandedCount = computeSubtreeSizes(jsonData);
             } else {
-                totalExpandedCount = jsonData.__size;
+                totalExpandedCount = metadataSize(jsonData);
             }
             
             // Use expandAllMode for virtual rendering
@@ -4767,29 +4575,23 @@
                 const idx = parseInt(path.match(/\[(\d+)\]$/)?.[1] || '0');
                 parent.splice(idx + 1, 0, value);
             } else {
-                const key = path.split('.').pop() || path.match(/\[([^\]]+)\]$/)?.[1];
+                const key = parsePath(path).at(-1);
                 let newKey = key + '_copy';
                 let counter = 1;
-                while (parent.hasOwnProperty(newKey)) {
+                while (JsonCore.own(parent, newKey)) {
                     newKey = key + '_copy' + counter++;
                 }
-                parent[newKey] = value;
+                JsonCore.define(parent, newKey, value);
             }
             markModified();
             renderTree();
         }
         
-        function showNotification(msg) {
-            const notif = document.createElement('div');
-            notif.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#4a4;color:#fff;padding:8px 16px;border-radius:4px;z-index:10000;';
-            notif.textContent = msg;
-            document.body.appendChild(notif);
-            setTimeout(() => notif.remove(), 2000);
-        }
+
         
         // Export Functions
         async function exportSearchResults() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             
             if (searchMatches.length === 0) {
                 showNotification('Keine Suchergebnisse zum Exportieren');
@@ -4887,7 +4689,7 @@
             const selectedItem = document.getElementById('csvSelectedItem');
             if (selectedPath && selectedPath !== 'root') {
                 selectedItem.classList.remove('disabled');
-                selectedItem.textContent = `"${selectedPath.split('.').pop()}" exportieren`;
+                selectedItem.textContent = `"${String(parsePath(selectedPath).at(-1))}" exportieren`;
             } else {
                 selectedItem.classList.add('disabled');
                 selectedItem.textContent = 'Ausgewählten Knoten exportieren';
@@ -4903,7 +4705,7 @@
         });
         
         async function exportCSV(mode = 'full') {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             
             // Close dropdown
             document.getElementById('csvDropdown')?.classList.remove('show');
@@ -4921,7 +4723,7 @@
                     showNotification('Ausgewählter Knoten nicht gefunden');
                     return;
                 }
-                const nodeName = selectedPath.split('.').pop().replace(/\[.*\]/, '');
+                const nodeName = String(parsePath(selectedPath).at(-1)).replace(/\[.*\]/, '');
                 exportName = `${nodeName}_export.csv`;
             }
             
@@ -4937,7 +4739,7 @@
                     obj.forEach((item, i) => flattenForCSV(item, `${prefix}[${i}]`));
                 } else {
                     for (const [key, value] of Object.entries(obj)) {
-                        if (key === '__size' || key === '__depthSizes') continue;
+
                         flattenForCSV(value, prefix ? `${prefix}.${key}` : key);
                     }
                 }
@@ -5009,13 +4811,16 @@
             e.currentTarget.classList.remove('drag-over');
             
             if (!draggedPath || draggedPath === targetPath) return;
-            if (targetPath.startsWith(draggedPath)) return; // Can't drop parent into child
+            const sourceParts = parsePath(draggedPath);
+            const targetParts = parsePath(targetPath);
+            if (sourceParts.length <= targetParts.length && sourceParts.every((part, i) => part === targetParts[i])) return;
             
             saveUndoState('root');
             const value = JSON.parse(JSON.stringify(getValueAtPath(draggedPath)));
             const targetValue = getValueAtPath(targetPath);
             
-            // Delete from source
+            if (targetValue === null || typeof targetValue !== "object") return;
+            // Delete only after confirming that the target can receive a value.
             deleteAtPath(draggedPath);
             
             // Add to target
@@ -5023,13 +4828,13 @@
                 if (Array.isArray(targetValue)) {
                     targetValue.push(value);
                 } else {
-                    const key = draggedPath.split('.').pop() || 'item';
+                    const key = String(parsePath(draggedPath).at(-1));
                     let newKey = key;
                     let counter = 1;
-                    while (targetValue.hasOwnProperty(newKey)) {
+                    while (JsonCore.own(targetValue, newKey)) {
                         newKey = key + counter++;
                     }
-                    targetValue[newKey] = value;
+                    JsonCore.define(targetValue, newKey, value);
                 }
             }
             
@@ -5039,14 +4844,13 @@
         }
         
         // ── Virtual rendering helpers for expandAllMode ──────────────────
-        // Compute __size and __depthSizes on every object/array via iterative post-order traversal.
-        // __size = total number of nodes in the subtree INCLUDING the node itself.
-        // __depthSizes[d] = visible count when expanded to relative depth d (d=0 → collapsed = 1)
+        // Keep subtree sizes on symbol keys, separate from user-owned JSON fields.
         function computeSubtreeSizes(root) {
+            metadataDirty = false;
             if (root === null || typeof root !== 'object') return 1;
             function getChildren(val) {
                 if (Array.isArray(val)) return val;
-                return Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').map(k => val[k]);
+                return Object.keys(val).map(k => val[k]);
             }
             const stack = [{
                 value: root,
@@ -5065,7 +4869,8 @@
                         if (ch.length > 0) {
                             stack.push({ value: child, children: ch, childIndex: 0, size: 1, primitiveChildCount: 0, containerChildDs: [] });
                         } else {
-                            try { child.__size = 1; } catch {}
+                            child[nodeSizeSymbol] = 1;
+                            child[nodeDepthsSymbol] = [1];
                             frame.size += 1;
                             frame.primitiveChildCount++;
                         }
@@ -5081,7 +4886,7 @@
                     for (let i = 0; i < refs.length; i++) {
                         if (refs[i].length > maxChildLen) maxChildLen = refs[i].length;
                     }
-                    const dsLen = maxChildLen + 1;
+                    const dsLen = Math.max(2, maxChildLen + 1);
                     const ds = new Array(dsLen);
                     ds[0] = 1;
                     for (let d = 1; d < dsLen; d++) {
@@ -5093,8 +4898,8 @@
                         ds[d] = sum;
                     }
                     try {
-                        frame.value.__size = frame.size;
-                        frame.value.__depthSizes = ds;
+                        frame.value[nodeSizeSymbol] = frame.size;
+                        frame.value[nodeDepthsSymbol] = ds;
                     } catch {}
                     if (stack.length > 0) {
                         const parent = stack[stack.length - 1];
@@ -5103,40 +4908,35 @@
                     }
                 }
             }
-            return root.__size || 1;
+            return metadataSize(root) || 1;
         }
 
         function getNodeSize(val) {
             if (val === null || typeof val !== 'object') return 1;
-            return val.__size || 1;
+            return metadataSize(val) || 1;
         }
 
         // Get visible size of a node when expanded to a given remaining depth budget
         function getNodeSizeAtDepth(val, remainingDepth) {
             if (val === null || typeof val !== 'object') return 1;
             if (remainingDepth <= 0) return 1;
-            const ds = val.__depthSizes;
+            const ds = metadataDepths(val);
             if (ds) return ds[Math.min(remainingDepth, ds.length - 1)];
-            return val.__size || 1;
+            return metadataSize(val) || 1;
         }
 
         // Count depth segments in a path (e.g. "root.a[0].b" → 3)
         function getPathDepth(path) {
-            if (path === 'root') return 0;
-            let depth = 0;
-            for (let i = 4; i < path.length; i++) {
-                if (path.charCodeAt(i) === 46 || path.charCodeAt(i) === 91) depth++; // '.' or '['
-            }
-            return depth;
+            return parsePath(path).length;
         }
 
         // Total visible rows – either visibleRows.length or computed from __size/__depthSizes
         function getVisibleRowCount() {
-            if (expandAllMode && jsonData) {
+            if (expandAllMode && jsonData !== undefined) {
                 let count;
                 const hasDepthLimit = expandAllDepthLimit !== Infinity;
-                if (hasDepthLimit && jsonData.__depthSizes) {
-                    count = jsonData.__depthSizes[Math.min(expandAllDepthLimit, jsonData.__depthSizes.length - 1)];
+                if (hasDepthLimit && metadataDepths(jsonData)) {
+                    count = metadataDepths(jsonData)[Math.min(expandAllDepthLimit, metadataDepths(jsonData).length - 1)];
                 } else {
                     count = totalExpandedCount;
                 }
@@ -5150,8 +4950,8 @@
                                 if (remaining > 0) {
                                     count -= (getNodeSizeAtDepth(val, remaining) - 1);
                                 }
-                            } else if (val.__size) {
-                                count -= (val.__size - 1);
+                            } else if (metadataSize(val)) {
+                                count -= (metadataSize(val) - 1);
                             }
                         }
                     }
@@ -5163,7 +4963,7 @@
 
         // Single row by flat index
         function getVisibleRow(index) {
-            if (expandAllMode && jsonData) {
+            if (expandAllMode && jsonData !== undefined) {
                 const rows = getExpandedRowsInRange(index, index + 1);
                 return rows[0] || null;
             }
@@ -5172,7 +4972,7 @@
 
         // Find flat index for a given path
         function findVisibleRowIndex(path) {
-            if (expandAllMode && jsonData) {
+            if (expandAllMode && jsonData !== undefined) {
                 return getFlatIndexForPath(path);
             }
             return visibleRows.findIndex(r => r.path === path);
@@ -5180,34 +4980,23 @@
 
         // Navigate the JSON tree along `path` segments, summing __size of skipped siblings
         function getFlatIndexForPath(targetPath) {
-            if (!jsonData || targetPath === 'root') return 0;
+            if ((jsonData === undefined) || targetPath === 'root') return 0;
             let idx = 0;
             let currentValue = jsonData;
             const hasDepthLimit = expandAllDepthLimit !== Infinity;
-            // Parse segments after "root"
-            const rest = targetPath.substring(4);
-            const segments = [];
-            let seg = '';
-            for (let i = 0; i < rest.length; i++) {
-                const ch = rest[i];
-                if (ch === '.') { if (seg) segments.push(seg); seg = ''; }
-                else if (ch === '[') { if (seg) segments.push(seg); seg = '['; }
-                else if (ch === ']') { segments.push(seg + ']'); seg = ''; }
-                else { seg += ch; }
-            }
-            if (seg) segments.push(seg);
+            const segments = parsePath(targetPath);
             for (let si = 0; si < segments.length; si++) {
                 const s = segments[si];
                 const childDepth = si + 1;
                 idx++; // move past current node
-                if (s.startsWith('[')) {
-                    const arrIdx = parseInt(s.slice(1, -1));
+                if (typeof s === 'number') {
+                    const arrIdx = s;
                     for (let i = 0; i < arrIdx; i++) {
                         idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[i], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[i]);
                     }
                     currentValue = currentValue[arrIdx];
                 } else {
-                    const keys = Object.keys(currentValue).filter(k => k !== '__size' && k !== '__depthSizes').sort();
+                    const keys = Object.keys(currentValue).sort();
                     for (const k of keys) {
                         if (k === s) break;
                         idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[k], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[k]);
@@ -5221,7 +5010,7 @@
         // Get rows in [startIdx, endIdx) for expandAllMode – O(depth × branching) via __size skipping
         function getExpandedRowsInRange(startIdx, endIdx) {
             const rows = [];
-            if (!jsonData) return rows;
+            if ((jsonData === undefined)) return rows;
             const rootKey = fileName || 'root';
             const hasCollapsed = window._collapsedInExpandAll && window._collapsedInExpandAll.size > 0;
             const hasDepthLimit = expandAllDepthLimit !== Infinity;
@@ -5243,7 +5032,7 @@
                     if (idx >= startIdx) {
                         const isObj = frame.value !== null && typeof frame.value === 'object';
                         const isArr = Array.isArray(frame.value);
-                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
+                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).length > 0);
                         rows.push({ key: frame.key, value: frame.value, path: frame.path,
                                     depth: frame.depth, hasChildren: hasKids, isArray: isArr, isObject: isObj });
                     }
@@ -5254,7 +5043,7 @@
                             frame.childKeys = null;
                             frame.childCount = frame.value.length;
                         } else {
-                            frame.childKeys = Object.keys(frame.value).filter(k => k !== '__size' && k !== '__depthSizes').sort();
+                            frame.childKeys = Object.keys(frame.value).sort();
                             frame.childCount = frame.childKeys.length;
                         }
                         frame.childIndex = 0;
@@ -5273,7 +5062,7 @@
                     let childKey, childPath;
                     if (frame.childKeys) {
                         const k = frame.childKeys[frame.childIndex];
-                        childKey = k; childPath = frame.path + '.' + k;
+                        childKey = k; childPath = appendPath(frame.path, k);
                     } else {
                         const i = frame.childIndex;
                         childKey = '[' + i + ']'; childPath = frame.path + '[' + i + ']';
@@ -5297,7 +5086,7 @@
 
         function buildVisibleRows() {
             minimapNeedsRedraw = true;
-            if (!jsonData) { visibleRows = []; return; }
+            if ((jsonData === undefined)) { visibleRows = []; return; }
 
             // In expandAllMode, do NOT build the full array – use virtual rendering instead
             if (expandAllMode) {
@@ -5315,7 +5104,7 @@
                 
                 const isObject = value !== null && typeof value === 'object';
                 const isArray = Array.isArray(value);
-                const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
+                const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).length > 0);
                 
                 visibleRows.push({ key, value, path, depth, hasChildren, isArray, isObject });
                 
@@ -5333,12 +5122,12 @@
                             });
                         }
                     } else {
-                        const keys = Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').sort().reverse();
+                        const keys = Object.keys(value).sort().reverse();
                         for (const k of keys) {
                             stack.push({ 
                                 key: k, 
                                 value: value[k], 
-                                path: `${path}.${k}`, 
+                                path: appendPath(path, k),
                                 depth: depth + 1 
                             });
                         }
@@ -5351,7 +5140,7 @@
         function addRowOld(key, value, path, depth) {
             const isObject = value !== null && typeof value === 'object';
             const isArray = Array.isArray(value);
-            const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').length > 0);
+            const hasChildren = isObject && (isArray ? value.length > 0 : Object.keys(value).length > 0);
             
             visibleRows.push({ key, value, path, depth, hasChildren, isArray, isObject });
             
@@ -5361,8 +5150,8 @@
                         addRow(`[${idx}]`, item, `${path}[${idx}]`, depth + 1);
                     });
                 } else {
-                    Object.keys(value).filter(k => k !== '__size' && k !== '__depthSizes').sort().forEach(k => {
-                        addRow(k, value[k], `${path}.${k}`, depth + 1);
+                    Object.keys(value).sort().forEach(k => {
+                        addRow(k, value[k], appendPath(path, k), depth + 1);
                     });
                 }
             }
@@ -5447,6 +5236,7 @@
             if (editingPath || editingKey) return;
             
             // Save current scroll position before rebuilding
+            if (metadataDirty) totalExpandedCount = jsonData === undefined ? 0 : computeSubtreeSizes(jsonData);
             const savedScrollTop = scrollTop;
             
             buildVisibleRows();
@@ -5613,7 +5403,7 @@
                 html += `<span class="key">${escapeHtml(row.key)}</span><span class="colon">: </span>`;
                 
                 if (row.isObject) {
-                    const count = row.isArray ? row.value.length : Object.keys(row.value).filter(k => k !== '__size' && k !== '__depthSizes').length;
+                    const count = row.isArray ? row.value.length : Object.keys(row.value).length;
                     const type = row.isArray ? 'Array' : 'Object';
                     const bracket = row.isArray ? '[]' : '{}';
                     html += `<span class="bracket">${bracket[0]}</span>`;
@@ -5714,7 +5504,7 @@
         
         function expandAll() {
             // Compute subtree sizes if not already done
-            if (jsonData && (!jsonData.__size || jsonData.__size <= 0)) {
+            if (jsonData !== undefined && (!metadataSize(jsonData) || metadataSize(jsonData) <= 0)) {
                 status.textContent = 'Berechne Baumgrößen...';
                 setTimeout(() => {
                     totalExpandedCount = computeSubtreeSizes(jsonData);
@@ -5728,7 +5518,7 @@
                     status.textContent = `${totalExpandedCount.toLocaleString()} Knoten – Alle aufgeklappt`;
                 }, 16);
             } else {
-                totalExpandedCount = jsonData ? (jsonData.__size || 1) : 0;
+                totalExpandedCount = jsonData !== undefined ? (metadataSize(jsonData) || 1) : 0;
                 expandAllMode = true;
                 expandAllDepthLimit = Infinity;
                 expandedPaths = new Set(['root']);
@@ -5755,8 +5545,8 @@
             // Stay in expandAllMode with depth limit for O(1) level changes
             if (!expandAllMode) {
                 expandAllMode = true;
-                if (!jsonData.__depthSizes) computeSubtreeSizes(jsonData);
-                totalExpandedCount = jsonData.__size || 1;
+                if (!metadataDepths(jsonData)) computeSubtreeSizes(jsonData);
+                totalExpandedCount = metadataSize(jsonData) || 1;
             }
             expandAllDepthLimit = currentExpandLevel >= maxDepth ? Infinity : currentExpandLevel;
             window._collapsedInExpandAll = new Set();
@@ -5770,8 +5560,8 @@
             // Stay in expandAllMode with depth limit for O(1) level changes
             if (!expandAllMode) {
                 expandAllMode = true;
-                if (!jsonData.__depthSizes) computeSubtreeSizes(jsonData);
-                totalExpandedCount = jsonData.__size || 1;
+                if (!metadataDepths(jsonData)) computeSubtreeSizes(jsonData);
+                totalExpandedCount = metadataSize(jsonData) || 1;
             }
             expandAllDepthLimit = currentExpandLevel;
             window._collapsedInExpandAll = new Set();
@@ -5796,9 +5586,9 @@
                         stack.push({ obj: cur[i], path: `${curPath}[${i}]`, depth: curDepth + 1 });
                     }
                 } else {
-                    const keys = Object.keys(cur).filter(k => k !== '__size' && k !== '__depthSizes');
+                    const keys = Object.keys(cur);
                     for (let i = keys.length - 1; i >= 0; i--) {
-                        stack.push({ obj: cur[keys[i]], path: `${curPath}.${keys[i]}`, depth: curDepth + 1 });
+                        stack.push({ obj: cur[keys[i]], path: appendPath(curPath, keys[i]), depth: curDepth + 1 });
                     }
                 }
             }
@@ -5848,7 +5638,7 @@
         
         function search() {
             const query = searchInput.value.trim();
-            if (!query || !jsonData) {
+            if (!query || (jsonData === undefined)) {
                 searchMatches = [];
                 currentMatchIndex = -1;
                 updateSearchInfo();
@@ -5889,10 +5679,10 @@
                 if (Array.isArray(obj)) {
                     obj.forEach((item, idx) => searchInObject(item, `${path}[${idx}]`, query));
                 } else {
-                    Object.keys(obj).filter(k => k !== '__size' && k !== '__depthSizes').forEach(key => {
+                    Object.keys(obj).forEach(key => {
                         // Only check keys
-                        if (!searchValuesOnly && matchText(key)) searchMatches.push(`${path}.${key}`);
-                        searchInObject(obj[key], `${path}.${key}`, query);
+                        if (!searchValuesOnly && matchText(key)) searchMatches.push(appendPath(path, key));
+                        searchInObject(obj[key], appendPath(path, key), query);
                     });
                 }
             }
@@ -5901,9 +5691,8 @@
         function expandPathTo(path) {
             let current = 'root';
             expandedPaths.add(current);
-            const matches = path.match(/\.([^.\[]+)|\[(\d+)\]/g) || [];
-            for (const match of matches) {
-                current += match;
+            for (const segment of parsePath(path)) {
+                current = appendPath(current, segment);
                 expandedPaths.add(current);
             }
         }
@@ -6154,32 +5943,9 @@
             hideMatchList();
         }
         
-        // Strip __size and __depthSizes metadata from jsonData before saving
-        // Must be done in JS BEFORE Tauri IPC serialization to avoid sending bloated data
-        function stripViewerMetadata(obj) {
-            if (obj === null || typeof obj !== 'object') return;
-            const stack = [obj];
-            while (stack.length > 0) {
-                const val = stack.pop();
-                if (Array.isArray(val)) {
-                    for (let i = 0; i < val.length; i++) {
-                        const child = val[i];
-                        if (child !== null && typeof child === 'object') stack.push(child);
-                    }
-                } else {
-                    delete val.__size;
-                    delete val.__depthSizes;
-                    const keys = Object.keys(val);
-                    for (let i = 0; i < keys.length; i++) {
-                        const child = val[keys[i]];
-                        if (child !== null && typeof child === 'object') stack.push(child);
-                    }
-                }
-            }
-        }
         
         async function saveFile() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             
             if (window.__TAURI__) {
                 let chunkedSavePath = null;
@@ -6193,6 +5959,10 @@
                     });
                     
                     if (filePath) {
+                        if (typeof documents !== 'undefined') {
+                            const otherSources = documents.filter(d => d.id !== activeDocumentId).map(d => d.path).filter(Boolean);
+                            await window.__TAURI__.core.invoke('validate_export_path', { path: filePath, sources: otherSources });
+                        }
                         if (!isModified && currentFilePath) {
                             // Unmodified: copy original file 1:1 (preserves exact formatting + size)
                             await window.__TAURI__.core.invoke('copy_file', {
@@ -6206,13 +5976,10 @@
                             showNotification('Serialisiere JSON…', 'info');
                             await new Promise(r => setTimeout(r, 100));
                             
-                            // Replacer strips __size/__depthSizes without modifying jsonData in memory
-                            const replacer = (key, value) => {
-                                if (key === '__size' || key === '__depthSizes') return undefined;
-                                return value;
-                            };
+                            // Rendering metadata is stored separately from the document.
+                            const replacer = null;
                             
-                            const indent = originalIndent || '  ';
+                            const indent = originalIndent ?? '  ';
                             let jsonStr;
                             
                             if (wasConcatenated && Array.isArray(jsonData)) {
@@ -6308,19 +6075,13 @@
         // === EDIT FUNCTIONS ===
         
         function getValueAtPath(path) {
-            if (path === 'root') return jsonData;
-            const parts = parsePath(path);
-            let current = jsonData;
-            for (const part of parts) {
-                if (current === null || current === undefined) return undefined;
-                current = current[part];
-            }
-            return current;
+            return JsonCore.getAtPath(jsonData, path);
         }
         
         function setValueAtPath(path, value) {
             if (path === 'root') {
                 jsonData = value;
+                markModified();
                 return;
             }
             const parts = parsePath(path);
@@ -6328,9 +6089,10 @@
             let current = jsonData;
             for (const part of parts) {
                 if (current === null || current === undefined) return;
+                if (!JsonCore.own(current, part)) throw new Error("Pfad nicht gefunden");
                 current = current[part];
             }
-            current[lastKey] = value;
+            JsonCore.define(current, lastKey, value);
             markModified();
         }
         
@@ -6350,30 +6112,16 @@
         }
         
         function parsePath(path) {
-            const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-            const parts = [];
-            const regex = /\.([^.\[\]]+)|\[(\d+)\]/g;
-            let match;
-            while ((match = regex.exec(path)) !== null) {
-                if (match[1] !== undefined) {
-                    if (DANGEROUS_KEYS.has(match[1])) {
-                        throw new Error(`Unsafe key in path: ${match[1]}`);
-                    }
-                    parts.push(match[1]);
-                }
-                else if (match[2] !== undefined) parts.push(parseInt(match[2]));
-            }
-            return parts;
+            return JsonCore.parsePath(path);
         }
         
         function getParentPath(path) {
-            const lastDot = path.lastIndexOf('.');
-            const lastBracket = path.lastIndexOf('[');
-            const lastIndex = Math.max(lastDot, lastBracket);
-            return lastIndex > 0 ? path.substring(0, lastIndex) : 'root';
+            return JsonCore.parentPath(path);
         }
         
         function markModified() {
+            if (typeof tableSource !== 'undefined') tableSource = null;
+            metadataDirty = true;
             if (!isModified) {
                 isModified = true;
                 updateTitle();
@@ -6509,11 +6257,11 @@
                     const parent = getValueAtPath(parentPath);
                     
                     if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
-                        if (!parent.hasOwnProperty(newKey)) {
+                        if (!JsonCore.own(parent, newKey)) {
                             saveUndoState(parentPath);
                             const value = parent[currentKey];
                             delete parent[currentKey];
-                            parent[newKey] = value;
+                            JsonCore.define(parent, newKey, value);
                             markModified();
                         }
                     }
@@ -6647,7 +6395,7 @@
                         const obj = getValueAtPath(row.path);
                         let newKey = 'new_property';
                         let i = 1;
-                        while (obj.hasOwnProperty(newKey)) {
+                        while (JsonCore.own(obj, newKey)) {
                             newKey = `new_property_${i++}`;
                         }
                         obj[newKey] = null;
@@ -6746,7 +6494,7 @@
         
         // ============ STATISTICS PANEL ============
         function showStatistics() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             const stats = computeStatistics(jsonData);
             const total = stats.objects + stats.arrays + stats.strings + stats.numbers + stats.booleans + stats.nulls;
             const typeColors = { Objekte: '#569cd6', Arrays: '#c586c0', Strings: '#ce9178', Zahlen: '#b5cea8', Booleans: '#dcdcaa', Null: '#6a9955' };
@@ -6807,7 +6555,7 @@
                     for (let i = 0; i < val.length; i++) stack.push({ val: val[i], depth: depth + 1 });
                 } else if (typeof val === 'object') {
                     stats.objects++;
-                    const keys = Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes');
+                    const keys = Object.keys(val);
                     for (const k of keys) {
                         stats.uniqueKeys.add(k);
                         stats.keyCounts.set(k, (stats.keyCounts.get(k) || 0) + 1);
@@ -6872,7 +6620,7 @@
                 try {
                     const val = getValueAtPath(path);
                     if (val !== undefined) {
-                        if (typeof val === 'object' && val !== null) valuePreview = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').length}}`;
+                        if (typeof val === 'object' && val !== null) valuePreview = Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`;
                         else valuePreview = String(val).substring(0, 30);
                     }
                 } catch(e) {}
@@ -6929,7 +6677,7 @@
 
         // ============ TABLE VIEW ============
         function showTableView() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             // Find the best array to show as table
             let targetArray = null;
             let targetPath = 'root';
@@ -6975,7 +6723,7 @@
         // Only arrays count towards depth (maxArrayDepth limits nested array-in-array expansion).
         // maxArrayExpand: only expand the first N items of each array.
         function flattenObject(obj, prefix, arrayDepth, maxArrayDepth, maxArrayExpand) {
-            const result = {};
+            const result = Object.create(null);
             if (obj === null || obj === undefined || typeof obj !== 'object') {
                 if (prefix) result[prefix] = obj;
                 return result;
@@ -7005,9 +6753,9 @@
                 }
             } else {
                 // Objects: always expand fully (no depth limit)
-                const keys = Object.keys(obj).filter(k => k !== '__size' && k !== '__depthSizes');
+                const keys = Object.keys(obj);
                 for (const k of keys) {
-                    const key = prefix ? `${prefix}.${k}` : k;
+                    const key = appendPath(prefix, k).replace(/^\./, "");
                     const val = obj[k];
                     if (val !== null && typeof val === 'object') {
                         Object.assign(result, flattenObject(val, key, arrayDepth, maxArrayDepth, maxArrayExpand));
@@ -7032,6 +6780,12 @@
         }
         let tableVirtualStart = 0;
         function renderTableView(arr, path) {
+            if (typeof tableSource !== 'undefined' && tableSource === arr) {
+                document.getElementById('tableViewOverlay').classList.add('visible');
+                document.getElementById('tableViewModal').classList.add('visible');
+                renderVirtualTable(); return;
+            }
+            const generation = typeof tableBuildGeneration !== 'undefined' ? ++tableBuildGeneration : 0;
             const rawData = arr.filter(item => typeof item === 'object' && item !== null);
             document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${rawData.length} Zeilen) — lade…`;
             document.getElementById('tableFilterInput').value = '';
@@ -7040,12 +6794,14 @@
             document.getElementById('tableViewModal').classList.add('visible');
             // Use setTimeout to allow the modal to paint before doing heavy work
             setTimeout(() => {
+                if (typeof tableBuildGeneration !== 'undefined' && generation !== tableBuildGeneration) return;
                 // Flatten each row: objects fully expanded, arrays limited to 3 nesting levels & 3 items each
+                if (typeof tableSource !== 'undefined') tableSource = arr;
                 tableData = rawData.map(item => flattenObject(item, '', 0, 3, 3));
                 // Collect all columns from flattened data
                 const colSet = new Set();
                 tableData.forEach(item => {
-                    Object.keys(item).filter(k => k !== '__size' && k !== '__depthSizes').forEach(k => colSet.add(k));
+                    Object.keys(item).forEach(k => colSet.add(k));
                 });
                 // Sort: flat columns first, then nested columns alphabetically
                 let cols = [...colSet].sort((a, b) => {
@@ -7054,12 +6810,11 @@
                     if (aDepth !== bDepth) return aDepth - bDepth;
                     return a.localeCompare(b);
                 });
-                if (cols.length > MAX_TABLE_COLUMNS) {
-                    cols = cols.slice(0, MAX_TABLE_COLUMNS);
-                }
                 tableColumns = cols;
+                if (typeof initializeTableColumns === 'function') initializeTableColumns(cols);
                 tableSortCol = null;
                 tableSortAsc = true;
+                tableVirtualStart = 0;
                 document.getElementById('tableTitle').textContent = `Tabellenansicht – ${path} (${rawData.length} Zeilen)`;
                 prepareTableData();
                 renderVirtualTable();
@@ -7075,6 +6830,7 @@
                     return v !== undefined && v !== null && String(v).toLowerCase().includes(lf);
                 }));
             }
+            if (typeof tableColumnRules !== 'undefined') data = WorkspaceCore.filterRows(data, tableColumnRules);
             if (tableSortCol !== null) {
                 data = [...data].sort((a, b) => {
                     const va = a[tableSortCol], vb = b[tableSortCol];
@@ -7092,7 +6848,7 @@
             if (typeof val === 'string') return { cls: 'string', display: '"' + (val.length > 50 ? val.substring(0, 50) + '…' : val) + '"' };
             if (typeof val === 'number') return { cls: 'number', display: String(val) };
             if (typeof val === 'boolean') return { cls: 'boolean', display: String(val) };
-            if (typeof val === 'object') return { cls: '', display: Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes').length}}` };
+            if (typeof val === 'object') return { cls: '', display: Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}` };
             return { cls: '', display: String(val) };
         }
         let _tableScrollHandler = null;
@@ -7108,15 +6864,17 @@
             headerHtml += '<th style="min-width:60px">#</th>';
             tableColumns.forEach(col => {
                 const arrow = tableSortCol === col ? (tableSortAsc ? '▲' : '▼') : '';
-                headerHtml += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
+                headerHtml += `<th data-col="${escapeHtml(col)}" title="${escapeHtml(col)}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
             });
             headerHtml += '</tr>';
+            const columnWidths = '<col>' + tableColumns.map(() => '<col>').join('');
             container.innerHTML = `
                 <table>
-                    <thead>${headerHtml}</thead>
+                    <colgroup>${columnWidths}</colgroup><thead>${headerHtml}</thead>
                     <tbody></tbody>
                 </table>`;
             const table = container.querySelector('table');
+            table.style.width = `${60 + tableColumns.length * 180}px`;
             const tbody = table.querySelector('tbody');
             let lastStart = -1, lastEnd = -1;
             function updateVisibleRows(requestedStart = tableVirtualStart) {
@@ -7144,6 +6902,7 @@
                     html += '</tr>';
                 }
                 tbody.innerHTML = html;
+                if (typeof applyPinnedColumns === 'function') applyPinnedColumns();
                 requestAnimationFrame(() => {
                     const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
                     horizontalScrollbar.max = String(maxScrollLeft);
@@ -7191,8 +6950,7 @@
                 event.preventDefault();
                 updateVisibleRows(nextStart);
             };
-            tableVirtualStart = 0;
-            updateVisibleRows(0);
+            updateVisibleRows(tableVirtualStart);
             // Sort handlers
             container.querySelectorAll('th[data-col]').forEach(th => {
                 th.onclick = () => {
@@ -7206,6 +6964,7 @@
         }
         // Keep old renderTable as alias for filter updates
         function renderTable(filter) {
+            tableVirtualStart = 0;
             prepareTableData(filter || '');
             renderVirtualTable();
         }
@@ -7227,14 +6986,16 @@
                 showNotification('Keine Daten zum Exportieren.');
                 return;
             }
+            const exportRows = tableFilteredData;
+            const exportColumns = [...tableColumns];
             try {
                 showNotification('Excel wird erstellt…');
                 setTimeout(() => {
                     // Build array-of-arrays: header + rows
-                    const header = ['#', ...tableColumns];
-                    const rows = tableFilteredData.map((row, idx) => {
+                    const header = ['#', ...exportColumns];
+                    const rows = exportRows.map((row, idx) => {
                         const cells = [idx + 1];
-                        for (const col of tableColumns) {
+                        for (const col of exportColumns) {
                             const val = row[col];
                             if (val === null || val === undefined) cells.push('');
                             else if (typeof val === 'object') cells.push(Array.isArray(val) ? `[${val.length}]` : JSON.stringify(val));
@@ -7268,9 +7029,9 @@
 
         // ============ RAW VIEW (Syntax-Highlighted) ============
         function showRawView() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             const target = selectedPath ? getValueAtPath(selectedPath) : jsonData;
-            const json = JSON.stringify(target, (key, val) => key === '__size' || key === '__depthSizes' ? undefined : val, 2);
+            const json = JSON.stringify(target, null, 2);
             // Limit to 500K chars for performance
             const limited = json.length > 500000 ? json.substring(0, 500000) + '\n\n... (abgeschnitten bei 500 KB)' : json;
             document.getElementById('rawContent').innerHTML = syntaxHighlightJSON(limited);
@@ -7296,7 +7057,7 @@
 
         // ============ DUPLICATE DETECTION ============
         function showDuplicates() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             status.textContent = 'Suche Duplikate...';
             setTimeout(() => {
                 const dupes = findDuplicates(jsonData);
@@ -7319,7 +7080,7 @@
                     for (let i = 0; i < val.length; i++) {
                         const child = val[i];
                         if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-                            const hash = JSON.stringify(child, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v);
+                            const hash = JSON.stringify(child, null);
                             if (hash.length < 10000) { // skip huge objects
                                 if (!hashMap.has(hash)) hashMap.set(hash, []);
                                 hashMap.get(hash).push(`${path}[${i}]`);
@@ -7328,9 +7089,9 @@
                         stack.push({ val: child, path: `${path}[${i}]` });
                     }
                 } else {
-                    const keys = Object.keys(val).filter(k => k !== '__size' && k !== '__depthSizes');
+                    const keys = Object.keys(val);
                     for (const k of keys) {
-                        stack.push({ val: val[k], path: `${path}.${k}` });
+                        stack.push({ val: val[k], path: appendPath(path, k) });
                     }
                 }
             }
@@ -7379,7 +7140,7 @@
             }
         }
         function executeJsonPath() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             const expr = document.getElementById('jsonpathInput').value.trim();
             if (!expr) return;
             try {
@@ -7404,7 +7165,7 @@
             // Simple JSONPath implementation supporting: $, ., .., *, [n], [*]
             const results = [];
             if (expr.startsWith('$')) expr = expr.substring(1);
-            if (expr.startsWith('.')) expr = expr.substring(1);
+
             
             const segments = parseJsonPathSegments(expr);
             queryRecursive(data, segments, 0, 'root', results);
@@ -7455,12 +7216,12 @@
                     if (Array.isArray(data)) {
                         for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx, `${path}[${i}]`, results);
                     } else {
-                        for (const k of Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes')) queryRecursive(data[k], segments, segIdx, `${path}.${k}`, results);
+                        for (const k of Object.keys(data)) queryRecursive(data[k], segments, segIdx, appendPath(path, k), results);
                     }
                 }
             } else if (seg.type === 'key') {
-                if (data !== null && typeof data === 'object' && !Array.isArray(data) && data.hasOwnProperty(seg.value)) {
-                    queryRecursive(data[seg.value], segments, segIdx + 1, `${path}.${seg.value}`, results);
+                if (data !== null && typeof data === 'object' && !Array.isArray(data) && JsonCore.own(data, seg.value)) {
+                    queryRecursive(data[seg.value], segments, segIdx + 1, appendPath(path, seg.value), results);
                 }
             } else if (seg.type === 'index') {
                 if (Array.isArray(data) && seg.value < data.length) {
@@ -7471,13 +7232,13 @@
                     if (Array.isArray(data)) {
                         for (let i = 0; i < data.length; i++) queryRecursive(data[i], segments, segIdx + 1, `${path}[${i}]`, results);
                     } else {
-                        for (const k of Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes')) queryRecursive(data[k], segments, segIdx + 1, `${path}.${k}`, results);
+                        for (const k of Object.keys(data)) queryRecursive(data[k], segments, segIdx + 1, appendPath(path, k), results);
                     }
                 }
             }
         }
         function exportJsonPathResults() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             const expr = document.getElementById('jsonpathInput').value.trim();
             if (!expr) return;
             try {
@@ -7502,11 +7263,14 @@
         };
 
         // ============ NOTIFICATION HELPER ============
-        function showNotification(msg, duration = 2500) {
+        function showNotification(msg, type = "info", duration = 2500) {
+            if (typeof type === "number") duration = type;
+            if (!Number.isFinite(duration) || duration <= 0) duration = 2500;
             const existing = document.querySelector('.notification');
             if (existing) existing.remove();
             const el = document.createElement('div');
             el.className = 'notification';
+            el.setAttribute('role', type === 'error' ? 'alert' : 'status');
             el.textContent = msg;
             document.body.appendChild(el);
             setTimeout(() => el.remove(), duration);
@@ -7515,12 +7279,12 @@
         // ============ DIFF VIEW ============
         let diffSecondData = null;
         function showDiffView() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             document.getElementById('diffOverlay').classList.add('visible');
             document.getElementById('diffModal').classList.add('visible');
             const leftPanel = document.getElementById('diffLeft');
-            leftPanel.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">Aktuelle Datei: ' + (fileName || 'JSON') + '</div>' +
-                '<pre style="margin:0;">' + escapeHTML(JSON.stringify(jsonData, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v, 2).substring(0, 500000)) + '</pre>';
+            leftPanel.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">Aktuelle Datei: ' + escapeHtml(fileName || 'JSON') + '</div>' +
+                '<pre style="margin:0;">' + escapeHtml(JSON.stringify(jsonData, null, 2).substring(0, 500000)) + '</pre>';
             const rightPanel = document.getElementById('diffRight');
             if (diffSecondData) {
                 renderDiffPanels();
@@ -7554,7 +7318,7 @@
             input.click();
         }
         function renderDiffPanels() {
-            const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => k === '__size' || k === '__depthSizes' ? undefined : v));
+            const clean = (obj) => JSON.parse(JSON.stringify(obj, null));
             const left = clean(jsonData);
             const right = clean(diffSecondData);
             const diffs = computeDiffs(left, right, '$');
@@ -7563,10 +7327,10 @@
             // Simple LCS-based line diff
             const result = lineDiff(leftLines, rightLines);
             document.getElementById('diffLeft').innerHTML = result.left.map(l =>
-                `<div class="${l.type === 'removed' ? 'diff-line-removed' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHTML(l.text)}</div>`
+                `<div class="${l.type === 'removed' ? 'diff-line-removed' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHtml(l.text)}</div>`
             ).join('');
             document.getElementById('diffRight').innerHTML = result.right.map(l =>
-                `<div class="${l.type === 'added' ? 'diff-line-added' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHTML(l.text)}</div>`
+                `<div class="${l.type === 'added' ? 'diff-line-added' : l.type === 'changed' ? 'diff-line-changed' : ''}">${escapeHtml(l.text)}</div>`
             ).join('');
             const added = result.right.filter(l => l.type === 'added').length;
             const removed = result.left.filter(l => l.type === 'removed').length;
@@ -7593,9 +7357,9 @@
             } else {
                 const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
                 for (const k of allKeys) {
-                    if (!(k in a)) diffs.push({ path: `${path}.${k}`, type: 'added' });
-                    else if (!(k in b)) diffs.push({ path: `${path}.${k}`, type: 'removed' });
-                    else diffs.push(...computeDiffs(a[k], b[k], `${path}.${k}`));
+                    if (!(k in a)) diffs.push({ path: appendPath(path, k), type: 'added' });
+                    else if (!(k in b)) diffs.push({ path: appendPath(path, k), type: 'removed' });
+                    else diffs.push(...computeDiffs(a[k], b[k], appendPath(path, k)));
                 }
             }
             return diffs;
@@ -7646,7 +7410,7 @@
 
         // ============ SCHEMA VALIDATION ============
         function showSchema() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             document.getElementById('schemaOverlay').classList.add('visible');
             document.getElementById('schemaModal').classList.add('visible');
             const schema = inferSchema(jsonData);
@@ -7669,8 +7433,8 @@
                 return { type: 'array', items: merged, count: data.length };
             }
             if (typeof data === 'object') {
-                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
-                const properties = {};
+                const keys = Object.keys(data);
+                const properties = Object.create(null);
                 for (const k of keys) {
                     properties[k] = inferSchema(data[k], depth + 1);
                 }
@@ -7685,8 +7449,8 @@
                 const first = schemas[0];
                 if (first.type === 'object') {
                     // Merge all object properties
-                    const allProps = {};
-                    const keyCounts = {};
+                    const allProps = Object.create(null);
+                    const keyCounts = Object.create(null);
                     for (const s of schemas) {
                         if (s.properties) {
                             for (const k of Object.keys(s.properties)) {
@@ -7696,7 +7460,7 @@
                             }
                         }
                     }
-                    const mergedProps = {};
+                    const mergedProps = Object.create(null);
                     for (const k of Object.keys(allProps)) {
                         mergedProps[k] = mergeSchemas(allProps[k]);
                         mergedProps[k].__required = keyCounts[k] === schemas.length;
@@ -7749,7 +7513,7 @@
 
         // ============ BULK OPERATIONS ============
         function showBulk() {
-            if (!jsonData) return;
+            if ((jsonData === undefined)) return;
             document.getElementById('bulkOverlay').classList.add('visible');
             document.getElementById('bulkModal').classList.add('visible');
             document.getElementById('bulkPreview').style.display = 'none';
@@ -7800,7 +7564,7 @@
                     if (typeof item === 'object' && item !== null) countBulkMatches(item, op, key, count);
                 }
             } else {
-                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
+                const keys = Object.keys(data);
                 for (const k of keys) {
                     if (k === key) count.n++;
                     if (typeof data[k] === 'object' && data[k] !== null) countBulkMatches(data[k], op, key, count);
@@ -7810,57 +7574,21 @@
         }
         function bulkApply() {
             const op = document.getElementById('bulkOp').value;
-            const keyFrom = document.getElementById('bulkKeyFrom').value.trim();
-            const keyTo = document.getElementById('bulkKeyTo').value.trim();
-            const newValueStr = document.getElementById('bulkNewValue').value.trim();
-            if (!keyFrom) { showNotification('Bitte Key-Name eingeben'); return; }
-            saveUndoState();
-            let count = 0;
-            function walk(data) {
-                if (data === null || typeof data !== 'object') return;
-                if (Array.isArray(data)) {
-                    for (const item of data) walk(item);
-                    return;
+            const from = document.getElementById('bulkKeyFrom').value.trim();
+            const to = document.getElementById('bulkKeyTo').value.trim();
+            const value = document.getElementById('bulkNewValue').value.trim();
+            const snapshot = JSON.parse(JSON.stringify(jsonData));
+            try {
+                const count = JsonCore.bulkEdit(jsonData, op, from, to, value);
+                if (count) {
+                    undoStack.push({ path: 'root', snapshot });
+                    if (undoStack.length > MAX_UNDO) undoStack.shift();
+                    redoStack = [];
+                    markModified(); updateUndoButtons(); renderTree();
                 }
-                const keys = Object.keys(data).filter(k => k !== '__size' && k !== '__depthSizes');
-                for (const k of keys) {
-                    if (k === keyFrom) {
-                        if (op === 'renameKey' && keyTo) {
-                            data[keyTo] = data[k];
-                            delete data[k];
-                            count++;
-                        } else if (op === 'deleteKey') {
-                            delete data[k];
-                            count++;
-                        } else if (op === 'replaceValue') {
-                            try {
-                                const newVal = JSON.parse(newValueStr);
-                                data[k] = newVal;
-                                count++;
-                            } catch(e) { /* skip */ }
-                        }
-                    }
-                    if (typeof data[k] === 'object' && data[k] !== null) walk(data[k]);
-                }
-                if (op === 'addKey' && !data.hasOwnProperty(keyFrom)) {
-                    // addKey: only add to objects that don't already have the key
-                }
-                if (op === 'addKey' && typeof data === 'object' && !Array.isArray(data)) {
-                    if (!data.hasOwnProperty(keyFrom)) {
-                        try {
-                            data[keyFrom] = JSON.parse(newValueStr || 'null');
-                            count++;
-                        } catch(e) { data[keyFrom] = null; count++; }
-                    }
-                }
-            }
-            walk(jsonData);
-            totalExpandedCount = computeSubtreeSizes(jsonData);
-            renderTree();
-            isModified = true;
-            document.title = '● ' + fileName + ' – JSON Viewer';
-            showNotification(`${count} Änderungen angewendet`);
-            hideBulk();
+                showNotification(`${count} Änderungen angewendet`);
+                hideBulk();
+            } catch (error) { showNotification(error.message, 'error'); }
         }
         document.getElementById('bulkOp').onchange = updateBulkUI;
         document.getElementById('btnBulk').onclick = showBulk;
@@ -8105,35 +7833,10 @@
 
                 const startTime = performance.now();
                 const data = parseJSON(text);
-                jsonData = data;
-                currentFilePath = null;
-                fileName = parsedUrl.pathname.split('/').filter(Boolean).pop() || 'api-response.json';
-                fileSize = size;
-                wasConcatenated = false;
-                originalIndent = '  ';
-                originalCrlf = false;
-                expandedPaths = new Set(['root']);
-                expandAllMode = false;
-                window._collapsedInExpandAll = new Set();
-                searchMatches = [];
-                currentMatchIndex = -1;
-                selectedPath = null;
-                selectedIndex = -1;
-                isModified = false;
-                currentExpandLevel = 1;
-                maxDepth = calculateMaxDepth(jsonData, 50);
-                undoStack = [];
-                redoStack = [];
-                updateUndoButtons();
-                loadBookmarksForFile();
-                totalExpandedCount = computeSubtreeSizes(jsonData);
-                const parseTime = performance.now() - startTime;
-                updateTitle();
-                updateStatusBar(totalExpandedCount, parseTime, parseTime);
-                enableButtons();
-                scrollTop = 0;
-                updateLevelDisplay();
-                renderTree();
+                await queueDocumentOperation(() => finalizeLoad({ jsonData: data,
+                    name: parsedUrl.pathname.split('/').filter(Boolean).pop() || 'api-response.json',
+                    fileSize: size, nodeCount: 0, parseTime: performance.now() - startTime,
+                    indent: '  ', crlf: false }, null, startTime));
                 showNotification('JSON von URL geladen');
                 activeRestController = null;
                 hideRestClient();
@@ -8218,7 +7921,7 @@
                 else if (e.key === 'l' && e.shiftKey) { e.preventDefault(); showGotoLineDialog(); }
                 else if (e.key === 'l' && !e.shiftKey) { e.preventDefault(); showMatchList(); }
                 else if (e.key === 'e') { e.preventDefault(); expandAll(); }
-                else if (e.key === 'w' && jsonData) { e.preventDefault(); collapseAll(); }
+                else if (e.key === 'w') { e.preventDefault(); closeDocument(activeDocumentId); }
                 else if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
                 else if (e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
                 else if (e.key === 'y') { e.preventDefault(); redo(); }
@@ -8229,7 +7932,7 @@
                 else if (e.key === 'r' && !e.shiftKey) { e.preventDefault(); showRawView(); }
                 else if (e.key === 'j') { e.preventDefault(); toggleJsonPathBar(); }
                 else if (e.key === 'd') { e.preventDefault(); showDiffView(); }
-            } else if (jsonData) {
+            } else if (jsonData !== undefined) {
                 if (e.key === '+' || e.key === '=') { e.preventDefault(); expandLevel(); }
                 else if (e.key === '-') { e.preventDefault(); collapseLevel(); }
             }
@@ -8266,5 +7969,6 @@
             });
         })();
     </script>
+    <script src="workspace.js"></script>
 </body>
 </html>

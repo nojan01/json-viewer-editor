@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+/package-lock.json
 
 # Build outputs
 target/
@@ -21,3 +21,6 @@ dist/
 # Logs
 *.log
 .build/
+
+# Private update signing key (never commit)
+.updater/

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "JSON Viewer",
-  "version": "1.3.7",
+  "version": "1.4.1",
   "identifier": "com.jsonviewer.editor",
   "build": {
     "frontendDist": "../web"
@@ -37,6 +37,12 @@
           "required": false
         }
       ]
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2RTM1NEE0N0FBQTk5OUUKUldTZW1hcDZwRlRqdHVlNCtzMjVBVVdUK3QzdVlVN2k5c3kyeTNFdWRSV3BMNFFYaE9MTFN5dGcK",
+      "endpoints": [
+        "https://github.com/nojan01/json-viewer-editor/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {
@@ -51,7 +57,9 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["json"],
+        "ext": [
+          "json"
+        ],
         "mimeType": "application/json",
         "description": "JSON File",
         "role": "Editor"
@@ -60,9 +68,18 @@
     "macOS": {
       "minimumSystemVersion": "10.15",
       "dmg": {
-        "appPosition": { "x": 180, "y": 170 },
-        "applicationFolderPosition": { "x": 480, "y": 170 },
-        "windowSize": { "width": 660, "height": 400 }
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
       }
     },
     "linux": {
@@ -80,6 +97,7 @@
       "rpm": {
         "release": "1"
       }
-    }
+    },
+    "createUpdaterArtifacts": true
   }
 }

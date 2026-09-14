@@ -34,6 +34,9 @@ if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
 fi
 
 export APPLE_SIGNING_IDENTITY
+export TAURI_SIGNING_PRIVATE_KEY="${TAURI_SIGNING_PRIVATE_KEY:-$PWD/.updater/json-viewer.key}"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+
 
 echo "Building and signing ${APP_NAME} ${VERSION}..."
 npm run build
@@ -81,5 +84,21 @@ spctl --assess --type execute --verbose=4 "$APP_PATH"
 spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
 
 rm -f "$APP_ARCHIVE"
+
+# The app was re-signed and stapled after Tauri bundled it. Recreate and sign
+# the updater archive from that FINAL app, never publish the earlier archive.
+UPDATER_ARCHIVE="$BUILD_DIR/macos/${APP_NAME}.app.tar.gz"
+tar -czf "$UPDATER_ARCHIVE" -C "$BUILD_DIR/macos" "${APP_NAME}.app"
+if [ -f "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+    TAURI_PRIVATE_KEY_PASSWORD="$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+        npx tauri signer sign --private-key-path "$TAURI_SIGNING_PRIVATE_KEY" "$UPDATER_ARCHIVE"
+else
+    TAURI_PRIVATE_KEY="$TAURI_SIGNING_PRIVATE_KEY" \
+    TAURI_PRIVATE_KEY_PASSWORD="$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+        npx tauri signer sign "$UPDATER_ARCHIVE"
+fi
+UPDATER_ARCH="${DMG_ARCH/x64/x86_64}"
+node scripts/create-updater-manifest.cjs "$VERSION" "$BUILD_DIR" "$BUILD_DIR/latest.json" \
+    "darwin-${UPDATER_ARCH}=$UPDATER_ARCHIVE"
 
 echo "Release ready: $DMG_PATH"

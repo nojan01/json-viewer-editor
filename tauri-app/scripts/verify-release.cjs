@@ -1,0 +1,12 @@
+const fs = require('node:fs');
+const {execFileSync} = require('node:child_process');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const pkg = JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+const config = JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json'),'utf8'));
+const cargo = fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8').match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+const tag = process.env.RELEASE_TAG;
+if (tag !== `v${pkg.version}` || config.version !== pkg.version || cargo !== pkg.version) throw new Error('Release-Tag und Paketversionen stimmen nicht überein');
+const git = args => execFileSync('git', args, {cwd:root,encoding:'utf8'}).trim();
+if (git(['rev-parse','HEAD']) !== git(['rev-parse',`refs/tags/${tag}^{commit}`])) throw new Error('Build-Commit stimmt nicht mit dem Release-Tag überein');
+console.log(`Release verified: ${tag}`);

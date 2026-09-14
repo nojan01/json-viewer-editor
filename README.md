@@ -21,6 +21,8 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 ## Features
 
 ### Kernfunktionen
+- **Datei-Tabs** — Mehrere Dateien gleichzeitig öffnen, mit eigenem Undo/Redo-Verlauf, Auswahl und Scrollposition
+- **Zuletzt geöffnet & Sitzungswiederherstellung** — Lokale Dateipfade und Baumansichten werden wiederhergestellt; weitere Tabs laden ihre Daten erst beim Aktivieren
 - 📂 **JSON-Dateien öffnen** — Per Menü, Drag & Drop oder "Öffnen mit"
 - 🌳 **Baumansicht** — Hierarchische Darstellung mit auf-/zuklappbaren Knoten und virtuelles Scrolling für große Dateien (>100 MB)
 - ✏️ **Inline-Bearbeitung** — Werte direkt im Baum editieren mit Undo/Redo (⌘Z / ⌘⇧Z)
@@ -35,6 +37,9 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 - 🏷️ **Lesezeichen** — Wichtige Stellen markieren und schnell wiederfinden (⌘B)
 
 ### Tabellenansicht & Export
+- **Spalten & Filter** — Spalten ausblenden, verschieben und links fixieren; kombinierbare Filter für Text, Gleichheit, Zahlen, fehlende Felder und leere Werte
+- **Ansichtsbezogener Excel-Export** — Exportiert die sichtbaren Spalten in ihrer Reihenfolge und alle gefilterten Zeilen
+- **Maskierter JSON-Export** — Feldnamen auf allen Ebenen auswählen, Ersatztext und Vorschau prüfen, separate Kopie exportieren; offene Quelldateien sind vor Überschreiben geschützt
 - 📊 **Tabellenansicht** — Arrays als Tabelle mit virtuellem Scrolling, automatischem Flattening verschachtelter Objekte und Spaltenfilter (⌘T)
 - 📥 **Excel-Export** — Tabellenansicht direkt als .xlsx exportieren (SheetJS)
 - 📤 **CSV-Export** — Daten als CSV exportieren
@@ -56,6 +61,12 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
   - **Authentifizierung**: Basic Auth, Bearer Token, API Key
   - Custom Headers und Request Body
   - Passwort-/Token-Felder mit Sichtbarkeits-Toggle
+
+### Updates
+- **Wie bei DualBeam** — Stille Prüfung beim Start, manuelle Prüfung über „Updates“ oder das Hilfe-Menü, Installation nach Zustimmung mit Fortschritt und Neustart
+- Signierte Updatepakete für macOS, Windows und Linux-AppImage; DEB/RPM werden über die jeweiligen Installationspakete aktualisiert
+- Ungespeicherte Änderungen werden vor Schließen, Beenden und Updateinstallation abgefragt
+- Einrichtung und Release-Ablauf: [UPDATE-RELEASE.md](tauri-app/UPDATE-RELEASE.md)
 
 ### Darstellung
 - 🎨 **Raw-Ansicht** — Formatiertes JSON mit Syntax-Highlighting (⌘R)
@@ -112,7 +123,7 @@ Siehe auch [INSTALL-LINUX.md](tauri-app/INSTALL-LINUX.md) für Details.
 | ⌘Z | Rückgängig |
 | ⌘⇧Z | Wiederholen |
 | ⌘E | Alle aufklappen |
-| ⌘W | Alle zuklappen |
+| ⌘W | Aktuellen Tab schließen |
 | ⌘T | Tabellenansicht |
 | ⌘R | Raw-Ansicht |
 | ⌘J | JSONPath-Abfrage |
@@ -185,11 +196,29 @@ json-viewer-editor/
 
 ## Technologie
 
-- **Frontend:** HTML, CSS, JavaScript (Vanilla) — Single-File Architecture
+- **Frontend:** HTML, CSS, JavaScript (Vanilla); Oberfläche in `index.html`, testbare JSON-Operationen in `json-core.js`
 - **Backend:** Rust mit Tauri 2.x
 - **Plugins:** tauri-plugin-dialog, tauri-plugin-fs, tauri-plugin-cli
 - **Excel-Export:** SheetJS (xlsx)
 - **CI/CD:** GitHub Actions (Windows, Linux, macOS)
+
+## Tests und Release-Prüfung
+
+Im Verzeichnis `tauri-app`:
+
+```sh
+npm ci
+npm test
+cd src-tauri
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+```
+
+Die Regressionstests prüfen unter anderem Schlüssel mit Sonderzeichen, unveränderte Nutzdaten, einfache JSON-Wurzelwerte, verkettetes JSON, Bulk-Operationen, Speichern und die Navigation durch 205.265 Tabellenzeilen. GitHub Actions führt die Tests auf macOS, Windows und Linux aus.
+
+Der Release-Workflow baut den angegebenen Tag statt des aktuellen Branches. Tag, `package.json`, `tauri.conf.json` und `Cargo.toml` müssen dieselbe Version nennen. Neue Releases benötigen einen Tag, der auch die Prüfskripte und Tests enthält; ältere Tags enthalten diese Änderungen noch nicht.
+
+Die separate Web-App wurde entfernt; die HTML-Oberfläche der Tauri-Desktop-App bleibt Bestandteil des Projekts. Details und Prüfgrenzen stehen in [REVIEW-TODO.md](REVIEW-TODO.md).
 
 ## Lizenz
 
@@ -198,6 +227,14 @@ Dieses Projekt steht unter der [MIT License](LICENSE). Der Quellcode darf damit 
 Das App-Icon ist eigen erstellt und lizenzfrei.
 
 ## Changelog
+
+### v1.4.1
+- Erweiterte Tabellenansicht mit Spaltensteuerung und kombinierten Filtern
+- Datei-Tabs, zuletzt geöffnete Dateien und Wiederherstellung der Baumansicht
+- Maskierter Export mit Vorschau und Schutz der Quelldateien
+- Signierter In-App-Updater mit eigenem Button in der oberen Werkzeugleiste
+- Getrennte Dokumentzustände und Schutz ungespeicherter Änderungen
+- Große formatierte JSON-Dateien werden direkt geladen; eine 406-MiB-Testdatei benötigt auf Apple Silicon rund zwei Sekunden
 
 ### v1.3.7 (August 2026)
 - **Große Tabellen** — Segmentierter virtueller Scroller zeigt auch in macOS-WKWebView alle Zeilen großer Datensätze an
