@@ -38,3 +38,32 @@
 .table-scroll thead tr { height:35px; }
 .table-scroll th { overflow:hidden; text-overflow:ellipsis; }
 .workspace-bar button:disabled { opacity:0.5; cursor:default; }
+
+/* Keep WebKitGTK's native light control surface out of the themed workspace.
+   Retain the native select's keyboard handling and supply a CSS-only arrow. */
+:root.platform-linux .workspace-bar select,
+:root.platform-linux .column-panel select {
+  -webkit-appearance:none;
+  appearance:none;
+  color-scheme:dark;
+  background-color:var(--bg-secondary);
+  color:var(--text-primary);
+  padding-right:26px;
+  background-image:linear-gradient(45deg, transparent 50%, currentColor 50%),
+                   linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:calc(100% - 13px) 50%, calc(100% - 8px) 50%;
+  background-size:5px 5px;
+  background-repeat:no-repeat;
+}
+:root.platform-linux.light .workspace-bar select,
+:root.platform-linux.light .column-panel select { color-scheme:light; }
+:root.platform-linux .workspace-bar select option,
+:root.platform-linux .column-panel select option {
+  background-color:var(--bg-secondary);
+  color:var(--text-primary);
+}
+:root.platform-linux .workspace-bar select:focus-visible,
+:root.platform-linux .column-panel select:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
