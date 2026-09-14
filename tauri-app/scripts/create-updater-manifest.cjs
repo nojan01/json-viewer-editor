@@ -11,7 +11,9 @@ function createManifest(version, entries, notes = `JSON Viewer ${version}`) {
         if (!artifact.endsWith(expectedExtension) || !fs.statSync(artifact).size) throw new Error(`Invalid updater artifact: ${artifact}`);
         const signature = fs.readFileSync(`${artifact}.sig`, 'utf8').trim();
         if (!signature || !/^[A-Za-z0-9+/=\r\n]+$/.test(signature)) throw new Error(`Missing or malformed signature: ${artifact}`);
-        const name = path.basename(artifact);
+        // GitHub normalizes spaces in uploaded release asset names to dots.
+        // Generate the URL from that published name rather than the local path.
+        const name = path.basename(artifact).replaceAll(' ', '.');
         if (assetNames.has(name)) throw new Error(`Release asset filename collision: ${name}`);
         assetNames.add(name);
         platforms[platform] = { signature, url: `https://github.com/nojan01/json-viewer-editor/releases/download/v${version}/${encodeURIComponent(name)}` };

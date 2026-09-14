@@ -116,7 +116,7 @@ test('release manifest requires a signature for every platform and correct artif
         assert.throws(()=>createManifest('1.4.0',[['darwin-aarch64',artifact]]));
         fs.writeFileSync(artifact+'.sig',Buffer.from('test-only-signature').toString('base64'));
         const manifest=createManifest('1.4.0',[['darwin-aarch64',artifact]]);
-        assert.equal(manifest.version,'1.4.0'); assert.ok(manifest.platforms['darwin-aarch64'].url.endsWith('JSON%20Viewer.app.tar.gz'));
+        assert.equal(manifest.version,'1.4.0'); assert.ok(manifest.platforms['darwin-aarch64'].url.endsWith('JSON.Viewer.app.tar.gz'));
         assert.throws(()=>createManifest('1.4.0',[['windows-x86_64',artifact]]));
         assert.throws(()=>createManifest('bad',[]));
         assert.throws(()=>createManifest('1.4.0',[]));
