@@ -1,4 +1,6 @@
 /* Desktop workspace features; shares the editor's state without copying document data. */
+// WebKitGTK native select painting can override the app's theme colors.
+document.documentElement.classList.toggle('platform-linux', /Linux/i.test(navigator.platform));
 const wx = (de, en) => currentLang === 'en' ? en : de;
 const byId = id => document.getElementById(id);
 let documents = [], activeDocumentId = null, nextDocumentId = 1, documentBeingLoaded = null;
