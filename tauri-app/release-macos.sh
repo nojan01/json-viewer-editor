@@ -88,7 +88,9 @@ rm -f "$APP_ARCHIVE"
 # The app was re-signed and stapled after Tauri bundled it. Recreate and sign
 # the updater archive from that FINAL app, never publish the earlier archive.
 UPDATER_ARCHIVE="$BUILD_DIR/macos/${APP_NAME}.app.tar.gz"
-tar -czf "$UPDATER_ARCHIVE" -C "$BUILD_DIR/macos" "${APP_NAME}.app"
+# macOS tar otherwise stores extended attributes as hidden AppleDouble entries
+# such as `._JSON Viewer.app`; Tauri rejects that extra archive root on update.
+COPYFILE_DISABLE=1 tar -czf "$UPDATER_ARCHIVE" -C "$BUILD_DIR/macos" "${APP_NAME}.app"
 if [ -f "$TAURI_SIGNING_PRIVATE_KEY" ]; then
     env -u TAURI_SIGNING_PRIVATE_KEY \
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
