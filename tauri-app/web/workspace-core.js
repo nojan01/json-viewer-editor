@@ -71,10 +71,18 @@
             const rules = Array.isArray(item.rules) ? item.rules.filter(rule =>
                 rule && typeof rule.column === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string'
             ).slice(0, 200).map(rule => ({ column: rule.column, op: rule.op, value: rule.value })) : [];
+            const tree = item.tree && typeof item.tree === 'object' ? {
+                expanded: strings(item.tree.expanded), collapsed: strings(item.tree.collapsed),
+                expandAllMode: item.tree.expandAllMode === true,
+                expandDepth: Number.isInteger(item.tree.expandDepth) && item.tree.expandDepth > 0 ? item.tree.expandDepth : null,
+                level: Number.isInteger(item.tree.level) && item.tree.level > 0 ? item.tree.level : 1,
+                lineNumbers: item.tree.lineNumbers === true, minimap: item.tree.minimap === true,
+                indentGuides: item.tree.indentGuides !== false
+            } : null;
             result.push({ name, columns: strings(item.columns), hidden: strings(item.hidden), pinned: strings(item.pinned), rules,
                 filter: typeof item.filter === 'string' ? item.filter.slice(0, 1000) : '',
                 jsonPath: typeof item.jsonPath === 'string' ? item.jsonPath.slice(0, 2000) : '',
-                sortColumn: typeof item.sortColumn === 'string' ? item.sortColumn : null, sortAscending: item.sortAscending !== false });
+                sortColumn: typeof item.sortColumn === 'string' ? item.sortColumn : null, sortAscending: item.sortAscending !== false, tree });
         }
         return result;
     }

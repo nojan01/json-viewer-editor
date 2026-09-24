@@ -65,15 +65,12 @@ function beginDocument() {
 function finishDocument() {
     const doc = documents.find(d => d.id === activeDocumentId);
     if (doc?.view) applyViewState(doc.view);
+    const activeView = savedViews.find(view => view.name === activeSavedViewName);
+    if (activeView) applySavedView(activeView, false);
     stashDocument();
     if (currentFilePath) {
         recentFiles = [currentFilePath, ...recentFiles.filter(p => p !== currentFilePath)].slice(0, 12);
         writePreference('json-viewer-recent', recentFiles);
-    }
-    const activeView = savedViews.find(view => view.name === activeSavedViewName);
-    if (activeView) {
-        byId('jsonpathInput').value = activeView.jsonPath;
-        if (activeView.jsonPath) { byId('jsonpathBar').classList.add('visible'); setTimeout(executeJsonPath, 0); }
     }
     renderDocumentTabs(); persistWorkspace(); updateUndoButtons(); updateSearchOptionButtons();
 }
@@ -312,13 +309,30 @@ function persistSavedViews() {
 function captureSavedView(name) {
     return { name, columns: [...tableAllColumns], hidden: [...tableHiddenColumns], pinned: [...tablePinnedColumns],
         rules: tableColumnRules.map(rule => ({...rule})), filter: byId('tableFilterInput').value,
-        jsonPath: byId('jsonpathInput').value.trim(), sortColumn: tableSortCol, sortAscending: tableSortAsc };
+        jsonPath: byId('jsonpathInput').value.trim(), sortColumn: tableSortCol, sortAscending: tableSortAsc,
+        tree: { expanded: [...expandedPaths], collapsed: [...(window._collapsedInExpandAll || [])], expandAllMode,
+            expandDepth: Number.isFinite(expandAllDepthLimit) ? expandAllDepthLimit : null, level: currentExpandLevel,
+            lineNumbers: showLineNumbers, minimap: showMinimap, indentGuides: showIndentGuides } };
+}
+function applySavedTree(tree) {
+    if (!tree) return;
+    expandedPaths = new Set(tree.expanded.length ? tree.expanded : ['root']);
+    window._collapsedInExpandAll = new Set(tree.collapsed); expandAllMode = tree.expandAllMode;
+    expandAllDepthLimit = tree.expandDepth ?? Infinity;
+    currentExpandLevel = Math.max(1,Math.min(maxDepth || tree.level,tree.level));
+    showLineNumbers = tree.lineNumbers; showMinimap = tree.minimap; showIndentGuides = tree.indentGuides;
+    byId('btnLineNum').style.opacity = showLineNumbers ? '1' : '0.5';
+    byId('btnMinimap').style.opacity = showMinimap ? '1' : '0.5';
+    byId('btnGuides').style.opacity = showIndentGuides ? '1' : '0.5';
+    byId('minimap').style.display = showMinimap ? 'block' : 'none'; minimapNeedsRedraw = true;
+    updateLevelDisplay(); renderTree(); if (showMinimap) requestAnimationFrame(updateMinimap);
 }
 function applySavedView(view, notify = true) {
     if (!view) return;
     activeSavedViewName = view.name; writePreference('json-viewer-active-view', activeSavedViewName);
     byId('jsonpathInput').value = view.jsonPath || '';
     if (view.jsonPath) { byId('jsonpathBar').classList.add('visible'); executeJsonPath(); }
+    applySavedTree(view.tree);
     if (tableAllColumns.length) {
         const applied = WorkspaceCore.applySavedView(view, tableAllColumns);
         tableAllColumns = applied.columns; tableHiddenColumns = new Set(applied.hidden);
@@ -332,7 +346,7 @@ function applySavedView(view, notify = true) {
 }
 function showSavedViews() {
     const dialog = document.createElement('dialog'); dialog.className = 'workspace-dialog';
-    dialog.innerHTML = `<h3>${wx('Gespeicherte Ansichten und Abfragen','Saved views and queries')}</h3><p>${wx('Speichert Spaltenauswahl, Reihenfolge, Fixierungen, Tabellenfilter, Sortierung und JSONPath. Die aktive Ansicht wird beim nächsten Dokument wiederverwendet.','Saves column selection, order, pins, table filters, sorting and JSONPath. The active view is reused for the next document.')}</p><div class="saved-view-form"><input class="saved-view-name" maxlength="80" placeholder="${wx('Name der Ansicht','View name')}"><button class="saved-view-save primary">${wx('Aktuelle Ansicht speichern','Save current view')}</button></div><div class="saved-view-list"></div><div class="dialog-actions"><button class="saved-view-none">${wx('Aktive Ansicht lösen','Clear active view')}</button><button class="saved-view-close">${wx('Schließen','Close')}</button></div>`;
+    dialog.innerHTML = `<h3>${wx('Gespeicherte Ansichten und Abfragen','Saved views and queries')}</h3><p>${wx('Speichert Spalten, Filter, Sortierung, JSONPath, aufgeklappte Baumebenen, Zeilennummern, Minimap und Einrückungslinien. Die aktive Ansicht wird beim nächsten Dokument wiederverwendet.','Saves columns, filters, sorting, JSONPath, expanded tree levels, line numbers, minimap and indentation guides. The active view is reused for the next document.')}</p><div class="saved-view-form"><input class="saved-view-name" maxlength="80" placeholder="${wx('Name der Ansicht','View name')}"><button class="saved-view-save primary">${wx('Aktuelle Ansicht speichern','Save current view')}</button></div><div class="saved-view-list"></div><div class="dialog-actions"><button class="saved-view-none">${wx('Aktive Ansicht lösen','Clear active view')}</button><button class="saved-view-close">${wx('Schließen','Close')}</button></div>`;
     const list = dialog.querySelector('.saved-view-list'), nameInput = dialog.querySelector('.saved-view-name');
     const render = () => {
         list.replaceChildren();
@@ -340,7 +354,7 @@ function showSavedViews() {
         for (const view of savedViews) {
             const row = document.createElement('div'); row.className = `saved-view-row${view.name === activeSavedViewName ? ' active' : ''}`;
             const info = document.createElement('div'), title = document.createElement('strong'), detail = document.createElement('small');
-            title.textContent = view.name; detail.textContent = `${view.columns.length - view.hidden.length}/${view.columns.length} ${wx('Spalten','columns')} · ${view.rules.length} ${wx('Filter','filters')}${view.jsonPath ? ' · JSONPath' : ''}`; info.append(title,detail);
+            title.textContent = view.name; detail.textContent = `${view.columns.length - view.hidden.length}/${view.columns.length} ${wx('Spalten','columns')} · ${view.rules.length} ${wx('Filter','filters')}${view.jsonPath ? ' · JSONPath' : ''}${view.tree ? ` · ${wx('Baumebene','tree level')} ${view.tree.level}` : ''}`; info.append(title,detail);
             const apply = document.createElement('button'); apply.textContent = wx('Anwenden','Apply'); apply.onclick = () => { applySavedView(view); render(); };
             const remove = document.createElement('button'); remove.textContent = wx('Löschen','Delete'); remove.onclick = () => { savedViews = savedViews.filter(item => item.name !== view.name); if (activeSavedViewName === view.name) activeSavedViewName = null; persistSavedViews(); render(); };
             row.append(info,apply,remove); list.append(row);

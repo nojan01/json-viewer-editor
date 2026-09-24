@@ -62,12 +62,13 @@ test('restored view preferences reject invalid scroll positions and contain no d
     assert.equal(view.scrollTop,123); assert.equal('data' in view,false);
 });
 test('saved views are sanitized and map only compatible columns onto the next file', () => {
-    const views = core.safeSavedViews([{name:' Server ',columns:['id','host'],hidden:['host'],pinned:['id'],rules:[{column:'host',op:'contains',value:'prod'}],filter:'active',jsonPath:'$.servers[*]',sortColumn:'id',sortAscending:false},{name:' Server ',columns:[]}]);
+    const views = core.safeSavedViews([{name:' Server ',columns:['id','host'],hidden:['host'],pinned:['id'],rules:[{column:'host',op:'contains',value:'prod'}],filter:'active',jsonPath:'$.servers[*]',sortColumn:'id',sortAscending:false,tree:{expanded:['root','root.servers'],collapsed:['root.servers[2]'],expandAllMode:true,expandDepth:3,level:3,lineNumbers:true,minimap:true,indentGuides:false}},{name:' Server ',columns:[]}]);
     assert.equal(views.length,1); assert.equal(views[0].name,'Server');
     const applied = core.applySavedView(views[0],['host','id','region']);
     assert.deepEqual(applied.columns,['id','host','region']); assert.deepEqual(applied.hidden,['host']);
     assert.deepEqual(applied.pinned,['id']); assert.equal(applied.rules.length,1);
     assert.equal(applied.sortColumn,'id'); assert.equal(applied.sortAscending,false);
+    assert.deepEqual(views[0].tree,{expanded:['root','root.servers'],collapsed:['root.servers[2]'],expandAllMode:true,expandDepth:3,level:3,lineNumbers:true,minimap:true,indentGuides:false});
     assert.equal(core.safeSavedViews({}).length,0);
 });
 test('keyed comparison ignores order and selected fields while preserving typed keys', () => {
