@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.4.1"
+version = "1.4.2"
 description = "A fast, cross-platform JSON viewer and editor"
 authors = ["Norbert Jander"]
 license = "MIT"

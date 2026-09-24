@@ -1,4 +1,4 @@
-# Updates und Release 1.4.1
+# Updates und Release 1.4.2
 
 Die App prüft beim Start still auf Updates. Über den „Update“-Button rechts neben „?“ in der oberen Werkzeugleiste oder über „Hilfe → Nach Updates suchen…“ wird die Prüfung manuell gestartet. Eine gefundene Version wird erst nach Zustimmung heruntergeladen. Ungespeicherte Tabs müssen zuvor gespeichert oder ausdrücklich verworfen werden. Signaturfehler brechen die Installation ab; nach erfolgreicher Installation erfolgt der Neustart. Windows startet dazu seinen Installer.
 
@@ -33,7 +33,7 @@ Der Release-Workflow baut Windows x64, Windows ARM64, Linux x64 und macOS Apple 
 
 `release-macos.sh` erzeugt das Updater-Archiv **nach** der abschließenden Signierung und dem Stapeln des Apple-Tickets neu. Anschließend wird genau dieses Archiv signiert. Das lokal erzeugte `latest.json` enthält nur macOS und darf nicht ungeprüft das gemeinsame Manifest eines plattformübergreifenden Releases ersetzen.
 
-Für ein Release müssen Paketversionen und Git-Tag übereinstimmen. Der Workflow baut den Tag und prüft ihn vorab. Die Implementierung ist auf 1.4.1 gesetzt.
+Für ein Release müssen Paketversionen und Git-Tag übereinstimmen. Der Workflow baut den Tag und prüft ihn vorab. Die Implementierung ist auf 1.4.2 gesetzt.
 
 ## Validierung
 
@@ -54,6 +54,8 @@ Die Tests decken unter anderem kombinierte Tabellenfilter, Datentypen, Maskierun
 
 ## Verhalten der neuen Funktionen
 
-Spalteneinstellungen und Tabellenfilter bleiben im geöffneten Tab erhalten. Beim Beenden werden ausschließlich Dateipfade und Baumnavigation gespeichert, keine JSON-Nutzdaten, Suchtexte oder Undo-Snapshots. Beim nächsten Start wird zunächst die zuletzt aktive lokale Datei geladen; andere Tabs laden bei Auswahl. Änderungen werden nicht automatisch auf die Festplatte geschrieben. Dateien aus dem Browser-Dateidialog oder REST-Antworten ohne lokalen Pfad lassen sich erst nach Speichern als lokale Datei in einer späteren Sitzung wiederherstellen.
+Spalteneinstellungen und Tabellenfilter bleiben im geöffneten Tab erhalten. Benannte Ansichten speichern zusätzlich Spaltenauswahl und -reihenfolge, Filter, Sortierung, JSONPath, aufgeklappte Baumebenen sowie Zeilennummern, Minimap und Einrückungslinien. Die zuletzt angewendete Ansicht wird auf die nächste Datei übertragen. JSON-Nutzdaten sind nicht Bestandteil einer Ansicht. Beim Beenden werden ausschließlich Dateipfade und Baumnavigation gespeichert, keine JSON-Nutzdaten, Suchtexte oder Undo-Snapshots. Beim nächsten Start wird zunächst die zuletzt aktive lokale Datei geladen; andere Tabs laden bei Auswahl. Änderungen werden nicht automatisch auf die Festplatte geschrieben. Dateien aus dem Browser-Dateidialog oder REST-Antworten ohne lokalen Pfad lassen sich erst nach Speichern als lokale Datei in einer späteren Sitzung wiederherstellen.
+
+Der intelligente Dateivergleich ordnet Objekt-Datensätze über ein ausgewähltes eindeutiges Feld wie `id` oder `hostname` zu. Die Reihenfolge der Datensätze beeinflusst das Ergebnis nicht. Ausgewählte Felder und verschachtelte Pfade können ignoriert werden; einzelne Feldänderungen sowie vollständige hinzugefügte oder entfernte Datensätze lassen sich mit Undo-Unterstützung in die aktuelle Datei übernehmen.
 
 Der maskierte Export arbeitet auf dem gesamten JSON-Dokument. Er ersetzt exakt ausgewählte Feldnamen auf allen Ebenen, auch in Arrays; ein ausgewähltes Objektfeld wird als Ganzes ersetzt. Der Ersatz ist immer ein JSON-String. Die Vorschau ist bei großen Dateien gekürzt, der Export vollständig. Verkettete Eingaben werden dabei als ein JSON-Array exportiert. Die Funktion behauptet keine automatische Erkennung aller personenbezogenen Daten.

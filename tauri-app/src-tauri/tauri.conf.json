@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "JSON Viewer",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "identifier": "com.jsonviewer.editor",
   "build": {
     "frontendDist": "../web"
