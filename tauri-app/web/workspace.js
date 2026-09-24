@@ -14,9 +14,12 @@ function writePreference(key, value) { try { localStorage.setItem(key, JSON.stri
 let recentFiles = readPreference('json-viewer-recent', []);
 if (!Array.isArray(recentFiles)) recentFiles = [];
 recentFiles = recentFiles.filter(p => typeof p === 'string').slice(0, 12);
+let savedViews = WorkspaceCore.safeSavedViews(readPreference('json-viewer-saved-views', []));
+let activeSavedViewName = readPreference('json-viewer-active-view', null);
+if (!savedViews.some(view => view.name === activeSavedViewName)) activeSavedViewName = null;
 const workspaceBar = document.createElement('div');
 workspaceBar.className = 'workspace-bar';
-workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><button id="btnMaskedExport"></button>';
+workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><select id="savedViewSelect" class="saved-view-select" aria-label="Gespeicherte Ansicht"></select><button id="btnManageViews"></button><button id="btnMaskedExport"></button>';
 // Place below the toolbar, above search and document contents.
 const toolbar = document.querySelector('.toolbar');
 (toolbar || treeContainer).insertAdjacentElement('afterend', workspaceBar);
@@ -67,6 +70,11 @@ function finishDocument() {
         recentFiles = [currentFilePath, ...recentFiles.filter(p => p !== currentFilePath)].slice(0, 12);
         writePreference('json-viewer-recent', recentFiles);
     }
+    const activeView = savedViews.find(view => view.name === activeSavedViewName);
+    if (activeView) {
+        byId('jsonpathInput').value = activeView.jsonPath;
+        if (activeView.jsonPath) { byId('jsonpathBar').classList.add('visible'); setTimeout(executeJsonPath, 0); }
+    }
     renderDocumentTabs(); persistWorkspace(); updateUndoButtons(); updateSearchOptionButtons();
 }
 function applyViewState(view) {
@@ -116,11 +124,16 @@ function renderDocumentTabs() {
     }
     byId('btnMaskedExport').textContent = wx('Maskierter Export','Masked export');
     byId('btnMaskedExport').disabled = jsonData === undefined;
+    byId('btnManageViews').textContent = wx('Ansichten…','Views…');
+    byId('btnManageViews').disabled = jsonData === undefined;
     const updateButton = byId('btnCheckUpdates');
     updateButton.querySelector('span:last-child').textContent = wx('Update','Update');
     updateButton.title = wx('Nach Updates suchen','Check for updates');
     const recent = byId('recentFiles'); recent.replaceChildren(new Option(wx('Zuletzt geöffnet…','Recent files…'),''));
     recentFiles.forEach(path => recent.add(new Option(path,path)));
+    const viewSelect = byId('savedViewSelect'); viewSelect.replaceChildren(new Option(wx('Ansicht wählen…','Choose view…'),''));
+    savedViews.forEach(view => viewSelect.add(new Option(view.name,view.name)));
+    viewSelect.value = activeSavedViewName || '';
 }
 function queueDocumentOperation(operation) {
     const run = operationQueue.then(async () => {
@@ -245,6 +258,8 @@ setTimeout(async () => {
 function initializeTableColumns(cols) {
     tableAllColumns = [...cols]; tableHiddenColumns = new Set(cols.slice(MAX_TABLE_COLUMNS));
     tablePinnedColumns = new Set(); tableColumnRules = []; syncTableColumns(); renderColumnPanel();
+    const active = savedViews.find(view => view.name === activeSavedViewName);
+    if (active) setTimeout(() => applySavedView(active, false), 0);
 }
 function syncTableColumns() {
     const visible = tableAllColumns.filter(c => !tableHiddenColumns.has(c));
@@ -287,6 +302,65 @@ function renderColumnPanel() {
     }
 }
 byId('btnTableColumns').onclick = () => { byId('columnPanel').hidden = !byId('columnPanel').hidden; if (!byId('columnPanel').hidden) renderColumnPanel(); renderVirtualTable(); };
+
+function persistSavedViews() {
+    savedViews = WorkspaceCore.safeSavedViews(savedViews);
+    writePreference('json-viewer-saved-views', savedViews);
+    writePreference('json-viewer-active-view', activeSavedViewName);
+    renderDocumentTabs();
+}
+function captureSavedView(name) {
+    return { name, columns: [...tableAllColumns], hidden: [...tableHiddenColumns], pinned: [...tablePinnedColumns],
+        rules: tableColumnRules.map(rule => ({...rule})), filter: byId('tableFilterInput').value,
+        jsonPath: byId('jsonpathInput').value.trim(), sortColumn: tableSortCol, sortAscending: tableSortAsc };
+}
+function applySavedView(view, notify = true) {
+    if (!view) return;
+    activeSavedViewName = view.name; writePreference('json-viewer-active-view', activeSavedViewName);
+    byId('jsonpathInput').value = view.jsonPath || '';
+    if (view.jsonPath) { byId('jsonpathBar').classList.add('visible'); executeJsonPath(); }
+    if (tableAllColumns.length) {
+        const applied = WorkspaceCore.applySavedView(view, tableAllColumns);
+        tableAllColumns = applied.columns; tableHiddenColumns = new Set(applied.hidden);
+        tablePinnedColumns = new Set(applied.pinned); tableColumnRules = applied.rules;
+        tableSortCol = applied.sortColumn; tableSortAsc = applied.sortAscending;
+        byId('tableFilterInput').value = applied.filter;
+        syncTableColumns(); prepareTableData(applied.filter); renderVirtualTable(); renderColumnPanel();
+    }
+    renderDocumentTabs();
+    if (notify) showNotification(`${wx('Ansicht angewendet','View applied')}: ${view.name}`);
+}
+function showSavedViews() {
+    const dialog = document.createElement('dialog'); dialog.className = 'workspace-dialog';
+    dialog.innerHTML = `<h3>${wx('Gespeicherte Ansichten und Abfragen','Saved views and queries')}</h3><p>${wx('Speichert Spaltenauswahl, Reihenfolge, Fixierungen, Tabellenfilter, Sortierung und JSONPath. Die aktive Ansicht wird beim nächsten Dokument wiederverwendet.','Saves column selection, order, pins, table filters, sorting and JSONPath. The active view is reused for the next document.')}</p><div class="saved-view-form"><input class="saved-view-name" maxlength="80" placeholder="${wx('Name der Ansicht','View name')}"><button class="saved-view-save primary">${wx('Aktuelle Ansicht speichern','Save current view')}</button></div><div class="saved-view-list"></div><div class="dialog-actions"><button class="saved-view-none">${wx('Aktive Ansicht lösen','Clear active view')}</button><button class="saved-view-close">${wx('Schließen','Close')}</button></div>`;
+    const list = dialog.querySelector('.saved-view-list'), nameInput = dialog.querySelector('.saved-view-name');
+    const render = () => {
+        list.replaceChildren();
+        if (!savedViews.length) { const empty = document.createElement('p'); empty.textContent = wx('Noch keine Ansichten gespeichert.','No saved views yet.'); list.append(empty); }
+        for (const view of savedViews) {
+            const row = document.createElement('div'); row.className = `saved-view-row${view.name === activeSavedViewName ? ' active' : ''}`;
+            const info = document.createElement('div'), title = document.createElement('strong'), detail = document.createElement('small');
+            title.textContent = view.name; detail.textContent = `${view.columns.length - view.hidden.length}/${view.columns.length} ${wx('Spalten','columns')} · ${view.rules.length} ${wx('Filter','filters')}${view.jsonPath ? ' · JSONPath' : ''}`; info.append(title,detail);
+            const apply = document.createElement('button'); apply.textContent = wx('Anwenden','Apply'); apply.onclick = () => { applySavedView(view); render(); };
+            const remove = document.createElement('button'); remove.textContent = wx('Löschen','Delete'); remove.onclick = () => { savedViews = savedViews.filter(item => item.name !== view.name); if (activeSavedViewName === view.name) activeSavedViewName = null; persistSavedViews(); render(); };
+            row.append(info,apply,remove); list.append(row);
+        }
+    };
+    dialog.querySelector('.saved-view-save').onclick = () => {
+        const name = nameInput.value.trim();
+        if (!name) { nameInput.focus(); return; }
+        const saved = captureSavedView(name), index = savedViews.findIndex(view => view.name === name);
+        if (index >= 0) savedViews[index] = saved; else savedViews.push(saved);
+        activeSavedViewName = name; persistSavedViews(); nameInput.value = ''; render();
+        showNotification(`${wx('Ansicht gespeichert','View saved')}: ${name}`);
+    };
+    dialog.querySelector('.saved-view-none').onclick = () => { activeSavedViewName = null; persistSavedViews(); render(); };
+    const close = () => { dialog.close(); dialog.remove(); };
+    dialog.querySelector('.saved-view-close').onclick = close; dialog.oncancel = event => { event.preventDefault(); close(); };
+    render(); document.body.append(dialog); dialog.showModal(); nameInput.focus();
+}
+byId('savedViewSelect').onchange = event => { const view = savedViews.find(item => item.name === event.target.value); if (view) applySavedView(view); };
+byId('btnManageViews').onclick = showSavedViews;
 
 async function writeExport(text, suggestedName) {
     if (!window.__TAURI__) {
@@ -345,6 +419,130 @@ function showMaskedExport() {
     render(''); invalidate(); document.body.append(dialog); dialog.showModal();
 }
 byId('btnMaskedExport').onclick = showMaskedExport;
+
+let smartDiffFileName = '', smartDiffResult = null, smartDiffLeft = null, smartDiffRight = null;
+function dataPath(segments) {
+    let path = 'root';
+    for (const segment of segments) path = typeof segment === 'number' ? `${path}[${segment}]` : appendPath(path, segment);
+    return path;
+}
+function smartDiffValue(value) {
+    if (value === undefined) return wx('(fehlt)','(missing)');
+    const text = JSON.stringify(value, null, 2);
+    return text.length > 1200 ? text.slice(0,1200) + '…' : text;
+}
+function showSmartDiffView() {
+    if (jsonData === undefined) return;
+    byId('diffOverlay').classList.add('visible'); byId('diffModal').classList.add('visible');
+    if (diffSecondData) prepareSmartDiff();
+    else { byId('diffResults').innerHTML = `<div class="smart-diff-empty">${wx('Bitte eine zweite JSON-Datei laden.','Load a second JSON file.')}</div>`; byId('diffSummary').textContent = ''; }
+}
+function hideSmartDiffView() { byId('diffOverlay').classList.remove('visible'); byId('diffModal').classList.remove('visible'); }
+function prepareSmartDiff() {
+    smartDiffLeft = WorkspaceCore.findRecordArray(jsonData); smartDiffRight = WorkspaceCore.findRecordArray(diffSecondData);
+    const select = byId('diffKeyField'), previous = select.value; select.replaceChildren(new Option(wx('Schlüsselfeld wählen…','Choose key field…'),''));
+    if (!smartDiffLeft || !smartDiffRight) {
+        byId('diffResults').innerHTML = `<div class="smart-diff-empty">${wx('Beide Dateien müssen ein Array mit Objekten enthalten.','Both files must contain an array of objects.')}</div>`;
+        byId('diffSummary').textContent = ''; return;
+    }
+    const leftFields = new Set(WorkspaceCore.comparisonFields(smartDiffLeft.rows));
+    const common = WorkspaceCore.comparisonFields(smartDiffRight.rows).filter(field => leftFields.has(field));
+    common.forEach(field => select.add(new Option(field,field)));
+    const preferred = ['id','ID','uuid','hostname','name'].find(field => common.includes(field));
+    select.value = common.includes(previous) ? previous : preferred || '';
+    byId('diffResults').innerHTML = `<div class="smart-diff-empty">${wx('Schlüsselfeld wählen und Vergleich starten. Die Reihenfolge der Datensätze spielt keine Rolle.','Choose a key field and start comparison. Record order does not matter.')}</div>`;
+    byId('diffSummary').textContent = `${fileName || 'JSON'} ⇔ ${smartDiffFileName || wx('zweite Datei','second file')} · ${smartDiffLeft.rows.length} / ${smartDiffRight.rows.length} ${wx('Datensätze','records')}`;
+    if (select.value) runSmartDiff();
+}
+async function loadSmartDiffFile() {
+    try {
+        let data, name;
+        if (window.__TAURI__) {
+            const selected = await window.__TAURI__.dialog.open({multiple:false,filters:[{name:'JSON',extensions:['json','jsonl','ndjson','txt']}]});
+            if (!selected) return;
+            const path = Array.isArray(selected) ? selected[0] : selected;
+            byId('diffSummary').textContent = wx('Vergleichsdatei wird geladen…','Loading comparison file…');
+            const result = await readFileContent(path); data = parseJSON(result.text); name = getFileName(path);
+        } else {
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.jsonl,.ndjson,.txt';
+            const file = await new Promise(resolve => { input.onchange = event => resolve(event.target.files[0] || null); input.click(); });
+            if (!file) return; data = parseJSON(await file.text()); name = file.name;
+        }
+        diffSecondData = data; smartDiffFileName = name; smartDiffResult = null; prepareSmartDiff();
+    } catch (error) { showNotification(`${wx('Vergleichsdatei konnte nicht geladen werden','Could not load comparison file')}: ${error.message || error}`,'error',5000); }
+}
+function runSmartDiff() {
+    if (!smartDiffLeft || !smartDiffRight) return;
+    const key = byId('diffKeyField').value;
+    if (!key) { showNotification(wx('Bitte ein Schlüsselfeld wählen.','Choose a key field.')); return; }
+    const ignored = byId('diffIgnoreFields').value.split(',').map(value => value.trim()).filter(Boolean);
+    smartDiffResult = WorkspaceCore.keyedCompare(smartDiffLeft.rows,smartDiffRight.rows,key,ignored);
+    renderSmartDiffResults();
+}
+function renderSmartDiffResults() {
+    const container = byId('diffResults'); container.replaceChildren();
+    if (!smartDiffResult) return;
+    if (smartDiffResult.duplicates.length) {
+        const error = document.createElement('div'); error.className = 'smart-diff-empty';
+        error.textContent = `${wx('Schlüsselfeld ist nicht eindeutig. Doppelte Werte','Key field is not unique. Duplicate values')}: ${smartDiffResult.duplicates.slice(0,10).map(String).join(', ')}`; container.append(error); return;
+    }
+    const changedRecords = smartDiffResult.records.filter(record => record.status !== 'unchanged');
+    const counts = {added:0,removed:0,changed:0,unchanged:0}; smartDiffResult.records.forEach(record => counts[record.status]++);
+    byId('diffSummary').textContent = `${counts.changed} ${wx('geändert','changed')} · ${counts.added} ${wx('hinzugefügt','added')} · ${counts.removed} ${wx('entfernt','removed')} · ${counts.unchanged} ${wx('unverändert','unchanged')} · ${smartDiffResult.missing.left.length + smartDiffResult.missing.right.length} ${wx('ohne Schlüssel','without key')}`;
+    if (!changedRecords.length) { const empty = document.createElement('div'); empty.className = 'smart-diff-empty'; empty.textContent = wx('Keine Unterschiede gefunden.','No differences found.'); container.append(empty); return; }
+    const visible = changedRecords.slice(0,2000);
+    visible.forEach((record, recordIndex) => {
+        const box = document.createElement('section'); box.className = `diff-record diff-record-${record.status}`;
+        const header = document.createElement('div'); header.className = 'diff-record-header';
+        const key = document.createElement('span'); key.className = 'diff-record-key'; key.textContent = `${byId('diffKeyField').value} = ${smartDiffValue(record.key)}`;
+        const badge = document.createElement('span'); badge.className = 'diff-badge'; badge.textContent = record.status === 'added' ? wx('nur rechts','right only') : record.status === 'removed' ? wx('nur links','left only') : `${record.changes.length} ${wx('Änderungen','changes')}`;
+        header.append(key,badge);
+        if (record.status !== 'changed') {
+            const apply = document.createElement('button'); apply.className = 'diff-apply'; apply.textContent = record.status === 'added' ? wx('Datensatz übernehmen','Add record') : wx('Datensatz entfernen','Remove record');
+            apply.onclick = () => applySmartDiffChange(record,null); header.append(apply);
+        }
+        box.append(header);
+        record.changes.forEach(change => {
+            const row = document.createElement('div'); row.className = 'diff-field';
+            const path = document.createElement('div'); path.className = 'diff-field-path'; path.textContent = change.path || wx('(Datensatz)','(record)');
+            const left = document.createElement('div'); left.className = 'diff-value'; left.textContent = smartDiffValue(change.left);
+            const arrow = document.createElement('div'); arrow.className = 'diff-arrow'; arrow.textContent = '←';
+            const right = document.createElement('div'); right.className = 'diff-value'; right.textContent = smartDiffValue(change.right);
+            const apply = document.createElement('button'); apply.className = 'diff-apply'; apply.textContent = wx('Übernehmen','Apply'); apply.onclick = () => applySmartDiffChange(record,change);
+            row.append(path,left,arrow,right,apply); box.append(row);
+        });
+        container.append(box);
+    });
+    if (changedRecords.length > visible.length) { const more = document.createElement('div'); more.className = 'smart-diff-empty'; more.textContent = `${changedRecords.length-visible.length} ${wx('weitere Unterschiede werden aus Performancegründen nicht dargestellt.','more differences are not shown for performance reasons.')}`; container.append(more); }
+}
+function applySmartDiffChange(record, change) {
+    if (!smartDiffLeft || !smartDiffRight) return;
+    const arrayPath = dataPath(smartDiffLeft.path);
+    if (record.status === 'added') {
+        saveUndoState(arrayPath); smartDiffLeft.rows.push(JSON.parse(JSON.stringify(smartDiffRight.rows[record.rightIndex])));
+    } else if (record.status === 'removed') {
+        saveUndoState(arrayPath); smartDiffLeft.rows.splice(record.leftIndex,1);
+    } else {
+        const target = smartDiffLeft.rows[record.leftIndex], recordPath = `${arrayPath}[${record.leftIndex}]`;
+        saveUndoState(recordPath);
+        let parent = target;
+        for (const segment of change.segments.slice(0,-1)) {
+            if (!Object.hasOwn(parent,segment) || !parent[segment] || typeof parent[segment] !== 'object') JsonCore.define(parent,segment,{});
+            parent = parent[segment];
+        }
+        const last = change.segments.at(-1);
+        if (change.right === undefined) delete parent[last]; else JsonCore.define(parent,last,JSON.parse(JSON.stringify(change.right)));
+    }
+    markModified(); updateUndoButtons(); renderTree(); stashDocument();
+    smartDiffLeft = WorkspaceCore.findRecordArray(jsonData); runSmartDiff();
+    showNotification(wx('Änderung übernommen.','Change applied.'));
+}
+byId('btnDiff').onclick = showSmartDiffView;
+byId('btnDiffClose').onclick = hideSmartDiffView;
+byId('diffOverlay').onclick = hideSmartDiffView;
+byId('btnDiffLoad').onclick = loadSmartDiffFile;
+byId('btnDiffRun').onclick = runSmartDiff;
+byId('diffKeyField').onchange = () => { if (byId('diffKeyField').value) runSmartDiff(); };
 
 let updateRunning = false, updateInstalling = false;
 async function checkForUpdates(interactive = false) {

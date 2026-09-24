@@ -2162,7 +2162,7 @@
             <button id="btnJsonPath" disabled title="JSONPath Abfrage (⌘J)">
                 <span class="icon">$.</span>
             </button>
-            <button id="btnDiff" disabled title="Diff-Vergleich (⌘D)">
+            <button id="btnDiff" disabled title="Intelligenter Dateivergleich (⌘D)">
                 <span class="icon">⇔</span>
             </button>
             <button id="btnSchema" disabled title="Schema-Validierung">
@@ -2398,7 +2398,7 @@
                     </div>
                     <div class="help-shortcut">
                         <span class="help-shortcut-key">⌘D</span>
-                        <span>Diff-Vergleich</span>
+                        <span>Intelligenter Dateivergleich</span>
                     </div>
                     <div class="help-shortcut">
                         <span class="help-shortcut-key">F1</span>
@@ -2546,16 +2546,17 @@
                     </div>
                     <div class="help-feature">
                         <strong>Filterung</strong>
-                        <p>Über das Filterfeld oberhalb der Tabelle können Zeilen nach Text durchsucht und gefiltert werden.</p>
+                        <p>Über das Filterfeld und „Spalten &amp; Filter“ lassen sich Volltextsuche, typisierte Feldfilter, sichtbare Spalten, Reihenfolge und fixierte Spalten festlegen.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Gespeicherte Ansichten</strong>
+                        <p>„Ansichten…“ speichert Spaltenauswahl, Filter, Sortierung und die aktuelle JSONPath-Abfrage unter einem Namen. Die aktive Ansicht wird auf die nächste Datei mit passenden Spalten angewendet.</p>
                     </div>
                     <div class="help-feature">
                         <strong>Kontextmenü-Zugang</strong>
                         <p>Rechtsklick auf ein Array im Baum bietet direkt die Option „Tabellenansicht" an.</p>
                     </div>
-                    <div class="help-feature">
-                        <strong>Hinweis</strong>
-                        <p>Zur Performance-Optimierung werden maximal 5.000 Zeilen angezeigt. Bei größeren Arrays wird eine entsprechende Meldung eingeblendet.</p>
-                    </div>
+                    <div class="help-feature"><strong>Große Tabellen</strong><p>Die Tabelle rendert nur den sichtbaren Ausschnitt und bleibt dadurch auch bei sehr vielen Datensätzen bedienbar.</p></div>
                 </div>
             </div>
             
@@ -2630,28 +2631,23 @@
             </div>
             
             <div class="help-section">
-                <h3>⇔ Diff-Vergleich (⌘D)</h3>
+                <h3>⇔ Intelligenter Dateivergleich (⌘D)</h3>
                 <div class="help-features">
                     <div class="help-feature">
-                        <strong>Zwei Dateien vergleichen</strong>
-                        <p>Vergleicht die aktuell geladene JSON-Datei mit einer zweiten Datei. Öffne den Diff-Dialog mit ⌘D oder dem ⇔ Button und lade dann über „Zweite Datei laden..." die Vergleichsdatei.</p>
+                        <strong>Datensätze zuordnen</strong>
+                        <p>Wähle ein eindeutiges Feld wie <code>id</code> oder <code>hostname</code>. Datensätze werden über diesen Wert zugeordnet, sodass eine andere Reihenfolge keine Unterschiede erzeugt.</p>
                     </div>
                     <div class="help-feature">
-                        <strong>Side-by-Side Ansicht</strong>
-                        <p>Beide Dateien werden nebeneinander dargestellt. Unterschiede sind farblich markiert:</p>
-                        <p>
-                            <span style="color:#4ec9b0;">■ Grün</span> – Hinzugefügte Zeilen (nur in der rechten Datei)<br>
-                            <span style="color:#f48771;">■ Rot</span> – Entfernte Zeilen (nur in der linken Datei)<br>
-                            <span style="color:#dcdcaa;">■ Gelb</span> – Geänderte Zeilen
-                        </p>
+                        <strong>Felder ignorieren</strong>
+                        <p>Kommagetrennte Feldnamen wie <code>timestamp</code>, <code>updatedAt</code> oder vollständige verschachtelte Pfade werden beim Vergleich ausgelassen.</p>
                     </div>
                     <div class="help-feature">
-                        <strong>Zusammenfassung</strong>
-                        <p>Am unteren Rand wird eine Zusammenfassung der Änderungen angezeigt: Anzahl hinzugefügter, entfernter und geänderter Zeilen.</p>
+                        <strong>Änderungen übernehmen</strong>
+                        <p>Einzelne Feldänderungen und vollständige hinzugefügte oder entfernte Datensätze können aus der rechten Vergleichsdatei übernommen werden. Jede Übernahme ist über Undo rückgängig zu machen.</p>
                     </div>
                     <div class="help-feature">
-                        <strong>Algorithmus</strong>
-                        <p>Verwendet einen LCS-basierten (Longest Common Subsequence) Zeilenvergleich für präzise Ergebnisse. Bei sehr großen Dateien (>5.000 Zeilen pro Seite) wird der Vergleich aus Performance-Gründen vereinfacht.</p>
+                        <strong>Eindeutige Schlüssel</strong>
+                        <p>Fehlende oder doppelte Schlüsselwerte werden gemeldet, damit keine Datensätze falsch zugeordnet werden.</p>
                     </div>
                 </div>
             </div>
@@ -2824,16 +2820,18 @@
     <div class="diff-overlay" id="diffOverlay"></div>
     <div class="diff-modal" id="diffModal">
         <div class="diff-header">
-            <h3>⇔ Diff-Vergleich</h3>
+            <h3>⇔ Intelligenter Dateivergleich</h3>
             <div style="display:flex;gap:8px;align-items:center;">
                 <button class="bulk-btn bulk-btn-secondary" id="btnDiffLoad">Zweite Datei laden...</button>
                 <button class="diff-close" id="btnDiffClose">✕</button>
             </div>
         </div>
-        <div class="diff-body">
-            <div class="diff-panel" id="diffLeft"></div>
-            <div class="diff-panel" id="diffRight"></div>
+        <div class="smart-diff-controls" id="smartDiffControls">
+            <label>Zuordnen über <select id="diffKeyField"><option value="">Schlüsselfeld wählen…</option></select></label>
+            <label>Felder ignorieren <input id="diffIgnoreFields" value="timestamp, updatedAt, modifiedAt" placeholder="timestamp, updatedAt"></label>
+            <button id="btnDiffRun" class="bulk-btn">Vergleichen</button>
         </div>
+        <div class="smart-diff-results" id="diffResults"><div class="smart-diff-empty">Bitte eine zweite JSON-Datei laden.</div></div>
         <div class="diff-summary" id="diffSummary"></div>
     </div>
 
@@ -7931,7 +7929,7 @@
                 else if (e.key === 't') { e.preventDefault(); showTableView(); }
                 else if (e.key === 'r' && !e.shiftKey) { e.preventDefault(); showRawView(); }
                 else if (e.key === 'j') { e.preventDefault(); toggleJsonPathBar(); }
-                else if (e.key === 'd') { e.preventDefault(); showDiffView(); }
+                else if (e.key === 'd') { e.preventDefault(); document.getElementById('btnDiff').click(); }
             } else if (jsonData !== undefined) {
                 if (e.key === '+' || e.key === '=') { e.preventDefault(); expandLevel(); }
                 else if (e.key === '-') { e.preventDefault(); collapseLevel(); }

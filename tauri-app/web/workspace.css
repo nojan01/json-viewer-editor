@@ -6,6 +6,7 @@
 .document-tab .tab-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .workspace-bar > button, .workspace-bar select, .workspace-dialog button, .column-panel button, .table-header #btnTableColumns { background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; padding:5px 8px; font-size:12px; line-height:1.3; cursor:pointer; }
 .workspace-bar select { max-width:165px; }
+.workspace-bar .saved-view-select { max-width:190px; }
 .workspace-dialog { font-size:13px; background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border); border-radius:10px; padding:22px; width:min(760px,90vw); max-height:85vh; margin:auto; overflow:auto; box-shadow:0 16px 60px #0006; }
 .workspace-dialog::backdrop { background:#0008; }
 .workspace-dialog h3 { margin:0 0 12px; }
@@ -28,7 +29,32 @@
 .table-scroll th.pinned { z-index:4; background:var(--bg-tertiary); }
 .table-header { flex-wrap:wrap; }
 .update-progress { width:100%; margin-top:12px; }
+.saved-view-form { display:grid; grid-template-columns:minmax(120px,1fr) auto; gap:8px; align-items:center; }
+.saved-view-form input { width:100%; }
+.saved-view-list { display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto; margin-top:14px; }
+.saved-view-row { display:grid; grid-template-columns:minmax(120px,1fr) auto auto; gap:8px; align-items:center; padding:8px; border:1px solid var(--border); border-radius:5px; }
+.saved-view-row.active { border-color:var(--accent); background:var(--bg-hover); }
+.saved-view-row small { display:block; color:var(--text-secondary); margin-top:3px; }
+.smart-diff-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg-secondary); }
+.smart-diff-controls label { display:flex; gap:6px; align-items:center; font-size:12px; }
+.smart-diff-controls select, .smart-diff-controls input { background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; padding:6px 8px; min-width:170px; }
+.smart-diff-controls input { min-width:260px; }
+.smart-diff-results { flex:1; overflow:auto; padding:12px; }
+.smart-diff-empty { color:var(--text-secondary); padding:30px; text-align:center; }
+.diff-record { border:1px solid var(--border); border-radius:7px; margin-bottom:10px; overflow:hidden; }
+.diff-record-header { display:flex; gap:10px; align-items:center; padding:8px 10px; background:var(--bg-tertiary); position:sticky; top:0; z-index:1; }
+.diff-record-key { font:600 12px/1.4 'SF Mono',monospace; flex:1; overflow-wrap:anywhere; }
+.diff-badge { border-radius:10px; padding:2px 7px; font-size:10px; background:var(--bg-hover); }
+.diff-field { display:grid; grid-template-columns:minmax(120px,.7fr) minmax(180px,1fr) 24px minmax(180px,1fr) auto; gap:8px; align-items:start; padding:8px 10px; border-top:1px solid var(--border); font-size:12px; }
+.diff-field-path { font-family:'SF Mono',monospace; overflow-wrap:anywhere; color:var(--accent); }
+.diff-value { font-family:'SF Mono',monospace; white-space:pre-wrap; overflow-wrap:anywhere; max-height:120px; overflow:auto; }
+.diff-arrow { color:var(--text-secondary); text-align:center; }
+.diff-apply { background:var(--accent); color:white; border-radius:4px; padding:5px 8px; cursor:pointer; white-space:nowrap; }
+.diff-apply:hover { background:var(--accent-hover); }
+.diff-record-added { border-color:#4ec9b0; }
+.diff-record-removed { border-color:#f48771; }
 @media(max-width:700px) { .workspace-bar { flex-wrap:wrap; } .document-tabs { flex-basis:100%; } .column-settings-row { grid-template-columns:22px minmax(70px,1fr) 65px 28px 28px; } .column-settings-row select { grid-column:2 / 3; } .column-settings-row input[type=text] { grid-column:3 / 6; } }
+@media(max-width:850px) { .diff-field { grid-template-columns:1fr; } .diff-arrow { display:none; } .smart-diff-controls label { width:100%; } .smart-diff-controls select, .smart-diff-controls input { flex:1; min-width:0; } }
 
 /* Set geometry in CSS/DOM properties so Tauri CSP never drops generated style attributes. */
 .table-scroll table { min-width:0; }

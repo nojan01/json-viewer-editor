@@ -60,7 +60,117 @@
             selectedPath: typeof view.selectedPath === 'string' ? view.selectedPath : null
         };
     }
-    const api = { matchesFilter, filterRows, fieldNames, serializeMasked, safeView };
+    function safeSavedViews(value) {
+        if (!Array.isArray(value)) return [];
+        const names = new Set(), result = [];
+        for (const item of value.slice(0, 50)) {
+            const name = typeof item?.name === 'string' ? item.name.trim().slice(0, 80) : '';
+            if (!name || names.has(name)) continue;
+            names.add(name);
+            const strings = input => Array.isArray(input) ? input.filter(v => typeof v === 'string').slice(0, 500) : [];
+            const rules = Array.isArray(item.rules) ? item.rules.filter(rule =>
+                rule && typeof rule.column === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string'
+            ).slice(0, 200).map(rule => ({ column: rule.column, op: rule.op, value: rule.value })) : [];
+            result.push({ name, columns: strings(item.columns), hidden: strings(item.hidden), pinned: strings(item.pinned), rules,
+                filter: typeof item.filter === 'string' ? item.filter.slice(0, 1000) : '',
+                jsonPath: typeof item.jsonPath === 'string' ? item.jsonPath.slice(0, 2000) : '',
+                sortColumn: typeof item.sortColumn === 'string' ? item.sortColumn : null, sortAscending: item.sortAscending !== false });
+        }
+        return result;
+    }
+    function applySavedView(view, availableColumns) {
+        const columns = [...new Set((availableColumns || []).filter(v => typeof v === 'string'))];
+        const known = new Set(columns), preferred = (view?.columns || []).filter(c => known.has(c));
+        const order = [...preferred, ...columns.filter(c => !preferred.includes(c))];
+        return {
+            columns: order,
+            hidden: (view?.hidden || []).filter(c => known.has(c)),
+            pinned: (view?.pinned || []).filter(c => known.has(c)),
+            rules: (view?.rules || []).filter(rule => known.has(rule.column)),
+            filter: typeof view?.filter === 'string' ? view.filter : '',
+            jsonPath: typeof view?.jsonPath === 'string' ? view.jsonPath : '',
+            sortColumn: known.has(view?.sortColumn) ? view.sortColumn : null,
+            sortAscending: view?.sortAscending !== false
+        };
+    }
+    function getField(object, field) {
+        if (!object || typeof object !== 'object') return undefined;
+        const parts = String(field).split('.').filter(Boolean);
+        let value = object;
+        for (const part of parts) {
+            if (value === null || typeof value !== 'object' || !Object.hasOwn(value, part)) return undefined;
+            value = value[part];
+        }
+        return value;
+    }
+    function comparisonFields(rows, limit = 200) {
+        const fields = new Set();
+        const visit = (value, prefix, depth) => {
+            if (value === null || typeof value !== 'object' || Array.isArray(value) || depth > 3) return;
+            for (const key of Object.keys(value)) {
+                const path = prefix ? `${prefix}.${key}` : key, child = value[key];
+                if (child === null || typeof child !== 'object') fields.add(path);
+                else if (!Array.isArray(child)) visit(child, path, depth + 1);
+                if (fields.size >= limit) return;
+            }
+        };
+        for (const row of (rows || []).slice(0, 100)) { visit(row, '', 0); if (fields.size >= limit) break; }
+        return [...fields].sort((a, b) => a.localeCompare(b));
+    }
+    function findRecordArray(data, depth = 0, path = []) {
+        if (depth > 6 || data === null || typeof data !== 'object') return null;
+        if (Array.isArray(data) && data.some(item => item && typeof item === 'object' && !Array.isArray(item))) return { rows: data, path };
+        for (const key of Object.keys(data)) {
+            const found = findRecordArray(data[key], depth + 1, [...path, key]);
+            if (found) return found;
+        }
+        return null;
+    }
+    function clone(value) { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
+    function keyedCompare(leftRows, rightRows, keyField, ignoredFields = []) {
+        const ignored = new Set((ignoredFields || []).map(v => String(v).trim()).filter(Boolean));
+        const keyOf = row => {
+            const value = getField(row, keyField);
+            return value === undefined || value === null ? null : `${typeof value}:${JSON.stringify(value)}`;
+        };
+        const build = rows => {
+            const map = new Map(), duplicates = [], missing = [];
+            rows.forEach((row, index) => {
+                const token = keyOf(row);
+                if (token === null) { missing.push(index); return; }
+                if (map.has(token)) duplicates.push(getField(row, keyField));
+                else map.set(token, { row, index, value: getField(row, keyField) });
+            });
+            return { map, duplicates, missing };
+        };
+        const left = build(leftRows || []), right = build(rightRows || []);
+        if (left.duplicates.length || right.duplicates.length) return { records: [], duplicates: [...left.duplicates, ...right.duplicates], missing: { left: left.missing, right: right.missing } };
+        const changes = (a, b, path = [], output = []) => {
+            const label = path.join('.'), last = path.at(-1);
+            if (ignored.has(label) || ignored.has(last)) return output;
+            if (a === b) return output;
+            if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) || Array.isArray(b)) {
+                output.push({ path: label, segments: [...path], type: a === undefined ? 'added' : b === undefined ? 'removed' : 'changed', left: clone(a), right: clone(b) });
+                return output;
+            }
+            const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+            for (const key of keys) changes(Object.hasOwn(a, key) ? a[key] : undefined, Object.hasOwn(b, key) ? b[key] : undefined, [...path, key], output);
+            return output;
+        };
+        const tokens = new Set([...left.map.keys(), ...right.map.keys()]), records = [];
+        for (const token of tokens) {
+            const l = left.map.get(token), r = right.map.get(token), value = l?.value ?? r?.value;
+            if (!l) records.push({ key: clone(value), status: 'added', leftIndex: null, rightIndex: r.index, changes: [] });
+            else if (!r) records.push({ key: clone(value), status: 'removed', leftIndex: l.index, rightIndex: null, changes: [] });
+            else {
+                const fields = changes(l.row, r.row);
+                records.push({ key: clone(value), status: fields.length ? 'changed' : 'unchanged', leftIndex: l.index, rightIndex: r.index, changes: fields });
+            }
+        }
+        return { records, duplicates: [], missing: { left: left.missing, right: right.missing } };
+    }
+    const api = { matchesFilter, filterRows, fieldNames, serializeMasked, safeView, safeSavedViews, applySavedView,
+        getField, comparisonFields, findRecordArray, keyedCompare };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.WorkspaceCore = api;
 })(globalThis);

@@ -61,6 +61,32 @@ test('restored view preferences reject invalid scroll positions and contain no d
     const view = core.safeView({scrollTop:123,expanded:['root'],data:'secret',selectedPath:'root[0]'});
     assert.equal(view.scrollTop,123); assert.equal('data' in view,false);
 });
+test('saved views are sanitized and map only compatible columns onto the next file', () => {
+    const views = core.safeSavedViews([{name:' Server ',columns:['id','host'],hidden:['host'],pinned:['id'],rules:[{column:'host',op:'contains',value:'prod'}],filter:'active',jsonPath:'$.servers[*]',sortColumn:'id',sortAscending:false},{name:' Server ',columns:[]}]);
+    assert.equal(views.length,1); assert.equal(views[0].name,'Server');
+    const applied = core.applySavedView(views[0],['host','id','region']);
+    assert.deepEqual(applied.columns,['id','host','region']); assert.deepEqual(applied.hidden,['host']);
+    assert.deepEqual(applied.pinned,['id']); assert.equal(applied.rules.length,1);
+    assert.equal(applied.sortColumn,'id'); assert.equal(applied.sortAscending,false);
+    assert.equal(core.safeSavedViews({}).length,0);
+});
+test('keyed comparison ignores order and selected fields while preserving typed keys', () => {
+    const left=[{id:1,host:'a',updatedAt:'old',settings:{port:80}},{id:2,host:'b'}];
+    const right=[{id:2,host:'b'},{id:1,host:'renamed',updatedAt:'new',settings:{port:443}},{id:'2',host:'string key'}];
+    const result=core.keyedCompare(left,right,'id',['updatedAt']);
+    assert.equal(result.duplicates.length,0); assert.deepEqual(result.missing,{left:[],right:[]});
+    const numeric=result.records.find(record=>record.key===1);
+    assert.equal(numeric.status,'changed'); assert.deepEqual(numeric.changes.map(change=>change.path),['host','settings.port']);
+    assert.equal(result.records.find(record=>record.key===2).status,'unchanged');
+    assert.equal(result.records.find(record=>record.key==='2').status,'added');
+});
+test('keyed comparison reports missing and duplicate keys and locates nested record arrays', () => {
+    const located=core.findRecordArray({payload:{items:[{hostname:'a'}]}});
+    assert.deepEqual(located.path,['payload','items']); assert.equal(located.rows[0].hostname,'a');
+    assert.ok(core.comparisonFields([{node:{hostname:'a'},id:1}]).includes('node.hostname'));
+    const result=core.keyedCompare([{id:1},{id:1},{}],[{id:1},{}],'id',[]);
+    assert.deepEqual(result.duplicates,[1]); assert.deepEqual(result.missing,{left:[2],right:[1]});
+});
 test('document operations are serialized and failures release the UI lock', async () => {
     const doc = {body:{inert:false},activeElement:{blur(){}}}, order=[];
     const ctx = sandbox(['queueDocumentOperation'],{document:doc,documentBusy:false,operationQueue:Promise.resolve()});
