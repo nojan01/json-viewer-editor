@@ -2171,6 +2171,9 @@
             <button id="btnBulk" disabled title="Bulk-Operationen">
                 <span class="icon">⚡</span>
             </button>
+            <button id="btnTransform" disabled title="Flatten / Unflatten">
+                <span class="icon">⇆</span>
+            </button>
             <button id="btnRestClient" title="URL laden">
                 <span class="icon">🌐</span>
             </button>
@@ -2735,6 +2738,62 @@
             </div>
             
             <div class="help-section">
+                <h3>Transformationsassistent</h3>
+                <div class="help-features">
+                    <div class="help-feature"><strong>Ablauf zusammenstellen</strong><p>„Transformationen…“ öffnen, „Schritt hinzufügen“ wählen und Operation sowie Feldnamen eintragen. Mit ↑ und ↓ die Reihenfolge ändern, mit × einen Schritt entfernen. Bis zu 50 Schritte werden nacheinander auf das gesamte Dokument angewendet.</p></div>
+                    <div class="help-feature"><strong>Felder und Text bearbeiten</strong><p>Umbenennen, Löschen, Trimmen und wörtliches Suchen/Ersetzen gelten für den exakten Feldnamen auf allen Objektebenen, auch in Arrays. Ein Punkt im Feldnamen ist kein Pfad. Fehlende Quellfelder werden übersprungen. Trimmen entfernt Leerraum am Anfang und Ende. Ersetzen ersetzt alle Vorkommen und verwendet keine regulären Ausdrücke.</p></div>
+                    <div class="help-feature"><strong>Datentypen konvertieren</strong><p>Als Ziel stehen String, Number, Boolean und Null zur Verfügung. Zahlen benötigen einen gültigen Zahlenwert; leere Texte werden nicht als 0 behandelt. Boolean akzeptiert true/false und 1/0 sowie die Texte „true“/„false“. Null setzt den Wert ausdrücklich auf null. Ungültige Konvertierungen brechen den Ablauf ab.</p></div>
+                    <div class="help-feature"><strong>Zusammenführen und Aufteilen</strong><p>Quellfelder zum Zusammenführen oder Zielfelder zum Aufteilen kommagetrennt eingeben, z.B. <code>vorname,nachname</code>. Das Trennzeichen kann ein Leerzeichen sein. Zusammenführen benötigt alle Quellfelder im selben Objekt. Beim Aufteilen muss die Anzahl der Teile zu den Zielfeldern passen. Die Quellfelder bleiben erhalten; ein anschließender Löschschritt kann sie entfernen. Feldnamen mit Kommas sind in diesen Listen nicht unterstützt.</p></div>
+                    <div class="help-feature"><strong>Flatten und Unflatten im Ablauf</strong><p>Beide Operationen können an beliebiger Stelle im Ablauf stehen. Trennzeichen und Array-Behandlung gehören zum jeweiligen Schritt. Folgeschritte arbeiten mit den dann vorhandenen Feldnamen. Beispiel: Nach Flatten kann das Feld <code>adresse.stadt</code> umbenannt werden.</p></div>
+                    <div class="help-feature"><strong>Profile wiederverwenden</strong><p>Profilnamen eingeben und „Profil speichern“ wählen. Ein vorhandener gleichnamiger Ablauf wird ersetzt. „Profil laden…“ stellt die Schritte wieder her; „Profil löschen“ entfernt das ausgewählte Profil. Bis zu 50 Profile werden lokal gespeichert. Profile enthalten Einstellungen, keine Dokumentdaten.</p></div>
+                    <div class="help-feature"><strong>Vorschau, Anwenden und Undo</strong><p>Die optionale Stichprobenvorschau verarbeitet maximal 300 Knoten mit gekürzten Texten und Tiefen. Sie ist keine vollständige Prüfung. „Anwenden“ verarbeitet das gesamte Dokument erneut auf einer unabhängigen Kopie. Zielkonflikte oder ungültige Werte ändern das Original nicht. Der vollständige Ablauf lässt sich mit einem Undo-Schritt zurücknehmen und mit Redo wiederholen.</p></div>
+                    <div class="help-feature"><strong>Große Dateien und Abbruch</strong><p>„In neuem Tab öffnen“ behält das Original und legt ein ungespeichertes Ergebnis an. „Schließen / Abbrechen“ beendet laufende Arbeit. Große Abläufe benötigen zusätzlichen Arbeitsspeicher für die Kopie; die Laufzeit hängt von Größe und Schrittanzahl ab. Die maximale Transformationstiefe beträgt 200.</p></div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h3>Datenprofil und Qualitätsprüfung</h3>
+                <div class="help-features">
+                    <div class="help-feature"><strong>Den richtigen Bereich wählen</strong><p>„Datenprofil…“ analysiert das Dokument oder den ausgewählten Knoten. Arrays gelten als Datensätze, Objekte als einzelner Datensatz. Enthält das Dokument genau ein direktes Array, z.B. <code>employees</code>, ist „Datensätze: employees“ vorausgewählt. „Dokumenthülle (1 Objekt)“ prüft nur das äußere Objekt und liefert deshalb 1 / 1.</p></div>
+                    <div class="help-feature"><strong>Analyseumfang</strong><p>Standardmäßig werden alle Datensätze geprüft; alternativ die ersten 10.000 als ausdrücklich gekennzeichnete Stichprobe. Bis zu 200 Felder werden erfasst. Verschachtelte Objektfelder lassen sich bis Tiefe 20 einbeziehen. Arrays innerhalb der Datensätze bleiben ein Feld; für deren Inhalte den betreffenden Knoten separat auswählen. Schließen / Abbrechen beendet die Analyse.</p></div>
+                    <div class="help-feature"><strong>Ergebnisse verstehen</strong><p>Fehlend bedeutet, dass das Feld im Datensatz nicht vorkommt. Null und Leerstrings werden separat gezählt. Gemischte Typen sind markiert. Minimum, Maximum und Durchschnitt berücksichtigen nur Zahlen, keine Zahlentexte. Eindeutige Werte und Wiederholungen beziehen sich auf skalare Werte einschließlich null; jede zusätzliche Wiederholung wird gezählt.</p></div>
+                    <div class="help-feature"><strong>Grenzen der Häufigkeitsanalyse</strong><p>Die fünf häufigsten skalaren Werte werden angezeigt. Bei mehr als 1.000 verschiedenen Werten oder Texten über 500 Zeichen entfallen Eindeutigkeit, Wiederholungen und häufigste Werte für dieses Feld. Fehlende Werte, Typen und Zahlenstatistiken werden weiter gezählt. Objekt- und Array-Inhalte werden nicht auf Gleichheit verglichen. Alle Angaben gelten für den ausgewählten Analyseumfang.</p></div>
+                    <div class="help-feature"><strong>Bericht als JSON oder CSV</strong><p>Nach „Analysieren“ das Berichtsformat wählen und „Bericht exportieren“ anklicken. JSON enthält den strukturierten Bericht. CSV enthält eine Zeile pro Feld, Semikolon als Trennzeichen und UTF-8 mit Kennzeichnung für Excel. In deutscher Sprache werden Dezimalzahlen mit Komma ausgegeben. Für beide Formate den Export mit der jeweils anderen Auswahl wiederholen; eine neue Analyse ist nicht nötig. Die Quelldatei bleibt unverändert.</p></div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h3>Ladefehler und eingeschränkte Funktionen</h3>
+                <div class="help-features">
+                    <div class="help-feature"><strong>Fehlermeldung lesen und kopieren</strong><p>Ladefehler bleiben in einem Dialog sichtbar, bis Sie ihn schließen. „Details kopieren“ übernimmt Dateipfad und vollständige Fehlerdetails; falls das Kopieren nicht möglich ist, den markierten Text mit ⌘C bzw. Strg+C kopieren. „Datei erneut auswählen…“ öffnet den Dateidialog.</p></div>
+                    <div class="help-feature"><strong>Dateizugriff unter macOS</strong><p>Falls der Zugriff verweigert wird, die Datei über Öffnen erneut auswählen. Berechtigungen unter Systemeinstellungen → Datenschutz &amp; Sicherheit → Dateien und Ordner → JSON Viewer prüfen. Die Zugriffsabfrage wird von macOS gesteuert; eine fehlende Abfrage allein bedeutet noch keinen Fehler.</p></div>
+                    <div class="help-feature"><strong>Ausgegraute Funktionen</strong><p>Bei Objekten mit mehr als 100.000 Feldern direkt auf oberster Ebene sind Raw- und Tabellenansicht, CSV-Datenexport, Statistik, Duplikatsuche, JSONPath, Vergleich, Schema-Prüfung und Bulk-Operationen vorsorglich deaktiviert. Diese Funktionen könnten die Oberfläche blockieren. Der Hinweis am Button erklärt den Grund; beim Tabwechsel wird die Verfügbarkeit neu geprüft. Der CSV-Berichtsexport im Datenprofil ist eine eigene Funktion.</p></div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h3>⇆ Flatten / Unflatten</h3>
+                <div class="help-features">
+                    <div class="help-feature">
+                        <strong>Flatten</strong>
+                        <p>Wandelt verschachtelte Objekte in flache Pfade um, zum Beispiel <code>user.address.city</code>. Als Trennzeichen stehen Punkt, Unterstrich und Schrägstrich zur Verfügung.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Unflatten</strong>
+                        <p>Stellt aus flachen Pfaden wieder verschachtelte Objekte und Arrays her. Widersprüchliche Pfade werden vor einer Änderung gemeldet.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Bereich und Arrays</strong>
+                        <p>Transformiert das gesamte Dokument oder den aktuell ausgewählten Knoten. Arrays können unverändert bleiben oder über <code>[0]</code>, <code>[1]</code> und weitere Indizes aufgelöst werden.</p>
+                    </div>
+                    <div class="help-feature">
+                        <strong>Vorschau und Ergebnis</strong>
+                        <p>Die optionale Vorschau zeigt nur eine begrenzte Stichprobe. Beide Aktionen starten direkt die vollständige Transformation. „Anwenden“ verändert das aktuelle Dokument mit Undo-Unterstützung; „In neuem Tab öffnen“ behält die Quelle unverändert.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="help-section">
                 <h3>🌐 REST-Client (URL laden)</h3>
                 <div class="help-features">
                     <div class="help-feature">
@@ -2912,6 +2971,47 @@
         </div>
     </div>
 
+    <!-- Flatten / Unflatten Modal -->
+    <dialog class="workspace-dialog transform-modal" id="transformModal">
+        <h3>⇆ Flatten / Unflatten</h3>
+        <p class="transform-hint">Verschachtelte Daten in flache Pfade umwandeln oder flache Pfade wiederherstellen. Schlüssel mit Trennzeichen werden automatisch maskiert.</p>
+        <div class="transform-grid">
+            <label>Operation
+                <select id="transformOperation">
+                    <option value="flatten">Flatten</option>
+                    <option value="unflatten">Unflatten</option>
+                </select>
+            </label>
+            <label>Bereich
+                <select id="transformScope">
+                    <option value="document">Gesamtes Dokument</option>
+                    <option value="selected">Ausgewählter Knoten</option>
+                </select>
+            </label>
+            <label>Trennzeichen
+                <select id="transformSeparator">
+                    <option value=".">Punkt (.)</option>
+                    <option value="_">Unterstrich (_)</option>
+                    <option value="/">Schrägstrich (/)</option>
+                </select>
+            </label>
+            <label>Arrays
+                <select id="transformArrays">
+                    <option value="preserve">Unverändert lassen</option>
+                    <option value="indices">Indizes als [0], [1], …</option>
+                </select>
+            </label>
+        </div>
+        <p class="transform-summary" id="transformSummary">Noch keine Vorschau erstellt.</p>
+        <pre class="transform-preview" id="transformPreview">Die Vorschau zeigt maximal 12.000 Zeichen.</pre>
+        <div class="dialog-actions">
+            <button id="btnTransformCancel">Abbrechen</button>
+            <button id="btnTransformPreview">Vorschau</button>
+            <button id="btnTransformApply">Anwenden</button>
+            <button id="btnTransformNewTab" class="primary">In neuem Tab öffnen</button>
+        </div>
+    </dialog>
+
     <!-- REST Client Modal -->
     <div class="rest-overlay" id="restOverlay"></div>
     <div class="rest-modal" id="restModal">
@@ -2974,6 +3074,7 @@
 
     <script src="json-core.js"></script>
     <script src="workspace-core.js"></script>
+    <script src="pipeline-core.js"></script>
     <script src="xlsx.full.min.js"></script>
     <script>
         // State
@@ -3446,6 +3547,7 @@
         
         async function readFileContent(filePath) {
             console.log('[ReadFile] Loading:', filePath);
+            const readErrors = [];
             
             // Step 1: Get file size (lightweight metadata call)
             let byteSize = 0;
@@ -3454,6 +3556,7 @@
                 console.log(`[ReadFile] File size: ${(byteSize / 1024 / 1024).toFixed(2)} MB`);
             } catch(e) {
                 console.warn('[ReadFile] get_file_size failed, will read directly:', e);
+                    readErrors.push(String(e?.message || e));
             }
             
             // Helper: validate that text is non-empty
@@ -3499,6 +3602,7 @@
                     console.warn('[ReadFile] Chunked read returned empty!');
                 } catch(chunkErr) {
                     console.error('[ReadFile] Chunked reading failed:', chunkErr);
+                    readErrors.push(String(chunkErr?.message || chunkErr));
                     // Fall through to single-read strategies
                 }
             }
@@ -3517,6 +3621,7 @@
                     console.warn('[ReadFile] read_file_raw returned empty, trying read_file_fast...');
                 } catch(rawErr) {
                     console.error('[ReadFile] read_file_raw failed:', rawErr);
+                    readErrors.push(String(rawErr?.message || rawErr));
                 }
             }
             
@@ -3532,6 +3637,7 @@
                 console.warn(`[ReadFile] read_file_fast returned empty string! byteSize=${byteSize}`);
             } catch(fastErr) {
                 console.error('[ReadFile] read_file_fast failed:', fastErr);
+                    readErrors.push(String(fastErr?.message || fastErr));
             }
             
             // --- Strategy D: Fallback — raw bytes even for small files ---
@@ -3545,6 +3651,7 @@
                 }
             } catch(rawErr2) {
                 console.error('[ReadFile] Fallback read_file_raw failed:', rawErr2);
+                    readErrors.push(String(rawErr2?.message || rawErr2));
             }
             
             // --- Strategy E: Last resort — chunked reading for any size ---
@@ -3570,6 +3677,7 @@
                     }
                 } catch(e) {
                     console.error('[ReadFile] Last resort chunked failed:', e);
+                    readErrors.push(String(e?.message || e));
                 }
             }
             
@@ -3577,7 +3685,7 @@
             throw new Error(
                 `Datei konnte nicht gelesen werden: ${filePath}\n` +
                 `Dateigröße laut Metadaten: ${byteSize} Bytes\n` +
-                `Alle Lesemethoden (String-IPC, Raw-Bytes, Chunked) haben leere Daten zurückgegeben.`
+                (readErrors.length ? [...new Set(readErrors)].join("\n") : `Alle Lesemethoden haben leere Daten zurückgegeben.`)
             );
         }
         
@@ -3701,7 +3809,7 @@
             currentMatchIndex = -1;
             isModified = false;
             currentExpandLevel = 1;
-            maxDepth = calculateMaxDepth(jsonData, 50);
+            maxDepth = result.prepared ? (metadataDepths(jsonData)?.length || 1) - 1 : calculateMaxDepth(jsonData, 50);
             
             // Load bookmarks for this specific file
             loadBookmarksForFile();
@@ -3709,7 +3817,7 @@
             // Precompute subtree sizes for virtual rendering
             if (progressEl) progressEl.textContent = 'Berechne Baumstruktur...';
             await new Promise(r => setTimeout(r, 16));
-            totalExpandedCount = computeSubtreeSizes(jsonData);
+            totalExpandedCount = result.prepared ? (metadataSize(jsonData) || 1) : computeSubtreeSizes(jsonData);
             console.log(`[SubtreeSizes] Total nodes: ${totalExpandedCount}`);
             const totalTime = performance.now() - startTime;
             
@@ -3739,18 +3847,47 @@
                 await finalizeLoad(result, filePath, startTime);
                 return true;
             } catch (err) {
-                showNotification('Fehler beim Laden: ' + (err.message || err));
+                showLoadError(err, filePath);
                 status.textContent = fileName || 'Bereit';
                 return false;
             }
         }
+        function showLoadError(error, path = '') {
+            const english = currentLang === 'en';
+            const dialog = document.createElement('dialog');
+            dialog.className = 'workspace-dialog load-error-dialog';
+            const heading = document.createElement('h3');
+            heading.textContent = english ? 'File could not be loaded' : 'Datei konnte nicht geladen werden';
+            const details = document.createElement('textarea');
+            details.readOnly = true;
+            details.setAttribute('aria-label', english ? 'Error details' : 'Fehlerdetails');
+            details.value = (path ? path + '\n\n' : '') + String(error?.message || error);
+            const hint = document.createElement('p');
+            hint.textContent = english
+                ? 'If access was denied: select the file again using Open. On macOS, check System Settings → Privacy & Security → Files & Folders → JSON Viewer. The system controls access prompts; an absent prompt does not by itself indicate an error.'
+                : 'Falls der Zugriff verweigert wurde: Die Datei über Öffnen erneut auswählen. Unter macOS: Systemeinstellungen → Datenschutz & Sicherheit → Dateien und Ordner → JSON Viewer prüfen. Die Zugriffsabfrage steuert macOS; eine ausbleibende Abfrage bedeutet allein noch keinen Fehler.';
+            const actions = document.createElement('div'); actions.className = 'dialog-actions';
+            const copy = document.createElement('button'); copy.textContent = english ? 'Copy details' : 'Details kopieren';
+            copy.onclick = async () => {
+                try { await navigator.clipboard.writeText(details.value); copy.textContent = english ? 'Copied' : 'Kopiert'; }
+                catch { details.focus(); details.select(); copy.textContent = english ? 'Press ⌘C / Ctrl+C' : '⌘C / Strg+C drücken'; }
+            };
+            const close = () => { dialog.close(); dialog.remove(); };
+            const reopen = document.createElement('button'); reopen.textContent = english ? 'Select file again…' : 'Datei erneut auswählen…';
+            reopen.onclick = () => { close(); openFile(); };
+            const dismiss = document.createElement('button'); dismiss.textContent = english ? 'Close' : 'Schließen'; dismiss.onclick = close;
+            dialog.oncancel = event => { event.preventDefault(); close(); };
+            actions.append(copy, reopen, dismiss); dialog.append(heading, details, hint, actions);
+            document.body.append(dialog); dialog.showModal();
+        }
+
         async function openFile() {
             if (window.__TAURI__) {
                 try {
                     const selected = await window.__TAURI__.dialog.open({ multiple: true,
                         filters: [{ name: 'JSON', extensions: ['json', 'jsonl', 'ndjson', 'txt'] }] });
                     for (const path of (Array.isArray(selected) ? selected : selected ? [selected] : [])) await loadFileFromPath(path);
-                } catch (err) { showNotification('Fehler beim Öffnen: ' + (err.message || err)); }
+                } catch (err) { showLoadError(err); }
             } else document.getElementById('fileInput').click();
         }
 
@@ -3812,7 +3949,7 @@
                 await finalizeLoad({ jsonData: parsed.data, name: file.name, fileSize: file.size,
                     nodeCount: 0, parseTime: performance.now() - start, ...parsed }, null, start);
                 return true;
-            } catch (err) { showNotification('Fehler beim Laden: ' + err.message); return false; }
+            } catch (err) { showLoadError(err, file.name); return false; }
         }
 
         function parseConcatenated(text) {
@@ -3879,6 +4016,43 @@
             status.textContent = fileName;
         }
         
+        // Synchronous whole-object operations are not safe for extremely wide roots.
+        // Use cached keys: capability checks must not repeatedly enumerate millions of fields.
+        function wideDocumentRestriction() {
+            return jsonData !== null && typeof jsonData === 'object' && !Array.isArray(jsonData) &&
+                JsonCore.sortedKeys(jsonData).length > 100000;
+        }
+        function restrictedFeatureIds() {
+            return ['btnRawView', 'btnTableView', 'btnExportCSV', 'btnStats', 'btnDuplicates',
+                'btnJsonPath', 'btnDiff', 'btnSchema', 'btnBulk'];
+        }
+        function featureRestrictionReason() {
+            return currentLang === 'en'
+                ? 'Unavailable for objects with over 100,000 fields: this function currently processes the entire object and can freeze the app.'
+                : 'Bei Objekten mit über 100.000 Feldern nicht verfügbar: Diese Funktion verarbeitet derzeit das gesamte Objekt und kann die App blockieren.';
+        }
+        function allowDocumentFeature() {
+            if (!wideDocumentRestriction()) return true;
+            showNotification(featureRestrictionReason(), 'info', 6000);
+            return false;
+        }
+        function updateFeatureAvailability() {
+            const restricted = wideDocumentRestriction();
+            for (const id of restrictedFeatureIds()) {
+                const button = document.getElementById(id);
+                if (!button) continue;
+                if (restricted) {
+                    if (!button.dataset.restrictionTitle) button.dataset.restrictionTitle = button.title;
+                    button.disabled = true;
+                    button.title = featureRestrictionReason();
+                } else if (button.dataset.restrictionTitle) {
+                    button.title = button.dataset.restrictionTitle;
+                    delete button.dataset.restrictionTitle;
+                    button.disabled = jsonData === undefined;
+                }
+            }
+        }
+
         function enableButtons() {
             document.getElementById('btnExpand').disabled = false;
             document.getElementById('btnCollapse').disabled = false;
@@ -3902,7 +4076,9 @@
             document.getElementById('btnDiff').disabled = false;
             document.getElementById('btnSchema').disabled = false;
             document.getElementById('btnBulk').disabled = false;
+            document.getElementById('btnTransform').disabled = false;
             document.getElementById('btnRestClient').disabled = false;
+            updateFeatureAvailability();
         }
         
         function toggleIndentGuides() {
@@ -4273,6 +4449,10 @@
         function undo() {
             if (undoStack.length === 0) return;
             const entry = undoStack.pop();
+            if (entry.reference && entry.path === 'root') {
+                redoStack.push({path:'root',snapshot:jsonData,reference:true});
+                jsonData=entry.snapshot;resetPreparedPipelineTree();updateUndoButtons();return;
+            }
             // Save current state of the same subtree for redo
             if (entry.path === 'root') {
                 redoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
@@ -4290,6 +4470,10 @@
         function redo() {
             if (redoStack.length === 0) return;
             const entry = redoStack.pop();
+            if (entry.reference && entry.path === 'root') {
+                undoStack.push({path:'root',snapshot:jsonData,reference:true});
+                jsonData=entry.snapshot;resetPreparedPipelineTree();updateUndoButtons();return;
+            }
             if (entry.path === 'root') {
                 undoStack.push({ path: 'root', snapshot: JSON.parse(JSON.stringify(jsonData)) });
                 jsonData = entry.snapshot;
@@ -4733,6 +4917,7 @@
         });
         
         async function exportCSV(mode = 'full') {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             
             // Close dropdown
@@ -5024,7 +5209,7 @@
                     }
                     currentValue = currentValue[arrIdx];
                 } else {
-                    const keys = Object.keys(currentValue).sort();
+                    const keys = JsonCore.sortedKeys(currentValue);
                     for (const k of keys) {
                         if (k === s) break;
                         idx += hasDepthLimit ? getNodeSizeAtDepth(currentValue[k], expandAllDepthLimit - childDepth) : getNodeSize(currentValue[k]);
@@ -5060,7 +5245,7 @@
                     if (idx >= startIdx) {
                         const isObj = frame.value !== null && typeof frame.value === 'object';
                         const isArr = Array.isArray(frame.value);
-                        const hasKids = isObj && (isArr ? frame.value.length > 0 : Object.keys(frame.value).length > 0);
+                        const hasKids = isObj && (isArr ? frame.value.length > 0 : JsonCore.sortedKeys(frame.value).length > 0);
                         rows.push({ key: frame.key, value: frame.value, path: frame.path,
                                     depth: frame.depth, hasChildren: hasKids, isArray: isArr, isObject: isObj });
                     }
@@ -5071,13 +5256,21 @@
                             frame.childKeys = null;
                             frame.childCount = frame.value.length;
                         } else {
-                            frame.childKeys = Object.keys(frame.value).sort();
+                            frame.childKeys = JsonCore.sortedKeys(frame.value);
                             frame.childCount = frame.childKeys.length;
                         }
                         frame.childIndex = 0;
                     } else { stack.pop(); }
                 } else if (frame.childIndex < frame.childCount) {
                     // ── Process next child ──
+                    // At the depth boundary every child occupies exactly one row.
+                    // Jump directly to the viewport instead of scanning millions of siblings.
+                    if (((hasDepthLimit && frame.depth + 1 >= expandAllDepthLimit) ||
+                         metadataDepths(frame.value)?.length <= 2) && idx < startIdx) {
+                        const skip = Math.min(startIdx - idx, frame.childCount - frame.childIndex);
+                        frame.childIndex += skip; idx += skip;
+                        if (frame.childIndex >= frame.childCount) { stack.pop(); continue; }
+                    }
                     let childValue;
                     if (frame.childKeys) { childValue = frame.value[frame.childKeys[frame.childIndex]]; }
                     else { childValue = frame.value[frame.childIndex]; }
@@ -5116,6 +5309,15 @@
             minimapNeedsRedraw = true;
             if ((jsonData === undefined)) { visibleRows = []; return; }
 
+            // A wide root must not materialize millions of row objects just to show
+            // its first screen. Depth one preserves the initial root-only expansion.
+            if (!expandAllMode && expandedPaths.size === 1 && expandedPaths.has('root') &&
+                jsonData !== null && typeof jsonData === 'object' &&
+                (Array.isArray(jsonData) ? jsonData.length : JsonCore.sortedKeys(jsonData).length) > 10000) {
+                expandAllMode = true; expandAllDepthLimit = 1;
+                window._collapsedInExpandAll = new Set();
+            }
+
             // In expandAllMode, do NOT build the full array – use virtual rendering instead
             if (expandAllMode) {
                 visibleRows = [];
@@ -5150,7 +5352,7 @@
                             });
                         }
                     } else {
-                        const keys = Object.keys(value).sort().reverse();
+                        const keys = JsonCore.sortedKeys(value).slice().reverse();
                         for (const k of keys) {
                             stack.push({ 
                                 key: k, 
@@ -5259,7 +5461,8 @@
         }
         // ── End custom scrollbar helpers ──────────────────────────────
 
-        function renderTree() {
+        function renderTree(reuseRows = false) {
+            updateFeatureAvailability();
             // Don't re-render while editing - it would destroy the input
             if (editingPath || editingKey) return;
             
@@ -5267,7 +5470,7 @@
             if (metadataDirty) totalExpandedCount = jsonData === undefined ? 0 : computeSubtreeSizes(jsonData);
             const savedScrollTop = scrollTop;
             
-            buildVisibleRows();
+            if (!reuseRows) buildVisibleRows();
             
             const container = document.createElement('div');
             container.className = 'virtual-list has-scrollbar';
@@ -5431,7 +5634,7 @@
                 html += `<span class="key">${escapeHtml(row.key)}</span><span class="colon">: </span>`;
                 
                 if (row.isObject) {
-                    const count = row.isArray ? row.value.length : Object.keys(row.value).length;
+                    const count = row.isArray ? row.value.length : JsonCore.sortedKeys(row.value).length;
                     const type = row.isArray ? 'Array' : 'Object';
                     const bracket = row.isArray ? '[]' : '{}';
                     html += `<span class="bracket">${bracket[0]}</span>`;
@@ -6106,10 +6309,10 @@
             return JsonCore.getAtPath(jsonData, path);
         }
         
-        function setValueAtPath(path, value) {
+        function setValueAtPath(path, value, preserveKeys = false) {
             if (path === 'root') {
                 jsonData = value;
-                markModified();
+                markModified(preserveKeys);
                 return;
             }
             const parts = parsePath(path);
@@ -6121,7 +6324,7 @@
                 current = current[part];
             }
             JsonCore.define(current, lastKey, value);
-            markModified();
+            markModified(preserveKeys);
         }
         
         function deleteAtPath(path) {
@@ -6147,7 +6350,8 @@
             return JsonCore.parentPath(path);
         }
         
-        function markModified() {
+        function markModified(preserveKeys = false) {
+            if (!preserveKeys) JsonCore.invalidateKeys();
             if (typeof tableSource !== 'undefined') tableSource = null;
             metadataDirty = true;
             if (!isModified) {
@@ -6522,6 +6726,7 @@
         
         // ============ STATISTICS PANEL ============
         function showStatistics() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             const stats = computeStatistics(jsonData);
             const total = stats.objects + stats.arrays + stats.strings + stats.numbers + stats.booleans + stats.nulls;
@@ -6705,6 +6910,7 @@
 
         // ============ TABLE VIEW ============
         function showTableView() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             // Find the best array to show as table
             let targetArray = null;
@@ -7057,6 +7263,7 @@
 
         // ============ RAW VIEW (Syntax-Highlighted) ============
         function showRawView() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             const target = selectedPath ? getValueAtPath(selectedPath) : jsonData;
             const json = JSON.stringify(target, null, 2);
@@ -7085,6 +7292,7 @@
 
         // ============ DUPLICATE DETECTION ============
         function showDuplicates() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             status.textContent = 'Suche Duplikate...';
             setTimeout(() => {
@@ -7168,6 +7376,7 @@
             }
         }
         function executeJsonPath() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             const expr = document.getElementById('jsonpathInput').value.trim();
             if (!expr) return;
@@ -7307,6 +7516,7 @@
         // ============ DIFF VIEW ============
         let diffSecondData = null;
         function showDiffView() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             document.getElementById('diffOverlay').classList.add('visible');
             document.getElementById('diffModal').classList.add('visible');
@@ -7438,6 +7648,7 @@
 
         // ============ SCHEMA VALIDATION ============
         function showSchema() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             document.getElementById('schemaOverlay').classList.add('visible');
             document.getElementById('schemaModal').classList.add('visible');
@@ -7541,6 +7752,7 @@
 
         // ============ BULK OPERATIONS ============
         function showBulk() {
+            if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
             document.getElementById('bulkOverlay').classList.add('visible');
             document.getElementById('bulkModal').classList.add('visible');
@@ -7577,6 +7789,7 @@
             }
         }
         function bulkPreview() {
+            if (!allowDocumentFeature()) return;
             const op = document.getElementById('bulkOp').value;
             const keyFrom = document.getElementById('bulkKeyFrom').value.trim();
             if (!keyFrom) { showNotification('Bitte Key-Name eingeben'); return; }
@@ -7601,6 +7814,7 @@
             return count.n;
         }
         function bulkApply() {
+            if (!allowDocumentFeature()) return;
             const op = document.getElementById('bulkOp').value;
             const from = document.getElementById('bulkKeyFrom').value.trim();
             const to = document.getElementById('bulkKeyTo').value.trim();

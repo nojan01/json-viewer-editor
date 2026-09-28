@@ -138,7 +138,17 @@
         return count;
     }
 
-    const api = { own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, bulkEdit };
+    let keyCache = new WeakMap();
+    function sortedKeys(value) {
+        let keys = keyCache.get(value);
+        if (!keys) { keys = Object.keys(value).sort(); if (keys.length > 1000) keyCache.set(value, keys); }
+        return keys;
+    }
+    // Generated Flatten paths retain traversal order and avoid a multi-million-key sort.
+    function seedKeys(value, keys) { keyCache.set(value, keys); }
+    function invalidateKeys() { keyCache = new WeakMap(); }
+
+    const api = { seedKeys, sortedKeys, invalidateKeys, own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, bulkEdit };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.JsonCore = api;
 })(globalThis);

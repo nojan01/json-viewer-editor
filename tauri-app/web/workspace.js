@@ -19,7 +19,7 @@ let activeSavedViewName = readPreference('json-viewer-active-view', null);
 if (!savedViews.some(view => view.name === activeSavedViewName)) activeSavedViewName = null;
 const workspaceBar = document.createElement('div');
 workspaceBar.className = 'workspace-bar';
-workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><select id="savedViewSelect" class="saved-view-select" aria-label="Gespeicherte Ansicht"></select><button id="btnManageViews"></button><button id="btnMaskedExport"></button>';
+workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><select id="savedViewSelect" class="saved-view-select" aria-label="Gespeicherte Ansicht"></select><button id="btnManageViews"></button><button id="btnMaskedExport"></button><button id="btnDataProfile"></button><button id="btnPipeline"></button>';
 // Place below the toolbar, above search and document contents.
 const toolbar = document.querySelector('.toolbar');
 (toolbar || treeContainer).insertAdjacentElement('afterend', workspaceBar);
@@ -32,7 +32,7 @@ function viewState() {
 function captureDocument() {
     return { jsonData, fileName, fileSize, wasConcatenated, originalIndent, originalCrlf, currentFilePath,
         expandedPaths, expandAllMode, expandAllDepthLimit, totalExpandedCount, selectedPath, selectedIndex,
-        isModified, currentExpandLevel, maxDepth, undoStack, redoStack, scrollTop, bookmarks,
+        isModified, currentExpandLevel, maxDepth, undoStack, redoStack, scrollTop, bookmarks, visibleRows, metadataDirty,
         searchMatches, currentMatchIndex, searchKeysOnly, searchValuesOnly, searchRegex,
         searchText: searchInput.value, collapsed: window._collapsedInExpandAll,
         tableSource, tableData, tableColumns, tableAllColumns, tableHiddenColumns, tablePinnedColumns, tableColumnRules,
@@ -84,11 +84,11 @@ function applyViewState(view) {
 function restoreDocumentState(state) {
     ({ jsonData, fileName, fileSize, wasConcatenated, originalIndent, originalCrlf, currentFilePath,
         expandedPaths, expandAllMode, expandAllDepthLimit, totalExpandedCount, selectedPath, selectedIndex,
-        isModified, currentExpandLevel, maxDepth, undoStack, redoStack, scrollTop, bookmarks,
+        isModified, currentExpandLevel, maxDepth, undoStack, redoStack, scrollTop, bookmarks, visibleRows, metadataDirty,
         searchMatches, currentMatchIndex, searchKeysOnly, searchValuesOnly, searchRegex,
         tableSource, tableData, tableColumns, tableAllColumns, tableHiddenColumns, tablePinnedColumns, tableColumnRules,
         tableFilteredData, tableSortCol, tableSortAsc, tableVirtualStart } = state);
-    editingPath = null; editingKey = false; metadataDirty = false; minimapNeedsRedraw = true;
+    editingPath = null; editingKey = false; minimapNeedsRedraw = true;
     window._collapsedInExpandAll = state.collapsed || new Set(); searchInput.value = state.searchText;
     byId('tableFilterInput').value = state.tableFilter; byId('tableTitle').textContent = state.tableTitle;
     byId('jsonpathInput').value = state.jsonPathText; byId('jsonpathResultCount').textContent = '';
@@ -96,7 +96,7 @@ function restoreDocumentState(state) {
     byId('fileSize').textContent = formatSize(fileSize); status.textContent = fileName;
     searchInfo.textContent = searchMatches.length ? `${currentMatchIndex + 1} / ${searchMatches.length}` : '';
     diffSecondData = null; enableButtons(); updateUndoButtons(); updateTitle(); updateLevelDisplay();
-    updateSearchOptionButtons(); renderTree(); updateBreadcrumb();
+    updateSearchOptionButtons(); renderTree(!metadataDirty); updateBreadcrumb();
 }
 function updateSearchOptionButtons() { updateSearchButtons(); }
 function persistWorkspace() {
@@ -121,6 +121,10 @@ function renderDocumentTabs() {
     }
     byId('btnMaskedExport').textContent = wx('Maskierter Export','Masked export');
     byId('btnMaskedExport').disabled = jsonData === undefined;
+    byId('btnDataProfile').textContent = wx('Datenprofil…','Data profile…');
+    byId('btnDataProfile').disabled = jsonData === undefined;
+    byId('btnPipeline').textContent = wx('Transformationen…','Transformations…');
+    byId('btnPipeline').disabled = jsonData === undefined;
     byId('btnManageViews').textContent = wx('Ansichten…','Views…');
     byId('btnManageViews').disabled = jsonData === undefined;
     const updateButton = byId('btnCheckUpdates');
@@ -376,12 +380,13 @@ function showSavedViews() {
 byId('savedViewSelect').onchange = event => { const view = savedViews.find(item => item.name === event.target.value); if (view) applySavedView(view); };
 byId('btnManageViews').onclick = showSavedViews;
 
-async function writeExport(text, suggestedName) {
+async function writeExport(text, suggestedName, format = 'json') {
+    const csv = format === 'csv';
     if (!window.__TAURI__) {
-        const url = URL.createObjectURL(new Blob([text],{type:'application/json'}));
+        const url = URL.createObjectURL(new Blob([text],{type:csv ? 'text/csv;charset=utf-8' : 'application/json'}));
         const a = document.createElement('a'); a.href = url; a.download = suggestedName; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); return true;
     }
-    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:'JSON',extensions:['json']}]});
+    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:csv ? 'CSV' : 'JSON',extensions:[csv ? 'csv' : 'json']}]});
     if (!path) return false;
     // Backend also checks file identity (symlinks/hard links) against every open source.
     await window.__TAURI__.core.invoke('validate_export_path',{path,sources:documents.map(d => d.id === activeDocumentId ? currentFilePath : d.path).filter(Boolean)});
@@ -396,6 +401,199 @@ async function writeExport(text, suggestedName) {
         await window.__TAURI__.core.invoke('save_file_finish',{path}); return true;
     } catch (err) { if (started) await window.__TAURI__.core.invoke('save_file_cancel',{path}).catch(()=>{}); throw err; }
 }
+function savePipelineProfile(saved, name, plan) {
+    name = name.trim();
+    if (!name || name.length > 80) throw new Error(wx('Bitte einen Profilnamen mit 1 bis 80 Zeichen eingeben.','Enter a profile name with 1 to 80 characters.'));
+    const steps = PipelineCore.steps(plan);
+    const next = saved.map(profile => ({...profile}));
+    let index = next.findIndex(profile => profile.name === name);
+    if (index < 0) {
+        if (next.length >= 50) throw new Error(wx('Maximal 50 Profile.','Maximum of 50 profiles.'));
+        index = next.length; next.push({name,steps});
+    } else next[index] = {name,steps};
+    localStorage.setItem('json-viewer-pipelines',JSON.stringify(next));
+    return {profiles:next,index};
+}
+function showPipeline() {
+    if(jsonData===undefined||documentBusy)return;
+    const source=jsonData, sourceName=fileName;
+    let saved=PipelineCore.profiles(readPreference('json-viewer-pipelines',[]));
+    let plan=[],busy=false,cancelled=false;
+    const dialog=document.createElement('dialog');dialog.className='workspace-dialog pipeline-dialog';
+    dialog.innerHTML=`<h3>${wx('Transformationsassistent','Transformation assistant')}</h3>
+      <p>${wx('Schritte werden in der gezeigten Reihenfolge auf das gesamte Dokument angewendet. Feldnamen gelten auf allen Objektebenen, auch innerhalb von Arrays. Fehlende Quellfelder werden übersprungen; Zielkonflikte und ungültige Werte brechen den gesamten Ablauf ab.','Steps run in the shown order on the entire document. Field names match at all object levels, including arrays. Missing source fields are skipped; target conflicts and invalid values abort the whole pipeline.')}</p>
+      <div class="pipeline-presets"><select class="pipeline-saved" aria-label="Profil"></select><input class="pipeline-name" maxlength="80" placeholder="${wx('Profilname','Profile name')}"><button class="pipeline-save">${wx('Profil speichern','Save profile')}</button><button class="pipeline-delete">${wx('Profil löschen','Delete profile')}</button></div>
+      <p class="pipeline-status" role="status" aria-live="polite"></p>
+      <ol class="pipeline-steps"></ol><button class="pipeline-add">+ ${wx('Schritt hinzufügen','Add step')}</button>
+      <pre class="mask-preview pipeline-preview"></pre>
+      <div class="dialog-actions"><button class="pipeline-close">${wx('Schließen / Abbrechen','Close / Cancel')}</button><button class="pipeline-preview-button">${wx('Stichprobenvorschau','Sample preview')}</button><button class="pipeline-apply">${wx('Anwenden','Apply')}</button><button class="pipeline-new primary">${wx('In neuem Tab öffnen','Open in new tab')}</button></div>`;
+    const q=s=>dialog.querySelector(s),status=q('.pipeline-status'),preview=q('.pipeline-preview');
+    const labels={rename:wx('Feld umbenennen','Rename field'),delete:wx('Feld löschen','Delete field'),convert:wx('Typ konvertieren','Convert type'),trim:wx('Text trimmen','Trim text'),replace:wx('Text ersetzen','Replace text'),merge:wx('Felder zusammenführen','Merge fields'),split:wx('Feld aufteilen','Split field'),flatten:'Flatten',unflatten:'Unflatten'};
+    function clear(){preview.textContent='';status.textContent='';status.classList.remove('pipeline-error');}
+    function listProfiles(){const select=q('.pipeline-saved');select.replaceChildren(new Option(wx('Profil laden…','Load profile…'),''));saved.forEach((p,i)=>select.add(new Option(p.name,String(i))));}
+    function render() {
+        const list=q('.pipeline-steps');list.replaceChildren();
+        plan.forEach((step,i)=>{
+            const li=document.createElement('li'),op=document.createElement('select');op.setAttribute('aria-label',wx('Operation','Operation'));
+            for(const [value,label]of Object.entries(labels))op.add(new Option(label,value));op.value=step.op;
+            op.onchange=()=>{plan[i]={op:op.value,field:'',target:'',value:'',separator:['flatten','unflatten'].includes(op.value)?'.':' ',arrays:'preserve',type:'string'};clear();render();};li.append(op);
+            function input(key,label){const wrap=document.createElement('label');wrap.textContent=label;const control=document.createElement('input');control.value=step[key]||'';control.maxLength=1000;control.dataset.step=String(i+1);control.dataset.field=key;control.required=key==='field'||(key==='target'&&step.op!=='replace')||key==='value'||(key==='separator'&&step.op==='split');if(control.required)wrap.textContent+=' *';if(key==='field')control.placeholder=wx('z.B. name','e.g. name');control.oninput=()=>{step[key]=control.value;control.removeAttribute('aria-invalid');clear();};wrap.append(control);li.append(wrap);}
+            function select(key,label,choices){const wrap=document.createElement('label');wrap.textContent=label;const control=document.createElement('select');choices.forEach(([v,l])=>control.add(new Option(l,v)));control.value=step[key];control.onchange=()=>{step[key]=control.value;clear();};wrap.append(control);li.append(wrap);}
+            if(['flatten','unflatten'].includes(step.op)) {
+                select('separator',wx('Trennzeichen','Separator'),[['.','(.)'],['_','(_)'],['/','(/)']]);
+                if(step.op==='flatten')select('arrays','Arrays',[['preserve',wx('Erhalten','Preserve')],['indices',wx('Indizes','Indices')]]);
+            } else {
+                input('field',step.op==='merge'?wx('Quellfelder (kommagetrennt)','Source fields (comma separated)'):wx('Feldname','Field name'));
+                if(['rename','merge','split','replace'].includes(step.op))input('target',step.op==='replace'?wx('Ersetzen durch','Replace with'):step.op==='split'?wx('Zielfelder (kommagetrennt)','Target fields (comma separated)'):wx('Zielfeld','Target field'));
+                if(step.op==='replace')input('value',wx('Suchtext (wörtlich)','Find text (literal)'));
+                if(['split','merge'].includes(step.op))input('separator',wx('Trennzeichen','Separator'));
+                if(step.op==='convert')select('type',wx('Zieltyp','Target type'),[['string','String'],['number','Number'],['boolean','Boolean'],['null','Null']]);
+            }
+            for(const [label,action,disabled]of [['↑',()=>{[plan[i-1],plan[i]]=[plan[i],plan[i-1]];},i===0],['↓',()=>{[plan[i+1],plan[i]]=[plan[i],plan[i+1]];},i===plan.length-1],['×',()=>plan.splice(i,1),false]]) {
+                const b=document.createElement('button');b.textContent=label;b.disabled=disabled;b.onclick=()=>{action();clear();render();};li.append(b);
+            }
+            list.append(li);
+        });
+    }
+    listProfiles();
+    q('.pipeline-add').onclick=()=>{if(plan.length>=50)return;plan.push({op:'trim',field:'',target:'',value:'',separator:' ',arrays:'preserve',type:'string'});clear();render();};
+    q('.pipeline-saved').onchange=()=>{const p=saved[Number(q('.pipeline-saved').value)];if(q('.pipeline-saved').value===''||!p)return;plan=PipelineCore.steps(p.steps);q('.pipeline-name').value=p.name;clear();render();};
+    q('.pipeline-save').onclick=()=>{
+        clear();
+        try {
+            const name=q('.pipeline-name');
+            if(!name.value.trim()){name.focus();throw new Error(wx('Bitte oben einen Profilnamen eingeben.','Enter a profile name above.'));}
+            for(const input of dialog.querySelectorAll('.pipeline-steps input[required]')) {
+                const empty=['separator','value'].includes(input.dataset.field) ? !input.value : !input.value.trim();
+                if(empty){input.setAttribute('aria-invalid','true');input.focus();throw new Error(`${wx('Schritt','Step')} ${input.dataset.step}: ${wx('Bitte das markierte Pflichtfeld ausfüllen.','Complete the highlighted required field.')}`);}
+            }
+            const result=savePipelineProfile(saved,name.value,plan);
+            saved=result.profiles;listProfiles();q('.pipeline-saved').value=String(result.index);
+            status.textContent=wx('Profil gespeichert: ','Profile saved: ')+saved[result.index].name;
+        }catch(e){status.classList.add('pipeline-error');status.textContent=e.message;}
+    };
+    q('.pipeline-delete').onclick=()=>{const value=q('.pipeline-saved').value;if(value==='')return;saved.splice(Number(value),1);writePreference('json-viewer-pipelines',saved);listProfiles();};
+    function close(){cancelled=true;if(!busy){dialog.close();dialog.remove();}}
+    q('.pipeline-close').onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
+    async function execute(mode) {
+        if(busy)return;
+        try {
+            const steps=PipelineCore.steps(plan);busy=true;cancelled=false;
+            const controls=[...dialog.querySelectorAll('button,input,select')].filter(c=>c!==q('.pipeline-close'));
+            const disabled=controls.map(c=>c.disabled);controls.forEach(c=>c.disabled=true);
+            try {
+                clear();status.textContent=wx('Arbeitskopie wird vorbereitet…','Preparing working copy…');
+                await new Promise(resolve=>setTimeout(resolve,16));
+                const input=mode==='preview'?boundedTransformSample(source).value:source;
+                const result=await PipelineCore.run(input,steps,{indexKeys:JsonCore.seedKeys,cancelled:()=>cancelled,step:(i,n)=>{status.textContent=`${wx('Schritt','Step')} ${i} / ${n}`;}});
+                if(mode==='preview') {preview.textContent=boundedTransformSample(result).text;status.textContent=wx('Stichprobe: maximal 300 Knoten; gekürzte Werte. Nur eine Orientierung, keine vollständige Prüfung. Anwenden verarbeitet alle Daten erneut.','Sample: up to 300 nodes; shortened values. Guidance only, not full validation. Apply processes all data again.');return;}
+                status.textContent=wx('Anzeige wird vorbereitet…','Preparing display…');
+                await prepareTransformTree(result,()=>cancelled);
+                if(cancelled)return;
+                // The modal prevents user edits; still verify the source before committing.
+                if(jsonData!==source)throw new Error(wx('Das aktive Dokument hat sich geändert.','The active document changed.'));
+                if(mode==='apply') {
+                    undoStack.push({path:'root',snapshot:source,reference:true});if(undoStack.length>MAX_UNDO)undoStack.shift();redoStack=[];
+                    jsonData=result;resetPreparedPipelineTree();updateUndoButtons();stashDocument();renderDocumentTabs();
+                } else {
+                    await queueDocumentOperation(async()=>{const start=performance.now();await finalizeLoad({jsonData:result,name:sourceName.replace(/\.json$/i,'')+'-transformed.json',fileSize:0,nodeCount:0,parseTime:0,prepared:true,indent:'  ',crlf:false},null,start);isModified=true;updateTitle();stashDocument();renderDocumentTabs();});
+                }
+                cancelled=true;
+            } finally {controls.forEach((c,i)=>c.disabled=disabled[i]);busy=false;if(cancelled){dialog.close();dialog.remove();}}
+        } catch(error){status.textContent=error.message;}
+    }
+    q('.pipeline-preview-button').onclick=()=>execute('preview');q('.pipeline-apply').onclick=()=>execute('apply');q('.pipeline-new').onclick=()=>execute('new');
+    document.body.append(dialog);dialog.showModal();q('.pipeline-add').click();
+}
+function resetPreparedPipelineTree() {
+    tableSource=null;currentExpandLevel=1;metadataDirty=false;totalExpandedCount=metadataSize(jsonData)||1;maxDepth=(metadataDepths(jsonData)?.length||1)-1;
+    expandedPaths=new Set(['root']);expandAllMode=false;window._collapsedInExpandAll=new Set();scrollTop=0;selectedPath=null;selectedIndex=-1;
+    searchMatches=[];currentMatchIndex=-1;searchInfo.textContent='';isModified=true;updateTitle();updateLevelDisplay();renderTree();
+}
+byId('btnPipeline').onclick=showPipeline;
+
+function showDataProfile() {
+    if (jsonData === undefined || documentBusy) return;
+    const source = jsonData, selected = selectedPath ? getValueAtPath(selectedPath) : undefined;
+    const sourceName = fileName;
+    const rootKeys = source && typeof source === 'object' && !Array.isArray(source) ? JsonCore.sortedKeys(source) : [];
+    const recordKeys = rootKeys.length <= 100 ? rootKeys.filter(key=>Array.isArray(source[key])) : [];
+    const recordKey = recordKeys.length === 1 ? recordKeys[0] : null;
+    const dialog = document.createElement('dialog'); dialog.className = 'workspace-dialog profile-dialog';
+    dialog.innerHTML = `<h3>${wx('Datenprofil und Qualitätsprüfung','Data profile and quality')}</h3>
+        <p>${wx('Analysiert alle Datensätze oder eine schnelle Stichprobe und bis zu 200 direkte Felder. Objektfelder können bis Tiefe 20 mitgeprüft werden. Arrays bleiben ein Feld; deren Einträge bitte separat als Datensätze auswählen.','Analyzes all records or a quick sample and up to 200 direct fields. Object fields can be included up to depth 20. Arrays remain a single field; select their entries separately as records.')}</p>
+        <label>${wx('Bereich','Scope')} <select class="profile-scope">${recordKey !== null ? `<option value="records">${wx('Datensätze','Records')}: ${escapeHtml(recordKey)} (${source[recordKey].length.toLocaleString()})</option>` : ''}<option value="document">${recordKey !== null ? wx('Dokumenthülle (1 Objekt)','Document wrapper (1 object)') : wx('Gesamtes Dokument','Entire document')}</option><option value="selected" ${selected === undefined ? 'disabled' : ''}>${wx('Ausgewählter Knoten','Selected node')}</option></select></label>
+        <label>${wx('Umfang','Coverage')} <select class="profile-coverage"><option value="all">${wx('Alle Datensätze','All records')}</option><option value="sample">${wx('Stichprobe: erste 10.000','Sample: first 10,000')}</option></select></label>
+        <label><input type="checkbox" class="profile-nested" checked> ${wx('Verschachtelte Objektfelder einbeziehen','Include nested object fields')}</label>
+        <p class="profile-scope-hint"></p>
+        <p class="profile-status" role="status" aria-live="polite"></p><div class="profile-results"></div>
+        <div class="dialog-actions"><button class="profile-close">${wx('Schließen / Abbrechen','Close / Cancel')}</button><button class="profile-run">${wx('Analysieren','Analyze')}</button><label>${wx('Berichtsformat','Report format')} <select class="profile-format"><option value="json">JSON</option><option value="csv">CSV (Excel)</option></select></label><button class="profile-export" disabled>${wx('Bericht exportieren','Export report')}</button></div>`;
+    const status=dialog.querySelector('.profile-status'), resultBox=dialog.querySelector('.profile-results');
+    const coverage=dialog.querySelector('.profile-coverage'), nested=dialog.querySelector('.profile-nested');
+    const scope=dialog.querySelector('.profile-scope'), run=dialog.querySelector('.profile-run'), save=dialog.querySelector('.profile-export');
+    scope.value = recordKey !== null ? 'records' : 'document';
+    function updateScopeHint() {
+        dialog.querySelector('.profile-scope-hint').textContent = scope.value === 'document' && recordKey !== null
+            ? wx('Hier wird nur das äußere Objekt geprüft. Für die einzelnen Einträge bitte „Datensätze: ' + recordKey + '“ wählen.', 'This only checks the outer object. Choose “Records: ' + recordKey + '” to analyze its entries.')
+            : scope.value === 'records' ? `${source[recordKey].length.toLocaleString()} ${wx('Datensätze unter','records under')} ${recordKey}` : '';
+    }
+    updateScopeHint();
+    let cancelled=false, report=null;
+    function close() { cancelled=true;dialog.close();dialog.remove(); }
+    dialog.querySelector('.profile-close').onclick=close;
+    dialog.oncancel=event=>{event.preventDefault();close();};
+    nested.onchange=coverage.onchange=scope.onchange=()=>{report=null;save.disabled=true;resultBox.replaceChildren();status.textContent='';updateScopeHint();};
+    run.onclick=async()=>{
+        run.disabled=true;scope.disabled=true;coverage.disabled=true;nested.disabled=true;save.disabled=true;report=null;resultBox.replaceChildren();
+        status.textContent=wx('Analyse läuft…','Analyzing…');
+        try {
+            await new Promise(resolve=>setTimeout(resolve,16));
+            if (cancelled) return;
+            const target=scope.value==='selected'?selected:scope.value==='records'?source[recordKey]:source;
+            // Avoid enumerating a known multi-million-field object even for a sample.
+            if (target && typeof target==='object' && !Array.isArray(target) && JsonCore.sortedKeys(target).length>100000)
+                throw new Error(wx('Dieses Objekt ist zu breit. Bitte einen kleineren Knoten oder ein Array mit Datensätzen auswählen.','This object is too wide. Select a smaller node or an array of records.'));
+            const result=await WorkspaceCore.profileData(target,{nested:nested.checked,maxRecords:coverage.value==='all'?Infinity:10000,cancelled:()=>cancelled,
+                progress:(count,total)=>{status.textContent=`${count.toLocaleString()} / ${total.toLocaleString()}`;}});
+            if (cancelled) return;
+            report={file:sourceName,scope:scope.value,recordField:scope.value==='records'?recordKey:null,createdAt:new Date().toISOString(),...result};
+            status.textContent=`${result.analyzedRecords.toLocaleString()} / ${result.totalRecords.toLocaleString()} ${wx('Datensätze analysiert','records analyzed')}${result.sampled?wx(' — Stichprobe, keine Gesamtprüfung',' — sample, not a full audit'):''}${result.fieldsLimited?wx(' — Feldauswahl auf 200 begrenzt',' — fields limited to 200'):''}${result.depthLimited?wx(' — Tiefe auf 20 begrenzt',' — depth limited to 20'):''}`;
+            const table=document.createElement('table');table.className='profile-table';
+            const header=table.createTHead().insertRow();
+            for(const title of [wx('Feld','Field'),wx('Typen / Anzahl','Types / Count'),wx('Fehlend','Missing'),'null',wx('Leerstring','Empty string'),wx('Eindeutig / Wiederholungen¹','Distinct / Repetitions¹'),'Min / Max / Ø',wx('Häufigste Werte¹','Most frequent values¹')]) {
+                const th=document.createElement('th');th.textContent=title;header.append(th);
+            }
+            const body=table.createTBody();
+            for(const field of result.fields) {
+                const row=body.insertRow();if(field.mixedTypes) row.className='profile-mixed';
+                const numeric=field.numeric;
+                const values=[field.recordValue?wx('[Datensatzwert]','[Record value]'):field.field,Object.entries(field.types).map(([type,count])=>`${type}: ${count}`).join(', ')+(field.mixedTypes?wx(' ⚠ gemischt',' ⚠ mixed'):''),field.missing,field.nulls,field.emptyStrings,
+                    field.present === (field.types.object||0)+(field.types.array||0) ? '—' : field.valuesLimited?wx('nicht ermittelt (Limit)','not determined (limit)'):`${field.distinctScalars} / ${field.duplicateScalars}`,
+                    numeric.count?`${numeric.min} / ${numeric.max} / ${numeric.mean}`:'—',
+                    field.topValues.map(v=>`${JSON.stringify(v.value)} (${v.count}×)`).join('; ')||'—'];
+                for(const value of values) row.insertCell().textContent=String(value);
+            }
+            resultBox.append(table);
+            const note=document.createElement('p');note.textContent=wx('¹ Nur skalare Werte, einschließlich null. Wiederholungen zählen jedes zusätzliche Vorkommen. Ab mehr als 1.000 verschiedenen Werten oder Texten über 500 Zeichen werden diese Kennzahlen ausgelassen. Alle Angaben beziehen sich auf die analysierten Datensätze.','¹ Scalar values only, including null. Repetitions count each additional occurrence. These metrics are omitted above 1,000 distinct values or for text longer than 500 characters. All metrics refer to analyzed records.');resultBox.append(note);
+            save.disabled=false;
+        } catch(error) { if(!cancelled) status.textContent=error.message; }
+        finally { if(!cancelled) {run.disabled=false;scope.disabled=false;coverage.disabled=false;nested.disabled=false;} }
+    };
+    save.onclick=async()=>{
+        if(!report) return;
+        save.disabled=true;
+        try {
+            const format=dialog.querySelector('.profile-format').value;
+            const text=format==='csv'?WorkspaceCore.profileCsv(report,currentLang):JSON.stringify(report,null,2);
+            await writeExport(text,sourceName.replace(/\.(json|jsonl|ndjson)$/i,'')+'-profile.'+format,format);
+        }
+        catch(error) {if(!cancelled) status.textContent=error.message;}
+        finally {if(!cancelled) save.disabled=false;}
+    };
+    document.body.append(dialog);dialog.showModal();
+}
+byId('btnDataProfile').onclick=showDataProfile;
+
 function showMaskedExport() {
     if (jsonData === undefined || documentBusy) return;
     const sourceData = jsonData, sourceName = fileName;
@@ -446,6 +644,7 @@ function smartDiffValue(value) {
     return text.length > 1200 ? text.slice(0,1200) + '…' : text;
 }
 function showSmartDiffView() {
+    if (!allowDocumentFeature()) return;
     if (jsonData === undefined) return;
     byId('diffOverlay').classList.add('visible'); byId('diffModal').classList.add('visible');
     if (diffSecondData) prepareSmartDiff();
@@ -486,6 +685,7 @@ async function loadSmartDiffFile() {
     } catch (error) { showNotification(`${wx('Vergleichsdatei konnte nicht geladen werden','Could not load comparison file')}: ${error.message || error}`,'error',5000); }
 }
 function runSmartDiff() {
+    if (!allowDocumentFeature()) return;
     if (!smartDiffLeft || !smartDiffRight) return;
     const key = byId('diffKeyField').value;
     if (!key) { showNotification(wx('Bitte ein Schlüsselfeld wählen.','Choose a key field.')); return; }
@@ -557,6 +757,221 @@ byId('diffOverlay').onclick = hideSmartDiffView;
 byId('btnDiffLoad').onclick = loadSmartDiffFile;
 byId('btnDiffRun').onclick = runSmartDiff;
 byId('diffKeyField').onchange = () => { if (byId('diffKeyField').value) runSmartDiff(); };
+
+let transformResult = null, transformResultOptions = null;
+function transformSelectionAvailable() {
+    return typeof selectedPath === 'string' && selectedPath !== 'root' && getValueAtPath(selectedPath) !== undefined;
+}
+function invalidateTransformPreview() {
+    cancelTransform();
+    transformResult = null; transformResultOptions = null;
+    byId('btnTransformApply').disabled = false; byId('btnTransformNewTab').disabled = false;
+    byId('transformSummary').textContent = wx('Noch keine Vorschau erstellt.','No preview generated yet.');
+    byId('transformPreview').textContent = wx('Die Vorschau zeigt maximal 12.000 Zeichen.','The preview shows up to 12,000 characters.');
+}
+function transformOptions() {
+    return { operation: byId('transformOperation').value, scope: byId('transformScope').value,
+        separator: byId('transformSeparator').value, arrays: byId('transformArrays').value };
+}
+function transformSource(options) {
+    if (options.scope === 'selected') {
+        if (!transformSelectionAvailable()) throw new Error(wx('Bitte zuerst einen Knoten auswählen.','Select a node first.'));
+        return getValueAtPath(selectedPath);
+    }
+    return jsonData;
+}
+let transformWorker = null, transformGeneration = 0, transformPending = null, transformBusy = false;
+function setTransformBusy(busy) {
+    transformBusy = busy;
+    for (const id of ['btnTransformPreview','btnTransformApply','btnTransformNewTab','transformOperation','transformScope','transformSeparator','transformArrays']) byId(id).disabled = busy;
+    if (!busy) byId('transformArrays').disabled = byId('transformOperation').value === 'unflatten';
+    if (!busy) byId('transformScope').querySelector('option[value="selected"]').disabled = !transformSelectionAvailable();
+}
+function cancelTransform() {
+    transformGeneration++;
+    if (transformWorker) { transformWorker.terminate(); transformWorker = null; }
+    transformPending?.(); transformPending = null;
+    setTransformBusy(false);
+}
+async function buildTransformResult(previewOnly = false) {
+    cancelTransform();
+    const generation = transformGeneration;
+    const options = transformOptions();
+    const source = previewOnly ? boundedTransformSample(transformSource(options)).value : transformSource(options);
+    const started = performance.now();
+    setTransformBusy(true);
+    byId('transformSummary').textContent = wx('Transformation läuft… Abbrechen ist jederzeit möglich.', 'Transforming… You can cancel at any time.');
+    // Paint the busy state before structured cloning the input for the worker.
+    await new Promise(resolve => setTimeout(resolve, 30));
+    if (generation !== transformGeneration) return null;
+    if (options.operation === 'flatten') {
+        try {
+            const result = await WorkspaceCore.flattenDataAsync(source, options, {
+                indexKeys: (value, keys) => JsonCore.seedKeys(value, keys),
+                cancelled: () => generation !== transformGeneration,
+                progress: count => { byId('transformSummary').textContent = `${count.toLocaleString()} ${wx('Schritte verarbeitet – Abbrechen möglich', 'steps processed – cancellation available')}`; }
+            });
+            if (generation !== transformGeneration) return null;
+            if (!previewOnly) {
+                byId('transformSummary').textContent = wx('Anzeige wird vorbereitet…', 'Preparing display…');
+                await prepareTransformTree(result, () => generation !== transformGeneration);
+                if (generation !== transformGeneration) return null;
+            }
+            const sample = previewOnly ? boundedTransformSample(result) : {text:'',clipped:false};
+            return {result, options, preview: sample.text, clipped: sample.clipped, extent: Array.isArray(result) ? result.length : 1, elapsed: performance.now() - started};
+        } catch (error) { if (generation !== transformGeneration) return null; throw error; }
+        finally { if (generation === transformGeneration) setTransformBusy(false); }
+    }
+    return new Promise((resolve, reject) => {
+        const worker = new Worker('transform-worker.js');
+        transformWorker = worker; transformPending = () => resolve(null);
+        const finish = () => { worker.terminate(); if (transformWorker === worker) { transformWorker = null; transformPending = null; setTransformBusy(false); } };
+        worker.onmessage = ({data}) => {
+            if (generation !== transformGeneration) { finish(); resolve(null); return; }
+            if (data.error) { finish(); reject(new Error(data.error)); return; }
+            finish(); resolve({ result: data.result, preview: data.preview, clipped: data.clipped, extent: data.extent, options, elapsed: performance.now() - started });
+        };
+        worker.onerror = event => { finish(); reject(new Error(event.message || 'Transformation fehlgeschlagen')); };
+        try { worker.postMessage({ source, options }); }
+        catch (error) { finish(); reject(error); }
+    });
+}
+async function prepareTransformTree(root, cancelled) {
+    if (root === null || typeof root !== 'object') return;
+    const frame = value => ({value, keys: Array.isArray(value) ? null : JsonCore.sortedKeys(value), i: 0, size: 1, counts: [1]});
+    const stack = [frame(root)];
+    let until = performance.now() + 8;
+    while (stack.length) {
+        if (performance.now() >= until) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            if (cancelled()) throw new Error('Transformation abgebrochen');
+            until = performance.now() + 8;
+        }
+        const f = stack[stack.length - 1], count = f.keys ? f.keys.length : f.value.length;
+        if (f.i < count) {
+            const child = f.value[f.keys ? f.keys[f.i++] : f.i++];
+            if (child !== null && typeof child === 'object') stack.push(frame(child));
+            else { f.size++; f.counts[1] = (f.counts[1] || 0) + 1; }
+        } else {
+            let sum = 0;
+            const ds = f.counts.map(n => sum += n || 0);
+            f.value[nodeSizeSymbol] = f.size; f.value[nodeDepthsSymbol] = ds;
+            stack.pop();
+            if (stack.length) {
+                const parent = stack[stack.length - 1]; parent.size += f.size;
+                for (let d = 0; d < f.counts.length; d++) parent.counts[d+1] = (parent.counts[d+1] || 0) + (f.counts[d] || 0);
+            }
+        }
+    }
+}
+function boundedTransformSample(value) {
+    let budget = 300, clipped = false;
+    function sample(value, depth = 0) {
+        if (--budget <= 0 || depth > 25) { clipped = true; return '…'; }
+        if (typeof value === 'string' && value.length > 500) { clipped = true; return value.slice(0,500) + '…'; }
+        if (value === null || typeof value !== 'object') return value;
+        const result = Array.isArray(value) ? [] : {};
+        if (Array.isArray(value)) {
+            for (let i = 0; i < value.length; i++) {
+                if (budget <= 0) { clipped = true; break; }
+                result.push(sample(value[i], depth + 1));
+            }
+            return result;
+        }
+        for (const key in value) if (Object.hasOwn(value,key)) {
+            if (budget <= 0) { clipped = true; break; }
+            Object.defineProperty(result,key,{value:sample(value[key],depth+1),enumerable:true});
+        }
+        return result;
+    }
+    const sampled = sample(value), text = JSON.stringify(sampled,null,2);
+    return {value:sampled,text:text.slice(0,12000),clipped:clipped || text.length > 12000};
+}
+function showTransform() {
+    const scope = byId('transformScope'), selected = scope.querySelector('option[value="selected"]');
+    selected.disabled = !transformSelectionAvailable();
+    if (selected.disabled && scope.value === 'selected') scope.value = 'document';
+    byId('transformArrays').disabled = byId('transformOperation').value === 'unflatten';
+    invalidateTransformPreview(); byId('transformModal').showModal();
+}
+function hideTransform() {
+    cancelTransform();
+    const dialog = byId('transformModal'); if (dialog.open) dialog.close();
+    transformResult = null; transformResultOptions = null;
+}
+async function previewTransform() {
+    try {
+        invalidateTransformPreview();
+        const generated = await buildTransformResult(true);
+        if (!generated) return;
+        // A sample must never become the result used by Apply or New Tab.
+        byId('transformPreview').textContent = generated.preview;
+        byId('transformSummary').textContent = wx('Stichprobe: maximal 300 Werte, gekürzte Texte und Tiefe. Keine vollständige Prüfung. Die Aktionen verarbeiten das gesamte gewählte Ziel.', 'Sample: up to 300 values, shortened text and depth. Not a full validation. Actions process the entire selected scope.');
+        byId('btnTransformApply').disabled = false; byId('btnTransformNewTab').disabled = false;
+    } catch (error) {
+        invalidateTransformPreview(); showNotification(error.message || String(error), 'error', 5000);
+    }
+}
+async function ensureCurrentTransformResult() {
+    if (transformBusy) return false;
+    try {
+        const generated = await buildTransformResult();
+        if (!generated) return false;
+        transformResult = generated.result; transformResultOptions = generated.options;
+        return true;
+    } catch (error) {
+        invalidateTransformPreview();
+        showNotification(error.message || String(error), 'error', 5000);
+        return false;
+    }
+}
+async function applyTransform() {
+    if (!(await ensureCurrentTransformResult())) return;
+    const path = transformResultOptions.scope === 'selected' ? selectedPath : 'root';
+    // The transformed tree is independent. Keep the detached original as the undo
+    // snapshot instead of serializing hundreds of megabytes on the window thread.
+    undoStack.push({path, snapshot: getValueAtPath(path)});
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = [];
+    const prepared = transformResultOptions.operation === 'flatten';
+    setValueAtPath(path, transformResult, prepared);
+    if (prepared && path === 'root') {
+        metadataDirty = false;
+        totalExpandedCount = metadataSize(jsonData) || 1;
+        maxDepth = (metadataDepths(jsonData)?.length || 1) - 1;
+        expandedPaths = new Set(['root']); expandAllMode = false;
+        window._collapsedInExpandAll = new Set(); scrollTop = 0;
+    }
+    updateUndoButtons(); renderTree(); stashDocument();
+    const label = transformResultOptions.operation === 'flatten' ? 'Flatten' : 'Unflatten';
+    hideTransform(); showNotification(`${label}: ${wx('Transformation angewendet.','transformation applied.')}`);
+}
+async function openTransformInNewTab() {
+    if (!(await ensureCurrentTransformResult())) return;
+    const result = transformResult, options = transformResultOptions;
+    const base = (fileName || 'data.json').replace(/\.json$/i, '');
+    const name = `${base}-${options.operation}.json`;
+    hideTransform();
+    try {
+        await queueDocumentOperation(async () => {
+            const started = performance.now();
+            await finalizeLoad({ jsonData: result, name, fileSize: options.scope === 'document' ? fileSize : 0,
+                prepared: options.operation === 'flatten', nodeCount: 0, parseTime: performance.now() - started, wasConcatenated: false, indent: '  ', crlf: false }, null, started);
+            isModified = true; updateTitle(); stashDocument(); renderDocumentTabs();
+        });
+        showNotification(wx('Transformation in neuem Tab geöffnet.','Transformation opened in a new tab.'));
+    } catch (error) { showNotification(error.message || String(error), 'error', 5000); }
+}
+byId('btnTransform').onclick = showTransform;
+byId('btnTransformCancel').onclick = hideTransform;
+byId('btnTransformPreview').onclick = previewTransform;
+byId('btnTransformApply').onclick = applyTransform;
+byId('btnTransformNewTab').onclick = openTransformInNewTab;
+for (const id of ['transformOperation','transformScope','transformSeparator','transformArrays']) {
+    byId(id).onchange = () => { byId('transformArrays').disabled = byId('transformOperation').value === 'unflatten'; invalidateTransformPreview(); };
+}
+byId('transformModal').oncancel = event => { event.preventDefault(); hideTransform(); };
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && byId('transformModal').open) hideTransform(); });
 
 let updateRunning = false, updateInstalling = false;
 async function checkForUpdates(interactive = false) {

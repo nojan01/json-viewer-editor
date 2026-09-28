@@ -64,7 +64,7 @@ if [ -n "$DEB_FILE" ]; then
     echo ""
     echo "Sie können JSON Viewer jetzt verwenden:"
     echo "  • Starten Sie die App aus dem Anwendungsmenü"
-    echo "  • Oder über das Terminal: json-viewer"
+    echo "  • Oder über das Terminal: app"
     echo "  • Rechtsklick auf JSON-Dateien → Öffnen mit → JSON Viewer"
 
 elif [ -n "$APPIMAGE_FILE" ]; then

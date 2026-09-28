@@ -26,7 +26,7 @@ sudo apt update
 sudo apt install -y libwebkit2gtk-4.1-0 libayatana-appindicator3-1
 
 # App installieren
-sudo dpkg -i json-viewer_1.0.0_amd64.deb
+sudo apt install ./JSON.Viewer_*_amd64.deb
 
 # Falls Abhängigkeiten fehlen:
 sudo apt install -f
@@ -36,10 +36,10 @@ sudo apt install -f
 
 ```bash
 # Ausführbar machen
-chmod +x JSON-Viewer_1.0.0_amd64.AppImage
+chmod +x JSON.Viewer_*_amd64.AppImage
 
 # Starten
-./JSON-Viewer_1.0.0_amd64.AppImage
+./JSON.Viewer_*_amd64.AppImage
 ```
 
 ## Selbst bauen
@@ -95,7 +95,7 @@ Die fertigen Pakete finden Sie unter:
 
 - **App starten:** 
   - Über das Anwendungsmenü
-  - Terminal: `json-viewer`
+  - Terminal: `app` (aktueller DEB-Programmname)
   
 - **Datei öffnen:** 
   - Drag & Drop einer JSON-Datei auf das App-Fenster
@@ -104,7 +104,7 @@ Die fertigen Pakete finden Sie unter:
 
 - **Kommandozeile:**
   ```bash
-  json-viewer /pfad/zur/datei.json
+  app /pfad/zur/datei.json
   ```
 
 ## Deinstallation
@@ -125,6 +125,47 @@ sudo rm /usr/share/applications/json-viewer.desktop
 
 ## Fehlerbehebung
 
+### Absturz unter XFCE mit falscher AT-SPI-Bus-Adresse
+
+Wenn die App kurz ein Fenster zeigt und mit `Speicherzugriffsfehler` endet,
+hilft ein Stacktrace bei der Unterscheidung zwischen App-, WebKit- und
+Sitzungsfehlern:
+
+```bash
+gdb -q -batch -ex run -ex 'bt 20' --args /usr/bin/app
+```
+
+Steht im Stacktrace `spi_register_object_to_path` aus
+`libatk-bridge-2.0.so.0` und erscheint gleichzeitig eine Meldung über
+`/root/.cache/at-spi/bus_0.0`, obwohl die App als normaler Benutzer läuft,
+prüfen Sie die AT-SPI-Adresse auf dem X11-Bildschirm:
+
+```bash
+xprop -root AT_SPI_BUS
+```
+
+Zeigt die Adresse auf `/root/`, entfernen Sie den falschen Eintrag für die
+laufende Sitzung und starten Sie die App erneut:
+
+```bash
+xprop -root -remove AT_SPI_BUS
+app
+```
+
+Bei erneutem Auftreten nach dem nächsten Login muss die Ursache in der
+Sitzungs-/Display-Manager-Konfiguration behoben werden. Bei LightDM kann
+`xserver-share=false` unter `[Seat:*]` in
+`/etc/lightdm/lightdm.conf.d/99-at-spi-isolation.conf` verhindern, dass
+der X-Server des Anmeldebildschirms samt dessen AT-SPI-Eintrag in der
+Benutzersitzung weiterverwendet wird. Die Änderung gilt ab der nächsten
+Anmeldung und lässt sich durch Entfernen dieser Konfigurationsdatei
+rückgängig machen. `NO_AT_BRIDGE=1 app` ist nur ein Diagnosetest: Er
+deaktiviert die Anbindung an Bildschirmleser für diesen App-Start.
+Die [AT-SPI-Dokumentation](https://github.com/GNOME/at-spi2-core/blob/main/bus/README.md)
+beschreibt die X11-Eigenschaft und den Zugänglichkeitsbus;
+die [LightDM-Konfiguration](https://github.com/ubuntu/lightdm/blob/main/data/lightdm.conf)
+beschreibt `xserver-share`.
+
 ### WebKit-Fehler
 
 Falls die App nicht startet und WebKit-Fehler anzeigt:
@@ -137,7 +178,7 @@ sudo apt install --reinstall libwebkit2gtk-4.1-0
 
 ```bash
 # Zeige fehlende Abhängigkeiten
-ldd /usr/bin/json-viewer | grep "not found"
+ldd /usr/bin/app | grep "not found"
 
 # Installiere fehlende Pakete
 sudo apt install -f
