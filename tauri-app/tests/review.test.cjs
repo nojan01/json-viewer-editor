@@ -11,7 +11,7 @@ function source(name) {
     return html.slice(start, html.indexOf('\n        }', start) + 10);
 }
 function sandbox(names, extras = {}) {
-    const ctx = vm.createContext({ JsonCore: core, appendPath: core.appendPath, ...extras });
+    const ctx = vm.createContext({ JsonCore: core, appendPath: core.appendPath, allowDocumentFeature: () => true, ...extras });
     vm.runInContext(names.map(source).join('\n'), ctx);
     return ctx;
 }
@@ -175,4 +175,79 @@ test('table slider can reach the final row of 205265 records', () => {
     scrollbar.oninput();
     assert.ok(tbody.innerHTML.includes('205264'));
     assert.ok(elements.get('tableInfo').textContent.includes('205265'));
+});
+
+test('wide roots use virtual rows and jump directly to the last screen', () => {
+    const data = Object.fromEntries(Array.from({length:100001},(_,i)=>['field'+String(i).padStart(6,'0'),i]));
+    const ctx = sandbox(['buildVisibleRows','getExpandedRowsInRange','getNodeSizeAtDepth','getNodeSize'], {
+        jsonData:data,fileName:'wide.json',expandedPaths:new Set(['root']),expandAllMode:false,
+        expandAllDepthLimit:Infinity,window:{},metadataDepths:()=>[1,100002],metadataSize:()=>100002
+    });
+    ctx.buildVisibleRows();
+    assert.equal(ctx.expandAllMode,true); assert.equal(ctx.expandAllDepthLimit,1);
+    assert.equal(ctx.visibleRows.length,0);
+    const keys=core.sortedKeys(data);
+    assert.equal(core.sortedKeys(data),keys);
+    const rows=ctx.getExpandedRowsInRange(99992,100002);
+    assert.equal(rows.length,10); assert.equal(rows.at(-1).value,100000);
+    ctx.expandAllDepthLimit=Infinity;
+    assert.equal(ctx.getExpandedRowsInRange(99992,100002).at(-1).value,100000);
+    data.extra=2;core.invalidateKeys(); assert.equal(core.sortedKeys(data).length,100002);
+});
+
+
+test('wide document restrictions disable buttons, guard shortcuts and reset for other tabs', () => {
+    const buttons = new Map();
+    const ctx = sandbox(['wideDocumentRestriction','restrictedFeatureIds','featureRestrictionReason',
+        'allowDocumentFeature','updateFeatureAvailability','showRawView','showStatistics'], {
+        jsonData: {small:1}, currentLang:'de', notices:[],
+        document:{getElementById(id) {
+            if (!buttons.has(id)) buttons.set(id,{disabled:false,title:id,dataset:{}});
+            return buttons.get(id);
+        }},
+        showNotification(message) { ctx.notices.push(message); }
+    });
+    ctx.updateFeatureAvailability();
+    assert.equal(ctx.allowDocumentFeature(),true);
+    ctx.jsonData=Object.fromEntries(Array.from({length:100001},(_,i)=>['field'+i,i]));
+    ctx.updateFeatureAvailability();
+    for (const button of buttons.values()) {
+        assert.equal(button.disabled,true);
+        assert.match(button.title,/100.000/);
+    }
+    // Direct entry points used by shortcuts must return before serialization or analysis.
+    ctx.showRawView(); ctx.showStatistics();
+    assert.equal(ctx.notices.length,2);
+    ctx.jsonData={small:1};ctx.updateFeatureAvailability();
+    for (const [id,button] of buttons) { assert.equal(button.disabled,false);assert.equal(button.title,id); }
+    ctx.jsonData=undefined;ctx.updateFeatureAvailability();
+    assert.equal(ctx.wideDocumentRestriction(),false);
+});
+
+test('failed reads retain permission errors instead of reporting empty data', async () => {
+    const ctx=sandbox(['readFileContent'],{
+        console:{log(){},warn(){},error(){}},RAW_READ_THRESHOLD:50e6,CHUNK_THRESHOLD:200e6,
+        window:{__TAURI__:{core:{invoke:async()=>{throw 'Fehler beim Öffnen: Operation not permitted (os error 1)';}}}}
+    });
+    await assert.rejects(ctx.readFileContent('/Desktop/example.json'),/Operation not permitted/);
+});
+
+test('load error remains visible and offers copying and reopening', async () => {
+    const nodes=[], doc={createElement(tag){const node={tag,children:[],setAttribute(){},append(...items){this.children.push(...items)},showModal(){this.open=true},close(){this.open=false},remove(){},focus(){},select(){}};nodes.push(node);return node},body:{append(){}}};
+    let copied='',opened=false;
+    const ctx=sandbox(['showLoadError'],{document:doc,currentLang:'de',navigator:{clipboard:{async writeText(text){copied=text}}},openFile(){opened=true}});
+    ctx.showLoadError(new Error('Permission denied'),'/Desktop/test.json');
+    assert.equal(nodes[0].open,true);
+    await nodes.find(n=>n.textContent==='Details kopieren').onclick();
+    assert.match(copied,/Permission denied/);assert.match(copied,/test.json/);
+    assert.equal(nodes[0].open,true);
+    nodes.find(n=>n.textContent==='Datei erneut auswählen…').onclick();
+    assert.equal(opened,true);assert.equal(nodes[0].open,false);
+});
+
+test('pipeline undo and redo swap detached roots without serializing large documents', () => {
+    const original={x:1},result={x:2};
+    const ctx=sandbox(['undo','redo'],{jsonData:result,undoStack:[{path:'root',snapshot:original,reference:true}],redoStack:[],resetPreparedPipelineTree(){},updateUndoButtons(){}});
+    ctx.undo();assert.equal(ctx.jsonData,original);assert.equal(ctx.redoStack[0].snapshot,result);
+    ctx.redo();assert.equal(ctx.jsonData,result);assert.equal(ctx.undoStack[0].snapshot,original);
 });

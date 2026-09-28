@@ -67,8 +67,7 @@
 
 /* Keep WebKitGTK's native light control surface out of the themed workspace.
    Retain the native select's keyboard handling and supply a CSS-only arrow. */
-:root.platform-linux .workspace-bar select,
-:root.platform-linux .column-panel select {
+:root.platform-linux select {
   -webkit-appearance:none;
   appearance:none;
   color-scheme:dark;
@@ -81,15 +80,79 @@
   background-size:5px 5px;
   background-repeat:no-repeat;
 }
-:root.platform-linux.light .workspace-bar select,
-:root.platform-linux.light .column-panel select { color-scheme:light; }
-:root.platform-linux .workspace-bar select option,
-:root.platform-linux .column-panel select option {
+:root.platform-linux.light select { color-scheme:light; }
+:root.platform-linux select option {
   background-color:var(--bg-secondary);
   color:var(--text-primary);
 }
-:root.platform-linux .workspace-bar select:focus-visible,
-:root.platform-linux .column-panel select:focus-visible {
+:root.platform-linux select:focus-visible {
   outline:2px solid var(--accent);
   outline-offset:2px;
 }
+
+.transform-modal { width:min(760px,92vw); }
+.transform-grid { display:grid; grid-template-columns:repeat(3,minmax(150px,1fr)); gap:12px; }
+.transform-grid label { display:flex; flex-direction:column; gap:5px; color:var(--text-secondary); font-size:12px; }
+.transform-grid select { background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; padding:7px 9px; }
+.transform-hint { color:var(--text-secondary); font-size:12px; }
+.transform-preview { min-height:130px; max-height:300px; overflow:auto; white-space:pre; background:var(--bg-secondary); border:1px solid var(--border); border-radius:6px; padding:12px; font:12px/1.45 'SF Mono',monospace; }
+.transform-summary { color:var(--text-secondary); font-size:12px; margin-top:8px; }
+@media(max-width:650px) { .transform-grid { grid-template-columns:1fr; } }
+
+.profile-dialog { width:min(1200px,94vw); }
+.profile-results { max-height:55vh; overflow:auto; margin-top:14px; }
+.profile-table { border-collapse:collapse; width:100%; font-size:12px; }
+.profile-table th, .profile-table td { text-align:left; padding:8px; border:1px solid var(--border); vertical-align:top; min-width:70px; max-width:280px; overflow-wrap:anywhere; }
+.profile-table th { position:sticky; top:0; background:var(--bg-secondary); }
+.profile-mixed td:nth-child(2) { color:var(--accent); font-weight:600; }
+.profile-status { min-height:20px; }
+
+.profile-dialog select {
+  color-scheme:dark;
+  background:var(--bg-secondary);
+  color:var(--text-primary);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:5px 8px;
+  font:inherit;
+}
+:root.light .profile-dialog select { color-scheme:light; }
+.profile-dialog > label { display:inline-flex; align-items:center; gap:5px; margin:4px 12px 4px 0; }
+.profile-scope-hint { color:var(--text-secondary); }
+
+.load-error-dialog { width:min(760px,90vw); }
+.load-error-dialog textarea { box-sizing:border-box; width:100%; min-height:160px; max-height:50vh; resize:vertical; background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border); padding:10px; user-select:text; }
+
+.pipeline-dialog { width:min(1100px,94vw); }
+.pipeline-presets, .pipeline-steps li { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+.pipeline-steps { max-height:40vh; overflow:auto; padding-left:24px; }
+.pipeline-steps label { display:flex; flex-direction:column; gap:4px; font-size:12px; }
+.pipeline-steps input { width:200px; max-width:100%; }
+.pipeline-steps li { align-items:flex-end; }
+.pipeline-dialog input, .pipeline-dialog select, .pipeline-dialog button { box-sizing:border-box; min-height:36px; font-size:13px; }
+.pipeline-presets > select, .pipeline-steps > li > select { width:220px; max-width:100%; }
+.pipeline-steps label select { min-width:160px; }
+.pipeline-dialog select {
+  -webkit-appearance:none;
+  appearance:none;
+  color-scheme:dark;
+  background-color:var(--bg-secondary);
+  color:var(--text-primary);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:8px 32px 8px 10px;
+  line-height:18px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;
+  background-size:5px 5px;
+  background-repeat:no-repeat;
+}
+.pipeline-dialog select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media(max-width:650px) {
+  .pipeline-presets > select, .pipeline-presets > input, .pipeline-steps > li > select, .pipeline-steps label { width:100%; }
+  .pipeline-steps label input, .pipeline-steps label select { width:100%; }
+}
+:root.light .pipeline-dialog select { color-scheme:light; }
+
+.pipeline-error { color:var(--text-primary); border-left:3px solid #e46868; padding:8px 10px; background:var(--bg-secondary); }
+.pipeline-dialog input[aria-invalid="true"] { border-color:#e46868; outline:1px solid #e46868; }

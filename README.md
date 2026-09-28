@@ -51,8 +51,13 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 - ⚖️ **Diff-Vergleich** — Zwei JSON-Dateien nebeneinander vergleichen (⌘D)
 - ✅ **Schema-Validierung** — JSON-Struktur automatisch analysieren und Schema generieren
 
+### Datenprofil
+- **Qualitätsprüfung** — Datentypen, fehlende Werte, Zahlenstatistiken und begrenzte Wertehäufigkeiten; alle Datensätze oder Stichprobe, Bericht als JSON und CSV
+
 ### Bearbeitung & Transformation
 - 🔧 **Bulk-Operationen** — Massenänderungen an Keys und Values (Umbenennen, Löschen, Transformieren)
+- ⇆ **Flatten/Unflatten** — Verschachtelte Daten oder ausgewählte Knoten mit Vorschau, Array-Modus und Undo in flache Pfade umwandeln und wiederherstellen
+- **Transformationsassistent** — Schritte kombinieren, Profile speichern, optionale Vorschau und gemeinsames Undo; Trimmen, Typkonvertierung, Zusammenführen/Aufteilen und Flatten/Unflatten
 - 🩹 **JSON Patch** — RFC 6902 Patch-Operationen exportieren
 
 ### REST-Client
@@ -101,13 +106,14 @@ Siehe auch [INSTALL-WINDOWS.md](tauri-app/INSTALL-WINDOWS.md) für Details.
 2. Installieren:
    ```bash
    # Debian/Ubuntu
-   sudo dpkg -i json-viewer_*.deb
+   sudo apt install ./JSON.Viewer_*_amd64.deb
 
    # Fedora/RHEL
    sudo rpm -i json-viewer_*.rpm
 
    # AppImage (keine Installation nötig)
-   chmod +x JSON_Viewer_*.AppImage && ./JSON_Viewer_*.AppImage
+   chmod +x JSON.Viewer_*_amd64.AppImage
+   ./JSON.Viewer_*_amd64.AppImage
    ```
 
 Siehe auch [INSTALL-LINUX.md](tauri-app/INSTALL-LINUX.md) für Details.
