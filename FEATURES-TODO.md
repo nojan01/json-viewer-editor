@@ -77,6 +77,8 @@ Alle Datensätze als Standard, alternativ die ersten 10.000 als ausdrücklich ge
 
 - [x] Auswahllisten unter Linux vollständig im dunklen App-Stil darstellen
 - [ ] Darstellung neuer Funktionen unter macOS, Windows und Linux prüfen
+- [ ] Tab-Überlappung unter Linux beheben (Tabs schieben sich bei mehreren geöffneten Dateien unter Auswahlfelder und Buttons)
+- [ ] Update-Funktion in der Linux-App bereitstellen (CI erzeugt aktuell kein AppImage für den Updater)
 
 ## Große Dokumente und Tabwechsel
 
