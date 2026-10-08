@@ -1,5 +1,6 @@
 .workspace-bar { font-size:12px; display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-secondary); border-bottom:1px solid var(--border); min-height:38px; }
-.document-tabs { display:flex; gap:4px; overflow-x:auto; flex:1; min-width:0; }
+/* contain:paint clips the scrolled tabs to the strip's own box so they can never draw under the select and buttons beside it. */
+.document-tabs { display:flex; gap:4px; overflow-x:auto; flex:1 1 0; min-width:0; position:relative; contain:paint; }
 /* Only the tab strip may shrink; the recent-files select and buttons keep their width so they never overlap it. */
 .workspace-bar > :not(.document-tabs) { flex-shrink:0; }
 .document-tab { display:flex; flex:none; align-items:center; border:1px solid var(--border); border-radius:5px; max-width:250px; }
@@ -159,5 +160,5 @@
 }
 :root.light .pipeline-dialog select { color-scheme:light; }
 
-.pipeline-error { color:var(--text-primary); border-left:3px solid #e46868; padding:8px 10px; background:var(--bg-secondary); }
+.pipeline-error { color:var(--text-primary); border:1px solid #e46868; border-radius:6px; padding:8px 10px; background:var(--bg-secondary); }
 .pipeline-dialog input[aria-invalid="true"] { border-color:#e46868; outline:1px solid #e46868; }
