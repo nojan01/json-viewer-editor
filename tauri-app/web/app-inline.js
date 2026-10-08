@@ -686,7 +686,10 @@
             await new Promise(r => setTimeout(r, 16));
             
             const parseStart = performance.now();
-            const parsedDocument = JsonCore.parseDocument(text);
+            const isNdjson = /\.(jsonl|ndjson)$/i.test(filePath || '');
+            const parsedDocument = isNdjson
+                ? { data: JsonCore.parseNdjson(text), wasConcatenated: false, indent: '', crlf: text.includes('\r\n') }
+                : JsonCore.parseDocument(text);
             const data = parsedDocument.data;
             const parseTime = performance.now() - parseStart;
             text = null; // Free memory

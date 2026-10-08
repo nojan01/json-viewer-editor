@@ -105,6 +105,20 @@
         return { data, wasConcatenated: concatenated, indent, crlf: sample.includes('\r\n') };
     }
 
+    // JSON Lines / NDJSON: one JSON value per non-empty line. Errors report the 1-based line number.
+    function parseNdjson(input) {
+        const lines = String(input).replace(/^\uFEFF/, '').split(/\r?\n/);
+        const values = [];
+        for (let n = 0; n < lines.length; n++) {
+            const line = lines[n].trim();
+            if (!line) continue;
+            try { values.push(JSON.parse(line)); }
+            catch (error) { throw new Error(`Ungültige JSON-Zeile ${n + 1}: ${error.message}`); }
+        }
+        if (!values.length) throw new Error('Die JSONL-Datei enthält keine Datensätze');
+        return values;
+    }
+
     // Validate the complete operation before touching the document.
     function bulkEdit(data, op, from, to, valueText) {
         if (!from) throw new Error('Bitte Key-Name eingeben');
@@ -148,7 +162,7 @@
     function seedKeys(value, keys) { keyCache.set(value, keys); }
     function invalidateKeys() { keyCache = new WeakMap(); }
 
-    const api = { seedKeys, sortedKeys, invalidateKeys, own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, bulkEdit };
+    const api = { seedKeys, sortedKeys, invalidateKeys, own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, parseNdjson, bulkEdit };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.JsonCore = api;
 })(globalThis);
