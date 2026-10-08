@@ -1,4 +1,4 @@
-# Updates und Release 1.5.1
+# Updates und Release 1.5.2
 
 Die App prüft beim Start still auf Updates. Über den „Update“-Button rechts neben „?“ in der oberen Werkzeugleiste oder über „Hilfe → Nach Updates suchen…“ wird die Prüfung manuell gestartet. Eine gefundene Version wird erst nach Zustimmung heruntergeladen. Ungespeicherte Tabs müssen zuvor gespeichert oder ausdrücklich verworfen werden. Signaturfehler brechen die Installation ab; nach erfolgreicher Installation erfolgt der Neustart. Windows startet dazu seinen Installer.
 
@@ -33,7 +33,7 @@ Der Release-Workflow baut Windows x64, Windows ARM64, Linux x64 und macOS Apple 
 
 `release-macos.sh` erzeugt das Updater-Archiv **nach** der abschließenden Signierung und dem Stapeln des Apple-Tickets neu. Anschließend wird genau dieses Archiv signiert. Das lokal erzeugte `latest.json` enthält nur macOS und darf nicht ungeprüft das gemeinsame Manifest eines plattformübergreifenden Releases ersetzen.
 
-Für ein Release müssen Paketversionen und Git-Tag übereinstimmen. Der Workflow baut den Tag und prüft ihn vorab. Die Implementierung ist auf 1.5.1 gesetzt.
+Für ein Release müssen Paketversionen und Git-Tag übereinstimmen. Der Workflow baut den Tag und prüft ihn vorab. Die Implementierung ist auf 1.5.2 gesetzt.
 
 ## Validierung
 
