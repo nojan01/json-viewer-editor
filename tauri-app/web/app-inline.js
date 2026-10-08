@@ -1214,6 +1214,8 @@
             document.getElementById('btnExportCSV')?.addEventListener('click', (e) => toggleCSVDropdown(e));
             document.getElementById('csvExportFull')?.addEventListener('click', () => exportCSV('full'));
             document.getElementById('csvSelectedItem')?.addEventListener('click', () => exportCSV('selected'));
+            document.getElementById('jsonlExportFull')?.addEventListener('click', () => exportJSONL('full'));
+            document.getElementById('jsonlSelectedItem')?.addEventListener('click', () => exportJSONL('selected'));
             document.getElementById('btnHelp')?.addEventListener('click', showHelp);
             
             // Search buttons and input
@@ -1840,6 +1842,35 @@
             }
         });
         
+        async function exportJSONL(mode = 'full') {
+            if (!allowDocumentFeature()) return;
+            if (jsonData === undefined) return;
+            document.getElementById('csvDropdown')?.classList.remove('show');
+
+            let dataToExport = jsonData;
+            let exportName = 'export.jsonl';
+            if (mode === 'selected') {
+                if (!selectedPath || selectedPath === 'root') {
+                    showNotification('Bitte zuerst einen Knoten auswählen');
+                    return;
+                }
+                dataToExport = getValueAtPath(selectedPath);
+                if (dataToExport === undefined) {
+                    showNotification('Ausgewählter Knoten nicht gefunden');
+                    return;
+                }
+                const nodeName = String(parsePath(selectedPath).at(-1)).replace(/\[.*\]/, '');
+                exportName = `${nodeName}_export.jsonl`;
+            }
+            try {
+                const text = JsonCore.jsonToJsonl(dataToExport);
+                await writeExport(text, exportName, 'jsonl');
+                showNotification('JSONL exportiert');
+            } catch (err) {
+                showNotification('JSONL-Export fehlgeschlagen: ' + (err?.message || err));
+            }
+        }
+
         async function exportCSV(mode = 'full') {
             if (!allowDocumentFeature()) return;
             if ((jsonData === undefined)) return;
@@ -3110,16 +3141,22 @@
                         filters: [{
                             name: 'JSON',
                             extensions: ['json']
+                        }, {
+                            name: 'JSON Lines',
+                            extensions: ['jsonl']
                         }]
                     });
                     
                     if (filePath) {
+                        // The chosen extension selects the output format (.jsonl = one record per line).
+                        const wantJsonl = /\.jsonl$/i.test(filePath);
+                        const sourceIsJsonl = !!currentFilePath && /\.(jsonl|ndjson)$/i.test(currentFilePath);
                         if (typeof documents !== 'undefined') {
                             const otherSources = documents.filter(d => d.id !== activeDocumentId).map(d => d.path).filter(Boolean);
                             await window.__TAURI__.core.invoke('validate_export_path', { path: filePath, sources: otherSources });
                         }
-                        if (!isModified && currentFilePath) {
-                            // Unmodified: copy original file 1:1 (preserves exact formatting + size)
+                        if (!isModified && currentFilePath && wantJsonl === sourceIsJsonl) {
+                            // Unmodified and same format: copy original file 1:1 (preserves exact formatting + size)
                             await window.__TAURI__.core.invoke('copy_file', {
                                 source: currentFilePath,
                                 dest: filePath
@@ -3137,7 +3174,9 @@
                             const indent = originalIndent ?? '  ';
                             let jsonStr;
                             
-                            if (wasConcatenated && Array.isArray(jsonData)) {
+                            if (wantJsonl) {
+                                jsonStr = JsonCore.jsonToJsonl(jsonData);
+                            } else if (wasConcatenated && Array.isArray(jsonData)) {
                                 const parts = [];
                                 for (let idx = 0; idx < jsonData.length; idx++) {
                                     parts.push(JSON.stringify(jsonData[idx], replacer, indent));

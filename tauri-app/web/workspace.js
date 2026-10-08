@@ -399,11 +399,13 @@ byId('btnManageViews').onclick = showSavedViews;
 
 async function writeExport(text, suggestedName, format = 'json') {
     const csv = format === 'csv';
+    const jsonl = format === 'jsonl';
     if (!window.__TAURI__) {
-        const url = URL.createObjectURL(new Blob([text],{type:csv ? 'text/csv;charset=utf-8' : 'application/json'}));
+        const mime = csv ? 'text/csv;charset=utf-8' : jsonl ? 'application/x-ndjson' : 'application/json';
+        const url = URL.createObjectURL(new Blob([text],{type:mime}));
         const a = document.createElement('a'); a.href = url; a.download = suggestedName; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); return true;
     }
-    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:csv ? 'CSV' : 'JSON',extensions:[csv ? 'csv' : 'json']}]});
+    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:csv ? 'CSV' : jsonl ? 'JSON Lines' : 'JSON',extensions:[csv ? 'csv' : jsonl ? 'jsonl' : 'json']}]});
     if (!path) return false;
     // Backend also checks file identity (symlinks/hard links) against every open source.
     await window.__TAURI__.core.invoke('validate_export_path',{path,sources:documents.map(d => d.id === activeDocumentId ? currentFilePath : d.path).filter(Boolean)});
