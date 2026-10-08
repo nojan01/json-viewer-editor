@@ -745,7 +745,7 @@
         
         .match-list-item.current {
             background: rgba(14, 99, 156, 0.2);
-            border-left: 3px solid var(--accent);
+            box-shadow: inset 3px 0 0 var(--accent);
         }
         
         .match-list-path {
@@ -2133,12 +2133,14 @@
                 <span class="icon">📤</span>
             </button>
             <div class="dropdown">
-                <button id="btnExportCSV" disabled title="Als CSV exportieren">
-                    <span>CSV ▼</span>
+                <button id="btnExportCSV" disabled title="Exportieren">
+                    <span>Exportieren ▼</span>
                 </button>
                 <div class="dropdown-content" id="csvDropdown">
-                    <div class="dropdown-item" id="csvExportFull">Komplettes JSON exportieren</div>
-                    <div class="dropdown-item" id="csvSelectedItem">Ausgewählten Knoten exportieren</div>
+                    <div class="dropdown-item" id="csvExportFull">Komplett als CSV exportieren</div>
+                    <div class="dropdown-item" id="csvSelectedItem">Ausgewählten Knoten als CSV exportieren</div>
+                    <div class="dropdown-item" id="jsonExportFull">Als JSON exportieren</div>
+                    <div class="dropdown-item" id="jsonSelectedItem">Ausgewählten Knoten als JSON exportieren</div>
                     <div class="dropdown-item" id="jsonlExportFull">Als JSONL exportieren (Zeile pro Element)</div>
                     <div class="dropdown-item" id="jsonlSelectedItem">Ausgewählten Knoten als JSONL exportieren</div>
                 </div>

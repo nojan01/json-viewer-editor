@@ -1214,6 +1214,8 @@
             document.getElementById('btnExportCSV')?.addEventListener('click', (e) => toggleCSVDropdown(e));
             document.getElementById('csvExportFull')?.addEventListener('click', () => exportCSV('full'));
             document.getElementById('csvSelectedItem')?.addEventListener('click', () => exportCSV('selected'));
+            document.getElementById('jsonExportFull')?.addEventListener('click', () => exportJSON('full'));
+            document.getElementById('jsonSelectedItem')?.addEventListener('click', () => exportJSON('selected'));
             document.getElementById('jsonlExportFull')?.addEventListener('click', () => exportJSONL('full'));
             document.getElementById('jsonlSelectedItem')?.addEventListener('click', () => exportJSONL('selected'));
             document.getElementById('btnHelp')?.addEventListener('click', showHelp);
@@ -1824,13 +1826,21 @@
             dropdown.classList.toggle('show');
             
             // Update selected item state
-            const selectedItem = document.getElementById('csvSelectedItem');
-            if (selectedPath && selectedPath !== 'root') {
-                selectedItem.classList.remove('disabled');
-                selectedItem.textContent = `"${String(parsePath(selectedPath).at(-1))}" exportieren`;
-            } else {
-                selectedItem.classList.add('disabled');
-                selectedItem.textContent = 'Ausgewählten Knoten exportieren';
+            const hasSelection = !!selectedPath && selectedPath !== 'root';
+            const nodeLabel = hasSelection ? `"${String(parsePath(selectedPath).at(-1))}"` : null;
+            const selectedItems = [
+                ['csvSelectedItem', 'Ausgewählten Knoten als CSV exportieren'],
+                ['jsonSelectedItem', 'Ausgewählten Knoten als JSON exportieren'],
+                ['jsonlSelectedItem', 'Ausgewählten Knoten als JSONL exportieren'],
+            ];
+            const formatNames = { csvSelectedItem: 'CSV', jsonSelectedItem: 'JSON', jsonlSelectedItem: 'JSONL' };
+            for (const [id, fallback] of selectedItems) {
+                const item = document.getElementById(id);
+                if (!item) continue;
+                item.classList.toggle('disabled', !hasSelection);
+                item.textContent = hasSelection
+                    ? `${nodeLabel} als ${formatNames[id]} exportieren`
+                    : fallback;
             }
         }
         
@@ -1842,6 +1852,23 @@
             }
         });
         
+        async function exportJSON(mode = 'full') {
+            if (!allowDocumentFeature()) return;
+            if (jsonData === undefined) return;
+            document.getElementById('csvDropdown')?.classList.remove('show');
+            try {
+                const selected = mode === 'selected';
+                const value = selected ? getValueAtPath(selectedPath) : jsonData;
+                if (value === undefined) return;
+                const text = JSON.stringify(value, null, 2);
+                const name = selected ? 'selected_export.json' : 'export.json';
+                await writeExport(text, name, 'json');
+                showNotification('JSON exportiert');
+            } catch (err) {
+                showNotification('JSON-Export fehlgeschlagen: ' + (err?.message || err));
+            }
+        }
+
         async function exportJSONL(mode = 'full') {
             if (!allowDocumentFeature()) return;
             if (jsonData === undefined) return;
