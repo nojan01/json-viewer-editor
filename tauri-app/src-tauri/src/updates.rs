@@ -48,7 +48,7 @@ struct Progress {
 pub async fn install_update(app: AppHandle, state: State<'_, UpdateState>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     if std::env::var_os("APPIMAGE").is_none() {
-        return Err("Automatische Installation ist unter Linux nur für AppImage verfügbar. DEB/RPM bitte über die GitHub-Releases aktualisieren: https://github.com/nojan01/json-viewer-editor/releases/latest".into());
+        return Err("Automatische Installation ist unter Linux nur für AppImage verfügbar. DEB/RPM bitte über die GitHub-Releases aktualisieren: https://github.com/nojan01/json-viewer-editor/releases/latest / Automatic installation on Linux is only available for AppImage. Please update DEB/RPM packages via the GitHub Releases: https://github.com/nojan01/json-viewer-editor/releases/latest".into());
     }
     let mut update = state
         .0

@@ -17,6 +17,22 @@ struct CompactStore {
     data: Mutex<Option<Vec<u8>>>,
 }
 
+// The frontend explicitly requests the launch path before restoring a session.
+// No timer: a large-file load must not race the workspace restore timer.
+#[tauri::command]
+fn get_startup_file(app: AppHandle) -> Option<String> {
+    if let Ok(matches) = app.cli().matches() {
+        if let Some(path) = matches.args.get("file").and_then(|arg| arg.value.as_str()) {
+            if is_supported_file(Path::new(path)) && Path::new(path).exists() {
+                return Some(path.to_owned());
+            }
+        }
+    }
+    std::env::args().skip(1).find(|arg| {
+        is_supported_file(Path::new(arg)) && Path::new(arg).exists()
+    })
+}
+
 // Files being written in chunks are staged in the target directory. The
 // original is replaced only after every chunk has been written successfully.
 struct ChunkedSaveStore {
@@ -262,7 +278,15 @@ fn commit_staged_file(temporary: &Path, target: &Path) -> Result<(), String> {
         .and_then(|file| file.sync_all())
         .map_err(|e| format!("Temporäre Datei konnte nicht synchronisiert werden: {}", e))?;
     fs::rename(temporary, target)
-        .map_err(|e| format!("Temporäre Datei konnte nicht übernommen werden: {}", e))
+        .map_err(|e| format!("Temporäre Datei konnte nicht übernommen werden: {}", e))?;
+    // Persist the rename itself on Unix by syncing the parent directory.
+    #[cfg(unix)]
+    if let Some(parent) = target.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::File::open(parent)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|e| format!("Verzeichnis konnte nicht synchronisiert werden: {}", e))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1265,6 +1289,7 @@ pub fn run() {
             files: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
+            get_startup_file,
             check_for_update,
             install_update,
             restart_application,
@@ -1314,40 +1339,7 @@ pub fn run() {
                 }
             }
 
-            // Check for file argument using CLI plugin
-            let mut file_opened = false;
-            if let Ok(matches) = app.cli().matches() {
-                if let Some(file_arg) = matches.args.get("file") {
-                    if let Some(file_path) = file_arg.value.as_str() {
-                        if is_supported_file(Path::new(file_path)) && Path::new(file_path).exists()
-                        {
-                            let path_clone = file_path.to_string();
-                            let app_handle_clone = app_handle.clone();
-                            file_opened = true;
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_millis(800));
-                                let _ = app_handle_clone.emit("open-file", &path_clone);
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Fallback: Check raw env args (for "Open With") — only if CLI plugin didn't find a file
-            if !file_opened {
-                let args: Vec<String> = std::env::args().collect();
-                for arg in args.iter().skip(1) {
-                    if is_supported_file(Path::new(arg)) && Path::new(arg).exists() {
-                        let path_clone = arg.clone();
-                        let app_handle_clone = app_handle.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(800));
-                            let _ = app_handle_clone.emit("open-file", &path_clone);
-                        });
-                        break;
-                    }
-                }
-            }
+            // CLI / Explorer launch paths are requested by get_startup_file.
 
             // Build initial menu in German
             build_menu(app_handle, "de")?;
@@ -1443,7 +1435,10 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
+        .unwrap_or_else(|e| {
+            eprintln!("error while building tauri application: {e}");
+            std::process::exit(1);
+        })
         .run(|_app_handle, event| {
             if let tauri::RunEvent::ExitRequested {
                 api, code: None, ..
