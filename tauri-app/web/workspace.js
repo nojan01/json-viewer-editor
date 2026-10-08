@@ -5,6 +5,7 @@ const wx = (de, en) => currentLang === 'en' ? en : de;
 const byId = id => document.getElementById(id);
 let documents = [], activeDocumentId = null, nextDocumentId = 1, documentBeingLoaded = null;
 let documentBusy = false, operationQueue = Promise.resolve(), workspaceRestoring = false;
+let explicitOpenRequested = false;
 let tableAllColumns = [], tableHiddenColumns = new Set(), tablePinnedColumns = new Set(), tableColumnRules = [];
 let tableBuildGeneration = 0, tableSource = null;
 const initialEmptyTree = treeContainer.innerHTML;
@@ -162,13 +163,19 @@ async function activateDocumentNow(id) {
     activeDocumentId = id; restoreDocumentState(doc.state); persistWorkspace(); return true;
 }
 const originalPathLoader = loadFileFromPath;
-loadFileFromPath = path => queueDocumentOperation(async () => {
+loadFileFromPath = path => {
+    explicitOpenRequested = true;
+    return queueDocumentOperation(async () => {
     const existing = documents.find(d => d.path === path || (d.id === activeDocumentId && currentFilePath === path));
     if (existing) return activateDocumentNow(existing.id);
     return originalPathLoader(path);
-});
+    });
+};
 const originalBrowserLoader = loadFile;
-loadFile = file => queueDocumentOperation(() => originalBrowserLoader(file));
+loadFile = file => {
+    explicitOpenRequested = true;
+    return queueDocumentOperation(() => originalBrowserLoader(file));
+};
 const originalSaveFile = saveFile;
 saveFile = () => queueDocumentOperation(async () => { await originalSaveFile(); stashDocument(); renderDocumentTabs(); persistWorkspace(); });
 byId('recentFiles').onchange = event => { if (event.target.value) loadFileFromPath(event.target.value); event.target.value = ''; };
@@ -241,8 +248,17 @@ window.addEventListener('beforeunload', event => {
 });
 window.addEventListener('pagehide', persistWorkspace);
 setInterval(persistWorkspace, 5000);
-setTimeout(async () => {
-    if (!window.__TAURI__ || documents.length) return;
+async function initializeWorkspace() {
+    if (!window.__TAURI__) return;
+    // Resolve Explorer/CLI intent before consulting the saved workspace.
+    // A failed explicit load must also not silently load the previous file.
+    let startupPath = null;
+    try { startupPath = await window.__TAURI__.core.invoke('get_startup_file'); }
+    catch (error) { showLoadError(error); }
+    if (startupPath) { await loadFileFromPath(startupPath); return; }
+    // The explicit-open flag only guards the startup window; clear it once decided.
+    const explicitOpen = explicitOpenRequested; explicitOpenRequested = false;
+    if (explicitOpen || documentBusy || documents.length) return;
     const saved = readPreference('json-viewer-workspace', {});
     if (!Array.isArray(saved.tabs)) return;
     const paths = new Set();
@@ -254,7 +270,8 @@ setTimeout(async () => {
     workspaceRestoring = true;
     try { if (active) await activateDocument(active.id); }
     finally { workspaceRestoring = false; renderDocumentTabs(); }
-}, 1400);
+}
+setTimeout(() => initializeWorkspace().catch(error => showLoadError(error)), 1400);
 
 function initializeTableColumns(cols) {
     tableAllColumns = [...cols]; tableHiddenColumns = new Set(cols.slice(MAX_TABLE_COLUMNS));
@@ -382,11 +399,13 @@ byId('btnManageViews').onclick = showSavedViews;
 
 async function writeExport(text, suggestedName, format = 'json') {
     const csv = format === 'csv';
+    const jsonl = format === 'jsonl';
     if (!window.__TAURI__) {
-        const url = URL.createObjectURL(new Blob([text],{type:csv ? 'text/csv;charset=utf-8' : 'application/json'}));
+        const mime = csv ? 'text/csv;charset=utf-8' : jsonl ? 'application/x-ndjson' : 'application/json';
+        const url = URL.createObjectURL(new Blob([text],{type:mime}));
         const a = document.createElement('a'); a.href = url; a.download = suggestedName; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); return true;
     }
-    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:csv ? 'CSV' : 'JSON',extensions:[csv ? 'csv' : 'json']}]});
+    const path = await window.__TAURI__.dialog.save({defaultPath:suggestedName,filters:[{name:csv ? 'CSV' : jsonl ? 'JSON Lines' : 'JSON',extensions:[csv ? 'csv' : jsonl ? 'jsonl' : 'json']}]});
     if (!path) return false;
     // Backend also checks file identity (symlinks/hard links) against every open source.
     await window.__TAURI__.core.invoke('validate_export_path',{path,sources:documents.map(d => d.id === activeDocumentId ? currentFilePath : d.path).filter(Boolean)});

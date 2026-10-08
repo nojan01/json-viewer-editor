@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "JSON Viewer",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "identifier": "com.jsonviewer.editor",
   "build": {
     "frontendDist": "../web"
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost https: http:; form-action 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost https: http:; form-action 'none'; base-uri 'self'"
     }
   },
   "plugins": {

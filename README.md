@@ -43,6 +43,7 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 - 📊 **Tabellenansicht** — Arrays als Tabelle mit virtuellem Scrolling, automatischem Flattening verschachtelter Objekte und Spaltenfilter (⌘T)
 - 📥 **Excel-Export** — Tabellenansicht direkt als .xlsx exportieren (SheetJS)
 - 📤 **CSV-Export** — Daten als CSV exportieren
+- 🧾 **JSON Lines (JSONL/NDJSON)** — JSONL-Dateien öffnen (auch über 768 MiB) und Arrays als JSONL exportieren (jedes Element eine Zeile); beim Speichern wählbar als JSON oder JSON Lines
 - 📋 **Suchergebnisse exportieren** — Gefilterte Ergebnisse separat speichern
 
 ### Analyse & Vergleich

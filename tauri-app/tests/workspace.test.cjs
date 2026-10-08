@@ -24,6 +24,53 @@ function source(name) {
 function sandbox(names, extras) {
     const ctx = vm.createContext({...extras}); vm.runInContext(names.map(source).join('\n'),ctx); return ctx;
 }
+function startupSandbox(invoke) {
+    const loaded = [], activated = [];
+    const ctx = sandbox(['initializeWorkspace'], {
+        window: {__TAURI__: {core: {invoke}}},
+        explicitOpenRequested: false, documentBusy: false, documents: [], nextDocumentId: 1,
+        workspaceRestoring: false,
+        loadFileFromPath: async path => { loaded.push(path); },
+        readPreference: () => ({tabs: [{path: 'old-large.json'}], active: 'old-large.json'}),
+        getFileName: path => path, WorkspaceCore: core,
+        activateDocument: async id => { activated.push(id); }, renderDocumentTabs: () => {}
+    });
+    return {ctx, loaded, activated};
+}
+test('startup launch path wins over the saved large file, including a slow lookup', async () => {
+    let resolve;
+    const {ctx, loaded, activated} = startupSandbox(() => new Promise(r => { resolve = r; }));
+    const pending = ctx.initializeWorkspace();
+    assert.equal(ctx.documents.length, 0);
+    resolve('new-500mb.json'); await pending;
+    assert.deepEqual(loaded, ['new-500mb.json']);
+    assert.deepEqual(activated, []); assert.equal(ctx.documents.length, 0);
+});
+test('an explicit open during startup lookup suppresses restoration even after load failure', async () => {
+    let resolve;
+    const {ctx, activated} = startupSandbox(() => new Promise(r => { resolve = r; }));
+    const pending = ctx.initializeWorkspace();
+    ctx.explicitOpenRequested = true;
+    resolve(null); await pending;
+    assert.deepEqual(activated, []); assert.equal(ctx.documents.length, 0);
+});
+test('normal startup still restores the saved active tab', async () => {
+    const {ctx, loaded, activated} = startupSandbox(async () => null);
+    await ctx.initializeWorkspace();
+    assert.deepEqual(loaded, []); assert.deepEqual(activated, [1]);
+    assert.equal(ctx.documents[0].path, 'old-large.json');
+    assert.equal(ctx.workspaceRestoring, false);
+});
+test('path and browser open requests are recorded before queued IO begins', async () => {
+    const queued = [];
+    const ctx = vm.createContext({explicitOpenRequested:false, loadFileFromPath:()=>{}, loadFile:()=>{},
+        queueDocumentOperation: op => { queued.push(op); }});
+    vm.runInContext(script.slice(script.indexOf('const originalPathLoader ='),script.indexOf('const originalSaveFile =')),ctx);
+    ctx.loadFileFromPath('large.json');
+    assert.equal(ctx.explicitOpenRequested,true); assert.equal(queued.length,1);
+    ctx.explicitOpenRequested=false; ctx.loadFile({name:'large.json'});
+    assert.equal(ctx.explicitOpenRequested,true); assert.equal(queued.length,2);
+});
 test('all new browser scripts parse', () => {
     new vm.Script(script);
     new vm.Script(fs.readFileSync(require.resolve('../web/workspace-core.js'),'utf8'));

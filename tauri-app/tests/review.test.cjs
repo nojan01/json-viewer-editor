@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const core = require('../web/json-core.js');
-const html = fs.readFileSync(require.resolve('../web/index.html'), 'utf8');
+const html = fs.readFileSync(require.resolve('../web/index.html'), 'utf8')
+    + fs.readFileSync(require.resolve('../web/app-inline.js'), 'utf8');
 function source(name) {
     let start = html.indexOf(`        function ${name}(`);
     if (start < 0) start = html.indexOf(`        async function ${name}(`);
@@ -17,6 +18,7 @@ function sandbox(names, extras = {}) {
 }
 test('all inline scripts parse', () => {
     for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+    new vm.Script(fs.readFileSync(require.resolve('../web/app-inline.js'), 'utf8'));
 });
 test('arbitrary object keys round-trip through paths without collisions', () => {
     const keys = ['profile.name', 'a[0]', '', '"\\]', 'ü', '0', '__proto__', 'constructor', 'prototype', 'hasOwnProperty'];
