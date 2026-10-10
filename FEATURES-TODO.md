@@ -67,11 +67,14 @@ Alle Datensätze als Standard, alternativ die ersten 10.000 als ausdrücklich ge
 
 ## 6. Datensätze zusammenführen
 
-- [ ] Dateien über ein Feld wie `id` oder `hostname` verbinden
-- [ ] Inner Join, Left Join und vollständiges Zusammenführen unterstützen
-- [ ] Doppelte und fehlende Schlüssel vorab melden
-- [ ] Feldkonflikte in einer Vorschau auflösen
-- [ ] Ergebnis in einem neuen Tab öffnen oder exportieren
+- [x] Dateien über ein Feld wie `id` oder `hostname` verbinden
+- [x] Inner Join, Left Join und vollständiges Zusammenführen unterstützen
+- [x] Doppelte und fehlende Schlüssel vorab melden
+- [x] Feldkonflikte in einer Vorschau auflösen (je Feld: aktuelle Datei, zweite Datei oder beide mit Suffix)
+- [x] Ergebnis in einem neuen Tab öffnen oder exportieren
+- [x] Node-Test: 205.265 × 205.265 Datensätze mit Konfliktauflösung, kooperativ in Zeitscheiben
+- [ ] Bedienung in der nativen Oberfläche (macOS, Windows, Linux) prüfen
+- [ ] Optional: 1:n-Verknüpfung bei doppelten Schlüsseln
 
 ## Plattform und Oberfläche
 
