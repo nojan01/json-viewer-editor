@@ -24,14 +24,14 @@ Apple Developer-ID-Signierung und Notarisierung bleiben zusätzlich erforderlich
 
 ## Plattformen und Veröffentlichung
 
-Der Release-Workflow baut Windows x64, Windows ARM64, Linux x64 und macOS Apple Silicon. Er erzeugt die Installationsdateien, ihre Updater-Signaturen und ein gemeinsames `latest.json`. Das Manifest wird nur mit vollständigen Artefakten aller vier Plattformen veröffentlicht. `build_macos: false` erlaubt Teil-Builds ohne Veröffentlichung. Die macOS-Architektur ist im Build explizit auf `aarch64-apple-darwin` festgelegt.
+Der Release-Workflow baut Windows x64, Windows ARM64, Linux x64 und macOS Apple Silicon. Er erzeugt die Installationsdateien, ihre Updater-Signaturen und ein gemeinsames `latest.json`. Mit `build_macos: true` wird das Manifest nur mit vollständigen Artefakten aller vier Plattformen veröffentlicht. Mit `build_macos: false` veröffentlicht der Workflow Windows und Linux (einschließlich AppImage und Signatur) und übernimmt den macOS-Eintrag aus dem bereits veröffentlichten `latest.json` derselben Version (`create-updater-manifest.cjs --merge`). Die macOS-Architektur ist im Build explizit auf `aarch64-apple-darwin` festgelegt.
 
 - macOS: `.app.tar.gz` und `.sig`
 - Windows: NSIS `.exe` und `.sig`
 - Linux: `.AppImage` und `.sig`
 - Linux-DEB/RPM: manuelle Paketaktualisierung; der integrierte Installer erklärt diese Einschränkung
 
-`release-macos.sh` erzeugt das Updater-Archiv **nach** der abschließenden Signierung und dem Stapeln des Apple-Tickets neu. Anschließend wird genau dieses Archiv signiert. Das lokal erzeugte `latest.json` enthält nur macOS und darf nicht ungeprüft das gemeinsame Manifest eines plattformübergreifenden Releases ersetzen.
+`release-macos.sh` erzeugt das Updater-Archiv **nach** der abschließenden Signierung und dem Stapeln des Apple-Tickets neu. Anschließend wird genau dieses Archiv signiert. Ist `gh` verfügbar, lädt das Skript das bereits veröffentlichte `latest.json` derselben Version und übernimmt dessen Windows- und Linux-Einträge; das lokal erzeugte Manifest enthält dann alle Plattformen. Ohne veröffentlichtes Manifest enthält es nur macOS und darf das gemeinsame Manifest nicht ersetzen. Empfohlene Reihenfolge: zuerst macOS lokal veröffentlichen, dann den Workflow mit `build_macos: false` starten.
 
 Für ein Release müssen Paketversionen und Git-Tag übereinstimmen. Der Workflow baut den Tag und prüft ihn vorab. Die Implementierung ist auf 1.5.3 gesetzt.
 

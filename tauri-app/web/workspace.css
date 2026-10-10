@@ -1,6 +1,8 @@
-.workspace-bar { font-size:12px; display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-secondary); border-bottom:1px solid var(--border); min-height:38px; }
+.workspace-bar { font-size:12px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-secondary); border-bottom:1px solid var(--border); min-height:38px; }
 /* contain:paint clips the scrolled tabs to the strip's own box so they can never draw under the select and buttons beside it. */
-.document-tabs { display:flex; gap:4px; overflow-x:auto; flex:1 1 0; min-width:0; position:relative; contain:paint; }
+.document-tabs { display:flex; gap:4px; overflow-x:auto; overflow-y:hidden; flex:1 1 0; min-width:min(260px,100%); position:relative; contain:paint; }
+/* Keep a usable tab strip: when it would drop below its minimum width, the controls wrap to a second row instead of covering the tabs. */
+.workspace-bar > .document-tabs:empty { min-width:0; }
 /* Only the tab strip may shrink; the recent-files select and buttons keep their width so they never overlap it. */
 .workspace-bar > :not(.document-tabs) { flex-shrink:0; }
 .document-tab { display:flex; flex:none; align-items:center; border:1px solid var(--border); border-radius:5px; max-width:250px; }

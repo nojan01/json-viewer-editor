@@ -108,6 +108,12 @@ function persistWorkspace() {
     }));
     writePreference('json-viewer-workspace', { tabs, active: currentFilePath });
 }
+// The Linux tab strip hides its scrollbar, so map vertical wheel movement to horizontal scrolling.
+byId('documentTabs').addEventListener('wheel', event => {
+    const tabs = event.currentTarget;
+    if (tabs.scrollWidth <= tabs.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    tabs.scrollLeft += event.deltaY; event.preventDefault();
+}, { passive:false });
 function renderDocumentTabs() {
     const tabs = byId('documentTabs'); tabs.replaceChildren();
     for (const doc of documents) {
@@ -119,6 +125,7 @@ function renderDocumentTabs() {
         button.onclick = () => activateDocument(doc.id);
         const close = document.createElement('button'); close.textContent = '×'; close.setAttribute('aria-label',wx('Tab schließen','Close tab'));
         close.onclick = () => closeDocument(doc.id); item.append(button,close); tabs.append(item);
+        if (active) requestAnimationFrame(() => item.scrollIntoView({ block:'nearest', inline:'nearest' }));
     }
     byId('btnMaskedExport').textContent = wx('Maskierter Export','Masked export');
     byId('btnMaskedExport').disabled = jsonData === undefined;

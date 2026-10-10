@@ -14,7 +14,7 @@ test('update button is in the top toolbar beside Help', () => {
     assert.match(toolbar, /id="btnCheckUpdates"[\s\S]*<span class="icon">⟳<\/span>[\s\S]*<span>Update<\/span>/);
     assert.doesNotMatch(workspaceScript.match(/workspaceBar\.innerHTML\s*=\s*[^;]+/)?.[0] || '', /btnCheckUpdates/);
 });
-const {createManifest} = require('../scripts/create-updater-manifest.cjs');
+const {createManifest, mergeManifest} = require('../scripts/create-updater-manifest.cjs');
 const script = fs.readFileSync(require.resolve('../web/workspace.js'),'utf8');
 function source(name) {
     const start = script.search(new RegExp(`^(?:async )?function ${name}\\(`,'m'));
@@ -230,6 +230,20 @@ test('release manifest requires a signature for every platform and correct artif
         assert.throws(()=>createManifest('bad',[]));
         assert.throws(()=>createManifest('1.4.0',[]));
     } finally { fs.rmSync(root,{recursive:true,force:true}); }
+});
+
+test('updater manifest keeps previously published platforms of the same version', () => {
+    const base = 'https://github.com/nojan01/json-viewer-editor/releases/download/v1.5.4/';
+    const built = {version:'1.5.4', notes:'n', pub_date:'d', platforms:{'linux-x86_64':{signature:'bmV3',url:base+'a.AppImage'}}};
+    const previous = {version:'1.5.4', platforms:{
+        'darwin-aarch64':{signature:'bWFj',url:base+'JSON.Viewer.app.tar.gz'},
+        'linux-x86_64':{signature:'b2xk',url:base+'old.AppImage'},
+        'darwin-x86_64':{signature:'eA==',url:'https://evil.example/x'}}};
+    const merged = mergeManifest(built, previous);
+    assert.deepEqual(Object.keys(merged.platforms).sort(), ['darwin-aarch64','linux-x86_64']);
+    assert.equal(merged.platforms['linux-x86_64'].signature, 'bmV3');
+    assert.deepEqual(Object.keys(mergeManifest(built,{...previous,version:'1.5.3'}).platforms), ['linux-x86_64']);
+    assert.equal(mergeManifest(built,null), built);
 });
 
 test('transform worker processes a large document and caps long-string previews', async () => {
