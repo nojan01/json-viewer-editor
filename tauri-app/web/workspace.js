@@ -20,7 +20,7 @@ let activeSavedViewName = readPreference('json-viewer-active-view', null);
 if (!savedViews.some(view => view.name === activeSavedViewName)) activeSavedViewName = null;
 const workspaceBar = document.createElement('div');
 workspaceBar.className = 'workspace-bar';
-workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><select id="savedViewSelect" class="saved-view-select" aria-label="Gespeicherte Ansicht"></select><button id="btnManageViews"></button><button id="btnMaskedExport"></button><button id="btnDataProfile"></button><button id="btnPipeline"></button>';
+workspaceBar.innerHTML = '<div class="document-tabs" id="documentTabs" role="tablist"></div><select id="recentFiles" aria-label="Zuletzt geöffnet"></select><select id="savedViewSelect" class="saved-view-select" aria-label="Gespeicherte Ansicht"></select><button id="btnManageViews"></button><button id="btnMaskedExport"></button><button id="btnDataProfile"></button><button id="btnPipeline"></button><button id="btnJoin"></button>';
 // Place below the toolbar, above search and document contents.
 const toolbar = document.querySelector('.toolbar');
 (toolbar || treeContainer).insertAdjacentElement('afterend', workspaceBar);
@@ -108,6 +108,12 @@ function persistWorkspace() {
     }));
     writePreference('json-viewer-workspace', { tabs, active: currentFilePath });
 }
+// The Linux tab strip hides its scrollbar, so map vertical wheel movement to horizontal scrolling.
+byId('documentTabs').addEventListener('wheel', event => {
+    const tabs = event.currentTarget;
+    if (tabs.scrollWidth <= tabs.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    tabs.scrollLeft += event.deltaY; event.preventDefault();
+}, { passive:false });
 function renderDocumentTabs() {
     const tabs = byId('documentTabs'); tabs.replaceChildren();
     for (const doc of documents) {
@@ -119,6 +125,7 @@ function renderDocumentTabs() {
         button.onclick = () => activateDocument(doc.id);
         const close = document.createElement('button'); close.textContent = '×'; close.setAttribute('aria-label',wx('Tab schließen','Close tab'));
         close.onclick = () => closeDocument(doc.id); item.append(button,close); tabs.append(item);
+        if (active) requestAnimationFrame(() => item.scrollIntoView({ block:'nearest', inline:'nearest' }));
     }
     byId('btnMaskedExport').textContent = wx('Maskierter Export','Masked export');
     byId('btnMaskedExport').disabled = jsonData === undefined;
@@ -126,6 +133,8 @@ function renderDocumentTabs() {
     byId('btnDataProfile').disabled = jsonData === undefined;
     byId('btnPipeline').textContent = wx('Transformationen…','Transformations…');
     byId('btnPipeline').disabled = jsonData === undefined;
+    byId('btnJoin').textContent = wx('Zusammenführen…','Join…');
+    byId('btnJoin').disabled = jsonData === undefined;
     byId('btnManageViews').textContent = wx('Ansichten…','Views…');
     byId('btnManageViews').disabled = jsonData === undefined;
     const updateButton = byId('btnCheckUpdates');
@@ -531,6 +540,143 @@ function resetPreparedPipelineTree() {
 }
 byId('btnPipeline').onclick=showPipeline;
 
+function showJoin() {
+    if (jsonData === undefined || documentBusy) return;
+    const source = jsonData, sourceName = fileName || 'data.json';
+    const leftFound = WorkspaceCore.findRecordArray(source);
+    let second = null, analysis = null, busy = false, cancelled = false, committing = false;
+    const dialog = document.createElement('dialog'); dialog.className = 'workspace-dialog join-dialog';
+    dialog.innerHTML = `<h3>${wx('Datensätze zusammenführen','Join records')}</h3>
+      <p>${wx('Verbindet die Datensätze der aktuellen Datei mit einer zweiten Datei über ein gemeinsames Schlüsselfeld wie <code>id</code> oder <code>hostname</code>. Schlüssel werden mit Datentyp verglichen (1 und "1" sind verschieden). Felder gleichen Namens mit unterschiedlichen Werten sind Konflikte und werden unten aufgelöst. Die geöffneten Dateien bleiben unverändert.','Joins the records of the current file with a second file on a shared key field such as <code>id</code> or <code>hostname</code>. Keys are compared including type (1 and "1" differ). Fields with the same name but different values are conflicts and are resolved below. Open files stay unchanged.')}</p>
+      <div class="join-row"><button class="join-load">${wx('Zweite Datei laden…','Load second file…')}</button><span class="join-files"></span></div>
+      <div class="join-row"><label>${wx('Schlüsselfeld','Key field')} <select class="join-key" disabled></select></label>
+        <label>${wx('Art','Type')} <select class="join-mode">
+          <option value="inner">${wx('Inner Join – nur Schlüssel in beiden Dateien','Inner join – keys present in both files')}</option>
+          <option value="left">${wx('Left Join – alle aktuellen Datensätze, ergänzt','Left join – all current records, enriched')}</option>
+          <option value="full">${wx('Vollständig – alle Datensätze beider Dateien','Full – all records of both files')}</option></select></label></div>
+      <p class="join-status pipeline-status" role="status" aria-live="polite"></p>
+      <div class="join-report"></div>
+      <div class="dialog-actions"><button class="join-close">${wx('Schließen / Abbrechen','Close / Cancel')}</button><button class="join-check">${wx('Prüfen','Check')}</button><button class="join-export" disabled>${wx('Als JSON exportieren…','Export as JSON…')}</button><button class="join-new primary" disabled>${wx('In neuem Tab öffnen','Open in new tab')}</button></div>`;
+    const q = selector => dialog.querySelector(selector), status = q('.join-status'), report = q('.join-report'), keySelect = q('.join-key');
+    const setStatus = (text, error = false) => { status.textContent = text; status.classList.toggle('pipeline-error', error); };
+    const fileLine = () => { q('.join-files').textContent = `${sourceName}${leftFound ? ` (${leftFound.rows.length.toLocaleString()})` : ''} ⇔ ${second ? `${second.name} (${second.found.rows.length.toLocaleString()})` : wx('keine zweite Datei','no second file')}`; };
+    const invalidate = () => { analysis = null; report.replaceChildren(); q('.join-new').disabled = q('.join-export').disabled = true; setStatus(''); };
+    function close() { cancelled = true; if (!busy) { dialog.close(); dialog.remove(); } }
+    q('.join-close').onclick = close; dialog.oncancel = event => { event.preventDefault(); close(); };
+    keySelect.onchange = q('.join-mode').onchange = invalidate;
+    fileLine();
+    if (!leftFound) setStatus(wx('Die aktuelle Datei enthält kein Array mit Objekten.','The current file contains no array of objects.'), true);
+    q('.join-load').onclick = async () => {
+        try {
+            const loaded = await pickSecondJsonFile(() => setStatus(wx('Zweite Datei wird geladen…','Loading second file…')));
+            if (!loaded) return;
+            const found = WorkspaceCore.findRecordArray(loaded.data);
+            if (!found) throw new Error(wx('Die zweite Datei enthält kein Array mit Objekten.','The second file contains no array of objects.'));
+            second = { ...loaded, found }; invalidate(); fileLine();
+            const leftFields = new Set(WorkspaceCore.comparisonFields(leftFound?.rows || []));
+            const common = WorkspaceCore.comparisonFields(found.rows).filter(field => leftFields.has(field));
+            keySelect.replaceChildren(...common.map(field => new Option(field, field)));
+            const preferred = common.find(field => /^(id|_id|key|hostname|name)$/i.test(field));
+            if (preferred) keySelect.value = preferred;
+            keySelect.disabled = !common.length;
+            setStatus(common.length ? wx('Schlüsselfeld wählen und „Prüfen“ klicken.','Choose a key field and click “Check”.') : wx('Keine gemeinsamen Felder gefunden.','No shared fields found.'), !common.length);
+        } catch (error) { setStatus(`${wx('Datei konnte nicht geladen werden','Could not load file')}: ${error.message || error}`, true); }
+    };
+    function cell(row, text) { row.insertCell().textContent = text; }
+    function renderReport() {
+        report.replaceChildren();
+        const a = analysis, list = document.createElement('ul'); list.className = 'join-summary';
+        const items = [
+            [`${a.matched.toLocaleString()} ${wx('Schlüssel in beiden Dateien','keys in both files')}`],
+            [`${a.leftOnly.toLocaleString()} ${wx('nur in','only in')} ${sourceName}`],
+            [`${a.rightOnly.toLocaleString()} ${wx('nur in','only in')} ${second.name}`],
+            [`${wx('Ohne Schlüssel','Without key')}: ${a.missing.left.toLocaleString()} / ${a.missing.right.toLocaleString()}`, a.missing.left + a.missing.right > 0],
+        ];
+        for (const [side, name] of [['left', sourceName], ['right', second.name]]) {
+            const d = a.duplicates[side];
+            if (d.count) items.push([`${wx('Doppelte Schlüssel in','Duplicate keys in')} ${name}: ${d.count.toLocaleString()} (${d.sample.map(x => `${JSON.stringify(x.key)} ×${x.occurrences}`).join(', ')}${d.count > d.sample.length ? ', …' : ''})`, true]);
+        }
+        for (const [text, warn] of items) { const li = document.createElement('li'); li.textContent = text; if (warn) li.className = 'join-warning'; list.append(li); }
+        report.append(list);
+        if (a.missing.left + a.missing.right) {
+            const p = document.createElement('p'); p.textContent = wx('Datensätze ohne Schlüssel werden beim Inner Join verworfen, beim Left Join (aktuelle Datei) bzw. vollständigen Zusammenführen unverändert übernommen.','Records without a key are dropped by an inner join and kept unchanged by a left join (current file) or a full join.'); report.append(p);
+        }
+        if (a.conflicts.length) {
+            const heading = document.createElement('p'); heading.textContent = wx('Feldkonflikte (gleiches Feld, unterschiedlicher Wert):','Field conflicts (same field, different value):'); report.append(heading);
+            const table = document.createElement('table'); table.className = 'profile-table join-conflicts';
+            const head = table.createTHead().insertRow();
+            for (const title of [wx('Feld','Field'), wx('Datensätze','Records'), wx('Beispiel','Example'), wx('Übernehmen','Keep')]) { const th = document.createElement('th'); th.textContent = title; head.append(th); }
+            const body = table.createTBody();
+            for (const conflict of a.conflicts) {
+                const row = body.insertRow(); cell(row, conflict.field); cell(row, conflict.count.toLocaleString());
+                const e = conflict.example, preview = v => { const t = JSON.stringify(v); return t.length > 60 ? t.slice(0, 57) + '…' : t; };
+                cell(row, `${keySelect.value}=${preview(e.key)}: ${preview(e.left)} ⇔ ${preview(e.right)}`);
+                const choice = document.createElement('select'); choice.dataset.field = conflict.field; choice.setAttribute('aria-label', conflict.field);
+                choice.add(new Option(wx('Wert der aktuellen Datei','Current file value'), 'left'));
+                choice.add(new Option(wx('Wert der zweiten Datei','Second file value'), 'right'));
+                choice.add(new Option(wx('Beide (zweiter mit Suffix)','Both (second with suffix)'), 'both'));
+                row.insertCell().append(choice);
+            }
+            report.append(table);
+            const suffix = document.createElement('label'); suffix.textContent = wx('Suffix für „Beide“ ','Suffix for “Both” ');
+            const input = document.createElement('input'); input.className = 'join-suffix'; input.value = '_2'; input.maxLength = 40; suffix.append(input); report.append(suffix);
+        }
+    }
+    function lockControls(locked) { for (const c of dialog.querySelectorAll('button,select,input')) if (c !== q('.join-close')) c.disabled = locked; if (!locked) { keySelect.disabled = !keySelect.options.length; q('.join-new').disabled = q('.join-export').disabled = !analysis || analysis.duplicates.left.count + analysis.duplicates.right.count > 0; } }
+    q('.join-check').onclick = async () => {
+        if (busy) return;
+        if (!leftFound || !second) { setStatus(wx('Bitte zuerst eine zweite Datei laden.','Load a second file first.'), true); return; }
+        if (!keySelect.value) { setStatus(wx('Bitte ein Schlüsselfeld wählen.','Choose a key field.'), true); return; }
+        invalidate(); busy = true; lockControls(true); setStatus(wx('Schlüssel werden geprüft…','Checking keys…'));
+        try {
+            analysis = await JoinCore.analyzeJoin(leftFound.rows, second.found.rows, keySelect.value, { cancelled: () => cancelled });
+            if (cancelled) return;
+            renderReport();
+            const blocked = analysis.duplicates.left.count + analysis.duplicates.right.count > 0;
+            setStatus(blocked ? wx('Das Schlüsselfeld ist nicht eindeutig. Bitte ein anderes Feld wählen.','The key field is not unique. Choose another field.') : wx('Prüfung abgeschlossen. Konflikte festlegen und Ergebnis öffnen oder exportieren.','Check complete. Resolve conflicts, then open or export the result.'), blocked);
+        } catch (error) { analysis = null; if (!cancelled) setStatus(error.message || String(error), true); }
+        finally { busy = false; if (cancelled) { dialog.close(); dialog.remove(); } else lockControls(false); }
+    };
+    async function build() {
+        const resolutions = Object.create(null);
+        for (const select of report.querySelectorAll('select[data-field]')) resolutions[select.dataset.field] = select.value;
+        const suffix = q('.join-suffix')?.value ?? '_2';
+        if (Object.values(resolutions).includes('both') && !suffix) throw new Error(wx('Bitte ein Suffix eingeben.','Enter a suffix.'));
+        const rows = await JoinCore.joinRecords(leftFound.rows, second.found.rows, analysis.keyField, { mode: q('.join-mode').value, resolutions, suffix, cancelled: () => cancelled });
+        return JoinCore.replaceAtPath(source, leftFound.path, rows);
+    }
+    async function finish(target) {
+        if (busy || !analysis) return;
+        busy = true; lockControls(true); setStatus(wx('Datensätze werden zusammengeführt…','Joining records…'));
+        try {
+            await new Promise(resolve => setTimeout(resolve, 16));
+            const result = await build();
+            if (cancelled) return;
+            const name = `${sourceName.replace(/\.(json|jsonl|ndjson)$/i, '')}-join.json`;
+            if (target === 'export') {
+                setStatus(wx('Export wird geschrieben…','Writing export…'));
+                if (await writeExport(JSON.stringify(result, null, 2), name)) setStatus(wx('Export gespeichert.','Export saved.'));
+                else setStatus('');
+                return;
+            }
+            cancelled = committing = true;
+            await queueDocumentOperation(async () => {
+                const started = performance.now();
+                await finalizeLoad({ jsonData: result, name, fileSize: 0, nodeCount: 0, parseTime: 0, prepared: false, wasConcatenated: false, indent: '  ', crlf: false }, null, started);
+                isModified = true; updateTitle(); stashDocument(); renderDocumentTabs();
+            });
+            showNotification(wx('Zusammengeführte Datensätze in neuem Tab geöffnet.','Joined records opened in a new tab.'));
+        } catch (error) {
+            const message = error.message || String(error);
+            if (committing) showNotification(message, 'error', 5000); else if (!cancelled) setStatus(message, true);
+        }
+        finally { busy = false; if (cancelled) { dialog.close(); dialog.remove(); } else lockControls(false); }
+    }
+    q('.join-new').onclick = () => finish('tab'); q('.join-export').onclick = () => finish('export');
+    document.body.append(dialog); dialog.showModal();
+}
+byId('btnJoin').onclick = showJoin;
+
 function showDataProfile() {
     if (jsonData === undefined || documentBusy) return;
     const source = jsonData, selected = selectedPath ? getValueAtPath(selectedPath) : undefined;
@@ -686,21 +832,24 @@ function prepareSmartDiff() {
     byId('diffSummary').textContent = `${fileName || 'JSON'} ⇔ ${smartDiffFileName || wx('zweite Datei','second file')} · ${smartDiffLeft.rows.length} / ${smartDiffRight.rows.length} ${wx('Datensätze','records')}`;
     if (select.value) runSmartDiff();
 }
+async function pickSecondJsonFile(onLoading) {
+    if (window.__TAURI__) {
+        const selected = await window.__TAURI__.dialog.open({multiple:false,filters:[{name:'JSON',extensions:['json','jsonl','ndjson','txt']}]});
+        if (!selected) return null;
+        const path = Array.isArray(selected) ? selected[0] : selected;
+        onLoading?.();
+        const result = await readFileContent(path); return { data: parseJSON(result.text), name: getFileName(path) };
+    }
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.jsonl,.ndjson,.txt';
+    const file = await new Promise(resolve => { input.onchange = event => resolve(event.target.files[0] || null); input.click(); });
+    if (!file) return null;
+    return { data: parseJSON(await file.text()), name: file.name };
+}
 async function loadSmartDiffFile() {
     try {
-        let data, name;
-        if (window.__TAURI__) {
-            const selected = await window.__TAURI__.dialog.open({multiple:false,filters:[{name:'JSON',extensions:['json','jsonl','ndjson','txt']}]});
-            if (!selected) return;
-            const path = Array.isArray(selected) ? selected[0] : selected;
-            byId('diffSummary').textContent = wx('Vergleichsdatei wird geladen…','Loading comparison file…');
-            const result = await readFileContent(path); data = parseJSON(result.text); name = getFileName(path);
-        } else {
-            const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.jsonl,.ndjson,.txt';
-            const file = await new Promise(resolve => { input.onchange = event => resolve(event.target.files[0] || null); input.click(); });
-            if (!file) return; data = parseJSON(await file.text()); name = file.name;
-        }
-        diffSecondData = data; smartDiffFileName = name; smartDiffResult = null; prepareSmartDiff();
+        const loaded = await pickSecondJsonFile(() => { byId('diffSummary').textContent = wx('Vergleichsdatei wird geladen…','Loading comparison file…'); });
+        if (!loaded) return;
+        diffSecondData = loaded.data; smartDiffFileName = loaded.name; smartDiffResult = null; prepareSmartDiff();
     } catch (error) { showNotification(`${wx('Vergleichsdatei konnte nicht geladen werden','Could not load comparison file')}: ${error.message || error}`,'error',5000); }
 }
 function runSmartDiff() {

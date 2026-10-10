@@ -326,7 +326,8 @@ jobs:
           needs.build-windows.result == 'success' &&
           needs.build-windows-arm64.result == 'success' &&
           needs.build-linux.result == 'success' &&
-          needs.build-macos.result == 'success' }}
+          (needs.build-macos.result == 'success' ||
+           (needs.build-macos.result == 'skipped' && !inputs.build_macos)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -343,9 +344,23 @@ jobs:
       - name: List downloaded files
         run: find . -type f -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm"
         
+      # Without a CI macOS build, keep the macOS entry that release-macos.sh
+      # already published for this version instead of dropping it.
+      - name: Download existing updater manifest
+        if: ${{ !inputs.build_macos }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json --output previous-latest.json || echo "No published latest.json yet"
+
       - name: Generate signed updater manifest
         shell: bash
-        run: node tauri-app/scripts/create-updater-manifest.cjs "${RELEASE_TAG#v}" . latest.json
+        run: |
+          if [ "${{ inputs.build_macos }}" = "true" ]; then
+            node tauri-app/scripts/create-updater-manifest.cjs "${RELEASE_TAG#v}" . latest.json
+          else
+            node tauri-app/scripts/create-updater-manifest.cjs --merge previous-latest.json "${RELEASE_TAG#v}" . latest.json
+          fi
+          grep -q '"linux-x86_64"' latest.json
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

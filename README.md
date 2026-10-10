@@ -50,6 +50,7 @@ Der Quellcode steht vollständig unter der [MIT-Lizenz](LICENSE) zur Verfügung.
 - 📈 **Statistiken** — Übersicht über Datentypen, Tiefe, Größe und Verteilung (⌘I)
 - 🔎 **Duplikate finden** — Doppelte Keys und Werte im Dokument aufspüren
 - ⚖️ **Diff-Vergleich** — Zwei JSON-Dateien nebeneinander vergleichen (⌘D)
+- 🔗 **Datensätze zusammenführen** — Zwei Dateien über ein Schlüsselfeld wie `id` oder `hostname` verbinden (Inner, Left, vollständig); doppelte/fehlende Schlüssel und Feldkonflikte vorab prüfen, Ergebnis in neuem Tab oder als JSON-Export
 - ✅ **Schema-Validierung** — JSON-Struktur automatisch analysieren und Schema generieren
 
 ### Datenprofil

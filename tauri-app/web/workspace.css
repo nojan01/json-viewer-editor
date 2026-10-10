@@ -1,6 +1,8 @@
-.workspace-bar { font-size:12px; display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-secondary); border-bottom:1px solid var(--border); min-height:38px; }
+.workspace-bar { font-size:12px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-secondary); border-bottom:1px solid var(--border); min-height:38px; }
 /* contain:paint clips the scrolled tabs to the strip's own box so they can never draw under the select and buttons beside it. */
-.document-tabs { display:flex; gap:4px; overflow-x:auto; flex:1 1 0; min-width:0; position:relative; contain:paint; }
+.document-tabs { display:flex; gap:4px; overflow-x:auto; overflow-y:hidden; flex:1 1 0; min-width:min(200px,100%); position:relative; contain:paint; }
+/* Keep a usable tab strip: when it would drop below its minimum width, the controls wrap to a second row instead of covering the tabs. */
+.workspace-bar > .document-tabs:empty { min-width:0; }
 /* Only the tab strip may shrink; the recent-files select and buttons keep their width so they never overlap it. */
 .workspace-bar > :not(.document-tabs) { flex-shrink:0; }
 .document-tab { display:flex; flex:none; align-items:center; border:1px solid var(--border); border-radius:5px; max-width:250px; }
@@ -162,3 +164,11 @@
 
 .pipeline-error { color:var(--text-primary); border:1px solid #e46868; border-radius:6px; padding:8px 10px; background:var(--bg-secondary); }
 .pipeline-dialog input[aria-invalid="true"] { border-color:#e46868; outline:1px solid #e46868; }
+
+.join-dialog { width:min(900px,94vw); }
+.join-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:10px 0; }
+.join-dialog select { background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border); padding:6px; font-size:12px; border-radius:4px; max-width:100%; }
+.join-files { color:var(--text-secondary); overflow-wrap:anywhere; }
+.join-summary { margin:8px 0; padding-left:20px; line-height:1.6; }
+.join-warning { color:#e46868; }
+.join-conflicts td:nth-child(3) { font-family:monospace; overflow-wrap:anywhere; }

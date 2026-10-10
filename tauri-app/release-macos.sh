@@ -101,7 +101,14 @@ else
         npx tauri signer sign "$UPDATER_ARCHIVE"
 fi
 UPDATER_ARCH="${DMG_ARCH/x64/x86_64}"
-node scripts/create-updater-manifest.cjs "$VERSION" "$BUILD_DIR" "$BUILD_DIR/latest.json" \
+# Keep Windows/Linux entries that CI already published for this version.
+PREVIOUS_MANIFEST="$BUILD_DIR/previous-latest.json"
+rm -f "$PREVIOUS_MANIFEST"
+if command -v gh >/dev/null 2>&1; then
+    gh release download "v$VERSION" --repo nojan01/json-viewer-editor --pattern latest.json \
+        --output "$PREVIOUS_MANIFEST" 2>/dev/null || echo "No published latest.json for v$VERSION yet."
+fi
+node scripts/create-updater-manifest.cjs --merge "$PREVIOUS_MANIFEST" "$VERSION" "$BUILD_DIR" "$BUILD_DIR/latest.json" \
     "darwin-${UPDATER_ARCH}=$UPDATER_ARCHIVE"
 
 echo "Release ready: $DMG_PATH"
