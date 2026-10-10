@@ -114,6 +114,27 @@ byId('documentTabs').addEventListener('wheel', event => {
     if (tabs.scrollWidth <= tabs.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
     tabs.scrollLeft += event.deltaY; event.preventDefault();
 }, { passive:false });
+// When the tabs do not fit beside the controls, give them a full-width row where they wrap,
+// so no tab is ever hidden in a scroll area (the Linux strip has no visible scrollbar).
+let tabLayoutFrame = 0;
+function layoutDocumentTabs() {
+    tabLayoutFrame = 0;
+    const tabs = byId('documentTabs');
+    const items = [...tabs.children];
+    const gap = parseFloat(getComputedStyle(workspaceBar).columnGap) || 0;
+    const style = getComputedStyle(workspaceBar);
+    const inner = workspaceBar.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+    const controls = [...workspaceBar.children].filter(el => el !== tabs && getComputedStyle(el).display !== 'none');
+    const controlsWidth = controls.reduce((sum, el) => sum + el.offsetWidth + gap, 0);
+    const tabGap = parseFloat(getComputedStyle(tabs).columnGap) || 0;
+    const needed = items.reduce((sum, el) => sum + el.offsetWidth, 0) + Math.max(0, items.length - 1) * tabGap;
+    const ownRow = items.length > 0 && Number.isFinite(needed) && needed > inner - controlsWidth;
+    workspaceBar.classList.toggle('tabs-own-row', ownRow);
+}
+function scheduleTabLayout() {
+    if (!tabLayoutFrame) tabLayoutFrame = requestAnimationFrame(layoutDocumentTabs);
+}
+if (typeof ResizeObserver === 'function') new ResizeObserver(scheduleTabLayout).observe(workspaceBar);
 function renderDocumentTabs() {
     const tabs = byId('documentTabs'); tabs.replaceChildren();
     for (const doc of documents) {
@@ -127,6 +148,7 @@ function renderDocumentTabs() {
         close.onclick = () => closeDocument(doc.id); item.append(button,close); tabs.append(item);
         if (active) requestAnimationFrame(() => item.scrollIntoView({ block:'nearest', inline:'nearest' }));
     }
+    scheduleTabLayout();
     byId('btnMaskedExport').textContent = wx('Maskierter Export','Masked export');
     byId('btnMaskedExport').disabled = jsonData === undefined;
     byId('btnDataProfile').textContent = wx('Datenprofil…','Data profile…');
