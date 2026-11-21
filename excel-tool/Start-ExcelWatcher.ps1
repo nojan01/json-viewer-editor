@@ -2,11 +2,13 @@
 # Ueberwacht den Ordner auf neue JSON-Dateien und fuehrt automatisch Update-Excel.ps1 aus
 
 param(
-    [string]$WatchFolder = $PSScriptRoot
+    [string]$WatchFolder = $PSScriptRoot,
+    [string]$TargetWorkbook,
+    [string]$TargetSheet
 )
 
 # Pfade
-$scriptPath = Join-Path $WatchFolder "Update-Excel.ps1"
+$scriptPath = Join-Path $PSScriptRoot "Update-Excel.ps1"
 $processedFolder = Join-Path $WatchFolder "verarbeitet"
 
 # Ordner fuer verarbeitete Dateien erstellen
@@ -37,6 +39,16 @@ Write-Host "Warte auf *_transfer_*.json Dateien..." -ForegroundColor Gray
 Write-Host "Druecken Sie Ctrl+C zum Beenden" -ForegroundColor Gray
 Write-Host ""
 
+# The operator selects the destination once per watcher session.
+if (!$TargetWorkbook) { $TargetWorkbook = Read-Host "Name der freigegebenen XLSX-Datei im überwachten Ordner" }
+if (!$TargetSheet) { $TargetSheet = Read-Host "Name des freigegebenen Zielblatts" }
+if ([string]::IsNullOrWhiteSpace($TargetSheet) -or
+    $TargetWorkbook -notmatch '^[^\\/:*?"<>|]+\.xlsx$') {
+    throw "Ungültige Zielmappe oder leeres Zielblatt."
+}
+$targetPath = Join-Path (Get-Item -LiteralPath $WatchFolder).FullName $TargetWorkbook
+$settings = @{ Workbook = $TargetWorkbook; Sheet = $TargetSheet; Path = $targetPath; Script = $scriptPath }
+
 # FileSystemWatcher erstellen (da alles erlaubt ist)
 $watcher = New-Object System.IO.FileSystemWatcher
 $watcher.Path = $WatchFolder
@@ -57,31 +69,24 @@ $action = {
         
         try {
             # JSON lesen
-            $json = Get-Content $filePath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $excelFile = $json.excelFile
-            $sheetName = $json.sheetName
-            $rowCount = $json.rows.Count
-            
-            # Excel-Datei suchen
-            $watchFolder = Split-Path $filePath -Parent
-            $excelPath = Join-Path $watchFolder $excelFile
-            
-            if (-not (Test-Path $excelPath)) {
-                Write-Host "    FEHLER: Excel-Datei nicht gefunden: $excelFile" -ForegroundColor Red
-                return
+            $json = Get-Content -LiteralPath $filePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $settings = $Event.MessageData
+            if ($json.excelFile -ne $settings.Workbook -or $json.sheetName -ne $settings.Sheet) {
+                throw "Transferziel wurde für diesen Watcher nicht freigegeben."
             }
-            
-            Write-Host "    Excel: $excelFile | Sheet: $sheetName | Zeilen: $rowCount" -ForegroundColor White
-            
-            # Update-Excel.ps1 ausfuehren
-            $scriptPath = Join-Path $watchFolder "Update-Excel.ps1"
-            & $scriptPath -JsonFile $filePath -ExcelFile $excelPath -SheetName $sheetName
-            
+            $target = Get-Item -LiteralPath $settings.Path -ErrorAction Stop
+            if ($target.PSIsContainer -or ($target.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw "Die Zielmappe muss eine reguläre XLSX-Datei sein."
+            }
+            $watchFolder = Split-Path $filePath -Parent
+            & $settings.Script -JsonFile $filePath -ExcelFile $settings.Path -SheetName $settings.Sheet
+            if (!$?) { throw "Übertragung fehlgeschlagen." }
+
             # Datei in verarbeitet-Ordner verschieben
             $processedFolder = Join-Path $watchFolder "verarbeitet"
             $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
             $newName = "$timestamp`_$fileName"
-            Move-Item -Path $filePath -Destination (Join-Path $processedFolder $newName) -Force
+            Move-Item -LiteralPath $filePath -Destination (Join-Path $processedFolder $newName) -Force
             
             Write-Host "    Verschoben nach: verarbeitet\$newName" -ForegroundColor Gray
             
@@ -92,7 +97,7 @@ $action = {
 }
 
 # Event registrieren
-Register-ObjectEvent $watcher "Created" -Action $action | Out-Null
+Register-ObjectEvent $watcher "Created" -MessageData $settings -Action $action | Out-Null
 
 # Warten (Ctrl+C zum Beenden)
 try {

@@ -8,9 +8,166 @@ use std::sync::Mutex;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_cli::CliExt;
+use tauri_plugin_fs::FsExt;
 use updates::{
     check_for_update, exit_application, install_update, restart_application, UpdateState,
 };
+
+#[derive(Default)]
+struct FileGrants {
+    readable: Mutex<std::collections::VecDeque<PathBuf>>,
+    writable: Mutex<std::collections::HashSet<PathBuf>>,
+}
+
+fn grant_path(path: &Path) -> std::io::Result<PathBuf> {
+    match path.canonicalize() {
+        Ok(path) => Ok(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && !path.is_symlink() => {
+            let parent = path.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
+            Ok(parent
+                .canonicalize()?
+                .join(path.file_name().ok_or(std::io::ErrorKind::InvalidInput)?))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn require_selected(app: &AppHandle, path: &str) -> Result<(), String> {
+    let canonical = grant_path(Path::new(path)).map_err(|e| e.to_string())?;
+    let grants = app.state::<std::sync::Arc<FileGrants>>();
+    if grants
+        .readable
+        .lock()
+        .map_err(|e| e.to_string())?
+        .contains(&canonical)
+    {
+        return Ok(());
+    }
+    Err("Datei nicht freigegeben. Bitte über den Dateidialog öffnen.".into())
+}
+
+fn require_save_target(app: &AppHandle, path: &str) -> Result<(), String> {
+    let canonical = grant_path(Path::new(path)).map_err(|e| e.to_string())?;
+    if app
+        .state::<std::sync::Arc<FileGrants>>()
+        .writable
+        .lock()
+        .map_err(|e| e.to_string())?
+        .contains(&canonical)
+    {
+        return Ok(());
+    }
+    Err("Bitte das Ziel im Speicherdialog auswählen.".into())
+}
+
+fn restore_file_grants(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let directory = app.path().app_config_dir()?;
+    fs::create_dir_all(&directory)?;
+    let record = directory.join("selected-files.grants");
+    let mut paths: std::collections::VecDeque<PathBuf> = fs::read(&record)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    paths.retain(|path| {
+        is_supported_file(path) && path.is_file() && path.canonicalize().ok().as_ref() == Some(path)
+    });
+    let grants = std::sync::Arc::new(FileGrants {
+        readable: Mutex::new(paths),
+        ..Default::default()
+    });
+    app.manage(grants.clone());
+    app.fs_scope().listen(move |event| {
+        if let tauri::scope::fs::Event::PathAllowed(path) = event {
+            if path.is_dir() || !is_supported_file(path) {
+                return;
+            }
+            if let (Ok(path), Ok(mut paths)) = (grant_path(path), grants.readable.lock()) {
+                paths.retain(|old| old != &path);
+                paths.push_front(path);
+                let saved = (|| -> Result<(), Box<dyn std::error::Error>> {
+                    let mut staged = tempfile::NamedTempFile::new_in(&directory)?;
+                    serde_json::to_writer(
+                        &mut staged,
+                        &paths.iter().take(256).collect::<Vec<_>>(),
+                    )?;
+                    staged.persist(&record)?;
+                    Ok(())
+                })();
+                if let Err(error) = saved {
+                    log::warn!("Dateifreigaben: {error}");
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct SaveFilter {
+    name: String,
+    extensions: Vec<String>,
+}
+
+#[tauri::command]
+async fn choose_save_path(
+    app: AppHandle,
+    default_path: String,
+    filters: Vec<SaveFilter>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let file_name = Path::new(&default_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("data.json");
+    let mut dialog = app.dialog().file().set_file_name(file_name);
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    for filter in filters {
+        let extensions: Vec<_> = filter.extensions.iter().map(String::as_str).collect();
+        dialog = dialog.add_filter(filter.name, &extensions);
+    }
+    let Some(file) = dialog.blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = file.into_path().map_err(|e| e.to_string())?;
+    ensure_export_file(&path)?;
+    let canonical = grant_path(&path).map_err(|e| e.to_string())?;
+    app.state::<std::sync::Arc<FileGrants>>()
+        .writable
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(canonical);
+    app.fs_scope()
+        .allow_file(&path)
+        .map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+fn ensure_export_file(path: &Path) -> Result<(), String> {
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("csv"))
+    {
+        return Ok(());
+    }
+    ensure_supported_file(path, "geschrieben")
+}
+
+#[tauri::command]
+fn write_export_text(app: AppHandle, path: String, content: String) -> Result<(), String> {
+    use std::io::Write;
+    require_save_target(&app, &path)?;
+    let path = Path::new(&path);
+    ensure_export_file(path)?;
+    let mut staged = tempfile::NamedTempFile::new_in(path.parent().ok_or("Ungültiger Dateipfad")?)
+        .map_err(|e| e.to_string())?;
+    staged
+        .write_all(content.as_bytes())
+        .map_err(|e| e.to_string())?;
+    commit_staged_file(&staged.into_temp_path(), path)
+}
 
 // In-memory store for compact JSON bytes (avoids temp files on disk)
 struct CompactStore {
@@ -24,13 +181,16 @@ fn get_startup_file(app: AppHandle) -> Option<String> {
     if let Ok(matches) = app.cli().matches() {
         if let Some(path) = matches.args.get("file").and_then(|arg| arg.value.as_str()) {
             if is_supported_file(Path::new(path)) && Path::new(path).exists() {
+                app.fs_scope().allow_file(path).ok()?;
                 return Some(path.to_owned());
             }
         }
     }
-    std::env::args().skip(1).find(|arg| {
-        is_supported_file(Path::new(arg)) && Path::new(arg).exists()
-    })
+    let path = std::env::args()
+        .skip(1)
+        .find(|arg| is_supported_file(Path::new(arg)) && Path::new(arg).exists())?;
+    app.fs_scope().allow_file(&path).ok()?;
+    Some(path)
 }
 
 // Files being written in chunks are staged in the target directory. The
@@ -63,9 +223,18 @@ fn ensure_supported_file(path: &Path, action: &str) -> Result<(), String> {
 
 // Masked export must never replace an open source, including symlinks/hard links.
 #[tauri::command]
-fn validate_export_path(path: String, sources: Vec<String>) -> Result<(), String> {
+fn validate_export_path(app: AppHandle, path: String, sources: Vec<String>) -> Result<(), String> {
+    require_save_target(&app, &path)?;
+    let sources = sources
+        .into_iter()
+        .filter(|s| require_selected(&app, s).is_ok())
+        .collect();
+    check_export_path(path, sources)
+}
+
+fn check_export_path(path: String, sources: Vec<String>) -> Result<(), String> {
     let target = Path::new(&path);
-    ensure_supported_file(target, "exportiert")?;
+    ensure_export_file(target)?;
     for source in sources {
         let source = Path::new(&source);
         if target == source
@@ -81,7 +250,8 @@ fn validate_export_path(path: String, sources: Vec<String>) -> Result<(), String
 
 // Optimized fast file reading command
 #[tauri::command]
-fn read_file_fast(path: String) -> Result<String, String> {
+fn read_file_fast(app: AppHandle, path: String) -> Result<String, String> {
+    require_selected(&app, &path)?;
     // Validate file path: only allow JSON/TXT files
     ensure_supported_file(Path::new(&path), "gelesen")?;
 
@@ -105,7 +275,8 @@ fn read_file_fast(path: String) -> Result<String, String> {
 // Fast file reading that returns raw bytes (avoids JSON string escaping in IPC)
 // For a 500MB file, this saves ~200MB+ of IPC overhead
 #[tauri::command]
-fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
+fn read_file_raw(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    require_selected(&app, &path)?;
     ensure_supported_file(Path::new(&path), "gelesen")?;
 
     let bytes = fs::read(&path).map_err(|e| format!("Fehler beim Lesen: {}", e))?;
@@ -116,7 +287,13 @@ fn read_file_raw(path: String) -> Result<tauri::ipc::Response, String> {
 // Chunked file reading: reads a byte range and returns raw bytes
 // For very large files (>200MB) where a single IPC transfer would hang
 #[tauri::command]
-fn read_file_chunk(path: String, offset: u64, length: u64) -> Result<tauri::ipc::Response, String> {
+fn read_file_chunk(
+    app: AppHandle,
+    path: String,
+    offset: u64,
+    length: u64,
+) -> Result<tauri::ipc::Response, String> {
+    require_selected(&app, &path)?;
     use std::io::{Seek, SeekFrom};
 
     ensure_supported_file(Path::new(&path), "gelesen")?;
@@ -149,41 +326,21 @@ fn read_file_chunk(path: String, offset: u64, length: u64) -> Result<tauri::ipc:
     Ok(tauri::ipc::Response::new(buffer))
 }
 
-// Fast file writing command
-#[tauri::command]
-fn write_file_fast(path: String, content: String) -> Result<(), String> {
-    // Validate file path: only allow JSON files for writing
-    ensure_supported_file(Path::new(&path), "geschrieben")?;
-    fs::write(&path, content).map_err(|e| format!("Fehler beim Schreiben: {}", e))
-}
-
 // Start an atomic chunked save in a temporary sibling file.
 #[tauri::command]
-fn save_file_start(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+fn save_file_start(
+    app: AppHandle,
+    path: String,
+    store: tauri::State<'_, ChunkedSaveStore>,
+) -> Result<(), String> {
+    require_save_target(&app, &path)?;
     let target = PathBuf::from(path);
-    ensure_supported_file(&target, "geschrieben")?;
+    ensure_export_file(&target)?;
 
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or("Ungültiger Dateiname".to_string())?;
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Systemzeit-Fehler: {}", e))?
-        .as_nanos();
-    let temporary = parent.join(format!(
-        ".{}.{}.{}.tmp",
-        file_name,
-        std::process::id(),
-        unique
-    ));
-
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .map_err(|e| format!("Temporäre Datei konnte nicht erstellt werden: {}", e))?;
+    let (_, temporary) = tempfile::NamedTempFile::new_in(parent)
+        .and_then(|file| file.keep().map_err(std::io::Error::from))
+        .map_err(|e| e.to_string())?;
 
     let mut files = store
         .files
@@ -198,14 +355,16 @@ fn save_file_start(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> R
 // Append a string chunk to the staged file, with optional LF→CRLF conversion.
 #[tauri::command]
 fn save_file_chunk(
+    app: AppHandle,
     path: String,
     content: String,
     crlf: Option<bool>,
     store: tauri::State<'_, ChunkedSaveStore>,
 ) -> Result<(), String> {
+    require_save_target(&app, &path)?;
     use std::io::Write;
     let target = PathBuf::from(path);
-    ensure_supported_file(&target, "geschrieben")?;
+    ensure_export_file(&target)?;
     let temporary = store
         .files
         .lock()
@@ -249,9 +408,14 @@ fn save_file_chunk(
 
 // Commit a fully written staged file by replacing the target with its sibling.
 #[tauri::command]
-fn save_file_finish(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+fn save_file_finish(
+    app: AppHandle,
+    path: String,
+    store: tauri::State<'_, ChunkedSaveStore>,
+) -> Result<(), String> {
+    require_save_target(&app, &path)?;
     let target = PathBuf::from(path);
-    ensure_supported_file(&target, "geschrieben")?;
+    ensure_export_file(&target)?;
     let temporary = store
         .files
         .lock()
@@ -269,15 +433,94 @@ fn save_file_finish(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> 
     Ok(())
 }
 
-// Both Unix rename and Windows MoveFileExW replace an existing regular file.
-// Keep the original in place until the staged file is ready.
+// An atomic rename replaces the inode, so retain the destination's access policy.
+#[cfg(unix)]
+fn replace_staged(temporary: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{chown, MetadataExt};
+    match fs::metadata(target) {
+        Ok(metadata) => {
+            let staged = fs::metadata(temporary)?;
+            if staged.uid() != metadata.uid() || staged.gid() != metadata.gid() {
+                chown(temporary, Some(metadata.uid()), Some(metadata.gid()))?;
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let acl = "system.posix_acl_access";
+                match xattr::get_deref(target, acl) {
+                    Ok(Some(bytes)) => xattr::set(temporary, acl, &bytes)?,
+                    Ok(None) if xattr::get(temporary, acl)?.is_some() => {
+                        xattr::remove(temporary, acl)?
+                    }
+                    Ok(None) => (),
+                    Err(error) if error.kind() == std::io::ErrorKind::Unsupported => (),
+                    Err(error) => return Err(error),
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                let source = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+                let destination = std::ffi::CString::new(temporary.as_os_str().as_bytes())?;
+                // The two C strings live through this synchronous metadata-only call.
+                if unsafe {
+                    libc::copyfile(
+                        source.as_ptr(),
+                        destination.as_ptr(),
+                        std::ptr::null_mut(),
+                        libc::COPYFILE_ACL,
+                    )
+                } != 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            fs::set_permissions(temporary, metadata.permissions())?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error),
+    }
+    fs::rename(temporary, target)
+}
+
+#[cfg(windows)]
+fn replace_staged(temporary: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
+    if !target.try_exists()? {
+        return fs::rename(temporary, target);
+    }
+    let wide = |path: &Path| {
+        path.as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>()
+    };
+    let target = wide(target);
+    let temporary = wide(temporary);
+    // ReplaceFileW preserves the existing target's discretionary ACL.
+    let ok = unsafe {
+        ReplaceFileW(
+            target.as_ptr(),
+            temporary.as_ptr(),
+            std::ptr::null(),
+            0,
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 fn commit_staged_file(temporary: &Path, target: &Path) -> Result<(), String> {
     fs::OpenOptions::new()
         .write(true)
         .open(temporary)
         .and_then(|file| file.sync_all())
         .map_err(|e| format!("Temporäre Datei konnte nicht synchronisiert werden: {}", e))?;
-    fs::rename(temporary, target)
+    replace_staged(temporary, target)
         .map_err(|e| format!("Temporäre Datei konnte nicht übernommen werden: {}", e))?;
     // Persist the rename itself on Unix by syncing the parent directory.
     #[cfg(unix)]
@@ -321,18 +564,31 @@ mod review_tests {
         fs::write(&source, b"{\"secret\":1}").unwrap();
         fs::hard_link(&source, &alias).unwrap();
         let sources = vec![source.to_string_lossy().into_owned()];
-        assert!(
-            validate_export_path(source.to_string_lossy().into_owned(), sources.clone()).is_err()
-        );
-        assert!(
-            validate_export_path(alias.to_string_lossy().into_owned(), sources.clone()).is_err()
-        );
-        assert!(validate_export_path(
+        assert!(check_export_path(source.to_string_lossy().into_owned(), sources.clone()).is_err());
+        assert!(check_export_path(alias.to_string_lossy().into_owned(), sources.clone()).is_err());
+        assert!(check_export_path(
             dir.0.join("masked.json").to_string_lossy().into_owned(),
             sources
         )
         .is_ok());
         assert_eq!(fs::read_to_string(source).unwrap(), "{\"secret\":1}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacement_preserves_private_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TestDirectory::new();
+        let target = dir.0.join("private.json");
+        let staged = dir.0.join("new.tmp");
+        fs::write(&target, b"old").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::write(&staged, b"new").unwrap();
+        commit_staged_file(&staged, &target).unwrap();
+        assert_eq!(
+            fs::metadata(target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]
@@ -360,26 +616,24 @@ mod review_tests {
     }
 
     #[test]
-    fn backend_export_preserves_user_metadata_keys() {
+    fn copy_to_hardlink_keeps_source() {
         let dir = TestDirectory::new();
-        let target = dir.0.join("document.json");
-        let value = serde_json::json!({"__size": 99, "nested": {"__depthSizes": [1, 2]}});
-        write_json_pretty(
-            target.to_string_lossy().into_owned(),
-            value.clone(),
-            Some(true),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        let result: serde_json::Value = serde_json::from_slice(&fs::read(target).unwrap()).unwrap();
-        assert_eq!(value, result);
+        let source = dir.0.join("source.json");
+        let alias = dir.0.join("alias.json");
+        fs::write(&source, b"123").unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+        copy_document(&source, &alias).unwrap();
+        assert_eq!(fs::read(source).unwrap(), b"123");
     }
 }
 
 #[tauri::command]
-fn save_file_cancel(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> Result<(), String> {
+fn save_file_cancel(
+    app: AppHandle,
+    path: String,
+    store: tauri::State<'_, ChunkedSaveStore>,
+) -> Result<(), String> {
+    require_save_target(&app, &path)?;
     let target = PathBuf::from(path);
     let temporary = store
         .files
@@ -391,36 +645,6 @@ fn save_file_cancel(path: String, store: tauri::State<'_, ChunkedSaveStore>) -> 
             .map_err(|e| format!("Temporäre Datei konnte nicht entfernt werden: {}", e))?;
     }
     Ok(())
-}
-
-// Writer wrapper that converts LF to CRLF (for files that originally used Windows line endings)
-struct CrlfWriter<W: std::io::Write> {
-    inner: W,
-}
-
-impl<W: std::io::Write> std::io::Write for CrlfWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // serde_json only emits raw 0x0A for formatting newlines (string content is \n escaped)
-        // So every 0x0A byte in the output is a formatting newline we can convert to \r\n
-        let mut start = 0;
-        for (i, &b) in buf.iter().enumerate() {
-            if b == b'\n' {
-                if i > start {
-                    self.inner.write_all(&buf[start..i])?;
-                }
-                self.inner.write_all(b"\r\n")?;
-                start = i + 1;
-            }
-        }
-        if start < buf.len() {
-            self.inner.write_all(&buf[start..])?;
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
 }
 
 // Detect JSON formatting from raw bytes: indent string + CRLF flag
@@ -518,110 +742,26 @@ fn detect_json_format(bytes: &[u8]) -> (String, bool) {
 }
 
 // Helper: serialize JSON with custom indent into a writer
-fn serialize_with_indent<W: std::io::Write>(
-    writer: W,
-    data: &serde_json::Value,
-    indent: &[u8],
-) -> Result<(), String> {
-    use serde::Serialize;
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(indent);
-    let mut serializer = serde_json::Serializer::with_formatter(writer, formatter);
-    data.serialize(&mut serializer)
-        .map_err(|e| format!("Fehler beim Schreiben: {}", e))
-}
-
 // Copy a file byte-for-byte (for saving unmodified files 1:1)
 #[tauri::command]
-fn copy_file(source: String, dest: String) -> Result<(), String> {
+fn copy_file(app: AppHandle, source: String, dest: String) -> Result<(), String> {
+    require_selected(&app, &source)?;
+    require_save_target(&app, &dest)?;
     ensure_supported_file(Path::new(&source), "gelesen")?;
     ensure_supported_file(Path::new(&dest), "geschrieben")?;
     // If source == dest, nothing to do (file is already there)
-    if source == dest {
+    copy_document(Path::new(&source), Path::new(&dest))
+}
+
+fn copy_document(source: &Path, target: &Path) -> Result<(), String> {
+    if target.exists() && same_file::is_same_file(source, target).map_err(|e| e.to_string())? {
         return Ok(());
     }
-    fs::copy(&source, &dest).map_err(|e| format!("Fehler beim Kopieren: {}", e))?;
-    Ok(())
-}
-
-// Save JSON data with streaming write (avoids OOM for large files)
-// All user keys are preserved; rendering metadata lives outside the document.
-// Reproduces original formatting: indent style + line endings.
-#[tauri::command]
-fn write_json_pretty(
-    path: String,
-    data: serde_json::Value,
-    pretty: Option<bool>,
-    concatenated: Option<bool>,
-    indent: Option<String>,
-    crlf: Option<bool>,
-) -> Result<(), String> {
-    ensure_supported_file(Path::new(&path), "geschrieben")?;
-
-    // Never remove user fields that happen to share internal-looking names.
-    let clean_data = data;
-
-    let file = fs::File::create(&path).map_err(|e| format!("Fehler beim Erstellen: {}", e))?;
-    let buf_writer = std::io::BufWriter::with_capacity(64 * 1024, file);
-    let indent_bytes = indent.as_deref().unwrap_or("  ").as_bytes().to_vec();
-    let use_crlf = crlf.unwrap_or(false);
-
-    if concatenated.unwrap_or(false) {
-        if let serde_json::Value::Array(items) = &clean_data {
-            use std::io::Write;
-            if use_crlf {
-                let mut writer = CrlfWriter { inner: buf_writer };
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        writer
-                            .inner
-                            .write_all(b"\r\n")
-                            .map_err(|e| format!("Schreibfehler: {}", e))?;
-                    }
-                    serialize_with_indent(&mut writer, item, &indent_bytes)?;
-                }
-                writer
-                    .inner
-                    .write_all(b"\r\n")
-                    .map_err(|e| format!("Schreibfehler: {}", e))?;
-                writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
-            } else {
-                let mut writer = buf_writer;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        writer
-                            .write_all(b"\n")
-                            .map_err(|e| format!("Schreibfehler: {}", e))?;
-                    }
-                    serialize_with_indent(&mut writer, item, &indent_bytes)?;
-                }
-                writer
-                    .write_all(b"\n")
-                    .map_err(|e| format!("Schreibfehler: {}", e))?;
-                writer.flush().map_err(|e| format!("Flush-Fehler: {}", e))?;
-            }
-            Ok(())
-        } else {
-            write_single_value(buf_writer, &clean_data, &indent_bytes, use_crlf)
-        }
-    } else if pretty.unwrap_or(false) {
-        write_single_value(buf_writer, &clean_data, &indent_bytes, use_crlf)
-    } else {
-        serde_json::to_writer(buf_writer, &clean_data)
-            .map_err(|e| format!("Fehler beim Schreiben: {}", e))
-    }
-}
-
-fn write_single_value<W: std::io::Write>(
-    writer: W,
-    data: &serde_json::Value,
-    indent: &[u8],
-    use_crlf: bool,
-) -> Result<(), String> {
-    if use_crlf {
-        serialize_with_indent(CrlfWriter { inner: writer }, data, indent)
-    } else {
-        serialize_with_indent(writer, data, indent)
-    }
+    let parent = target.parent().unwrap_or(Path::new("."));
+    let mut staged = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    let mut input = fs::File::open(source).map_err(|e| e.to_string())?;
+    std::io::copy(&mut input, &mut staged).map_err(|e| e.to_string())?;
+    commit_staged_file(&staged.into_temp_path(), target)
 }
 
 // Parse JSON file in Rust (serde_json, ~5x faster than V8 JSON.parse)
@@ -636,30 +776,65 @@ struct CompactResult {
     uses_crlf: bool,
 }
 
-// Parses NDJSON/JSONL bytes into an array of values (one per non-blank line).
-fn parse_ndjson_bytes(bytes: &[u8]) -> Result<serde_json::Value, String> {
-    let text = std::str::from_utf8(bytes).map_err(|e| format!("UTF-8-Fehler: {}", e))?;
-    let mut records: Vec<serde_json::Value> = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
+fn compact_document(bytes: &[u8], is_ndjson: bool) -> Result<(Vec<u8>, bool), String> {
+    let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
+    let mut compact_bytes = vec![b'['];
+    let mut count = 0;
+    let mut append = |raw: &serde_json::value::RawValue| {
+        if count > 0 {
+            compact_bytes.push(b',');
         }
-        let value = serde_json::from_str(trimmed)
-            .map_err(|e| format!("Ungültige JSON-Zeile {}: {}", index + 1, e))?;
-        records.push(value);
+        count += 1;
+        let mut quoted = false;
+        let mut escaped = false;
+        for byte in raw.get().bytes() {
+            if quoted || !byte.is_ascii_whitespace() {
+                compact_bytes.push(byte);
+            }
+            if escaped {
+                escaped = false;
+            } else if quoted && byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = !quoted;
+            }
+        }
+    };
+    if is_ndjson {
+        for (index, line) in text.lines().enumerate() {
+            if !line.trim().is_empty() {
+                append(
+                    serde_json::from_str(line)
+                        .map_err(|e| format!("Ungültige JSON-Zeile {}: {e}", index + 1))?,
+                );
+            }
+        }
+    } else {
+        for raw in
+            serde_json::Deserializer::from_str(text).into_iter::<&serde_json::value::RawValue>()
+        {
+            append(raw.map_err(|e| e.to_string())?);
+        }
     }
-    if records.is_empty() {
-        return Err("Die JSONL-Datei enthält keine Datensätze".to_string());
+    if count == 0 {
+        return Err("Datei enthält keine Datensätze".into());
     }
-    Ok(serde_json::Value::Array(records))
+    let was_concatenated = !is_ndjson && count > 1;
+    if is_ndjson || was_concatenated {
+        compact_bytes.push(b']');
+    } else {
+        compact_bytes.remove(0);
+    }
+    Ok((compact_bytes, was_concatenated))
 }
 
 #[tauri::command]
 fn parse_json_compact(
+    app: AppHandle,
     path: String,
     store: tauri::State<'_, CompactStore>,
 ) -> Result<CompactResult, String> {
+    require_selected(&app, &path)?;
     ensure_supported_file(Path::new(&path), "gelesen")?;
 
     let original_size = fs::metadata(&path)
@@ -683,53 +858,10 @@ fn parse_json_compact(
         .extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case("jsonl") || e.eq_ignore_ascii_case("ndjson"));
-    // First try single JSON value; if trailing chars, try concatenated JSON objects
-    let mut was_concatenated = false;
-    let value: serde_json::Value = if is_ndjson {
-        let parsed = parse_ndjson_bytes(&bytes)?;
-        drop(bytes);
-        parsed
-    } else {
-        match serde_json::from_slice(&bytes) {
-            Ok(v) => {
-                drop(bytes);
-                v
-            }
-            Err(ref e)
-                if e.classify() == serde_json::error::Category::Data
-                    || e.to_string().contains("trailing") =>
-            {
-                was_concatenated = true;
-                // Concatenated JSON (multiple root objects) – parse all and wrap in array
-                let stream =
-                    serde_json::Deserializer::from_slice(&bytes).into_iter::<serde_json::Value>();
-                let mut objects: Vec<serde_json::Value> = Vec::new();
-                for result in stream {
-                    let obj = result.map_err(|e2| {
-                        format!("JSON-Parse-Fehler (Objekt {}): {}", objects.len() + 1, e2)
-                    })?;
-                    objects.push(obj);
-                }
-                drop(bytes);
-                if objects.is_empty() {
-                    return Err("JSON-Datei enthält keine gültigen Objekte".to_string());
-                }
-                serde_json::Value::Array(objects)
-            }
-            Err(e) => return Err(format!("JSON-Parse-Fehler: {}", e)),
-        }
-    };
-
-    // Count nodes
-    let node_count = count_json_value(&value);
-
-    // Serialize compact JSON to memory (removes all formatting whitespace)
-    let compact_bytes =
-        serde_json::to_vec(&value).map_err(|e| format!("Fehler beim Serialisieren: {}", e))?;
+    let (compact_bytes, was_concatenated) = compact_document(&bytes, is_ndjson)?;
     let compact_size = compact_bytes.len() as u64;
-
-    // Free the parsed value
-    drop(value);
+    let node_count = 0;
+    drop(bytes);
 
     // Store compact bytes in memory for retrieval via get_compact_bytes
     *store
@@ -794,14 +926,16 @@ fn count_json_value(val: &serde_json::Value) -> u64 {
 
 // Get file size only (without re-reading and re-parsing the file)
 #[tauri::command]
-fn get_file_size(path: String) -> Result<u64, String> {
+fn get_file_size(app: AppHandle, path: String) -> Result<u64, String> {
+    require_selected(&app, &path)?;
     ensure_supported_file(Path::new(&path), "gelesen")?;
     let metadata = fs::metadata(&path).map_err(|e| format!("Fehler Metadaten: {}", e))?;
     Ok(metadata.len())
 }
 
 #[tauri::command]
-fn get_file_stats(path: String) -> Result<FileStats, String> {
+fn get_file_stats(app: AppHandle, path: String) -> Result<FileStats, String> {
+    require_selected(&app, &path)?;
     ensure_supported_file(Path::new(&path), "gelesen")?;
 
     let metadata = fs::metadata(&path).map_err(|e| format!("Fehler Metadaten: {}", e))?;
@@ -1320,6 +1454,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_startup_file,
+            choose_save_path,
+            write_export_text,
             check_for_update,
             install_update,
             restart_application,
@@ -1328,8 +1464,6 @@ pub fn run() {
             read_file_fast,
             read_file_raw,
             read_file_chunk,
-            write_file_fast,
-            write_json_pretty,
             copy_file,
             save_file_start,
             save_file_chunk,
@@ -1345,6 +1479,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let app_handle = app.handle();
+            restore_file_grants(app_handle)?;
 
             // Restore window state from saved settings
             if let Some(window) = app.get_webview_window("main") {
@@ -1457,7 +1592,10 @@ pub fn run() {
             // Handle file drop events (drag & drop from File Explorer)
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 for path in paths {
-                    if is_supported_file(path) {
+                    if is_supported_file(path)
+                        && path.is_file()
+                        && window.fs_scope().allow_file(path).is_ok()
+                    {
                         let path_str = path.to_string_lossy().to_string();
                         let _ = window.emit("open-file", &path_str);
                     }
@@ -1484,13 +1622,13 @@ pub fn run() {
             if let tauri::RunEvent::Opened { urls } = &event {
                 for url in urls {
                     // Tauri delivers a file:// URL; convert to a local path.
-                    let path_opt = url
-                        .to_file_path()
-                        .ok()
-                        .or_else(|| Some(std::path::PathBuf::from(url.path())));
+                    let path_opt = url.to_file_path().ok();
                     if let Some(path) = path_opt {
                         let path_str = path.to_string_lossy().to_string();
-                        if is_supported_file(&path) && path.exists() {
+                        if is_supported_file(&path)
+                            && path.is_file()
+                            && _app_handle.fs_scope().allow_file(&path).is_ok()
+                        {
                             let app_handle_clone = _app_handle.clone();
                             // Delay slightly so the frontend listener is ready when the app
                             // is being launched cold by the OS via this event.
@@ -1511,22 +1649,30 @@ pub fn run() {
 
 #[cfg(test)]
 mod ndjson_tests {
-    use super::parse_ndjson_bytes;
+    use super::compact_document;
+
+    #[test]
+    fn compaction_preserves_exact_numeric_tokens() {
+        let (bytes, multiple) =
+            compact_document(br#"{ "id": 9007199254740993, "n": 1e400 }"#, false).unwrap();
+        assert!(!multiple);
+        assert_eq!(bytes, br#"{"id":9007199254740993,"n":1e400}"#);
+    }
 
     #[test]
     fn parses_lines_into_array_and_skips_blank_lines() {
-        let v = parse_ndjson_bytes(b"{\"a\":1}\r\n\n[2]\n").unwrap();
-        assert_eq!(v, serde_json::json!([{"a": 1}, [2]]));
+        let (v, _) = compact_document(b"{\"a\":1}\r\n\n[2]\n", true).unwrap();
+        assert_eq!(v, br#"[{"a":1},[2]]"#);
     }
 
     #[test]
     fn reports_bad_line_number() {
-        let err = parse_ndjson_bytes(b"{}\n{bad\n").unwrap_err();
+        let err = compact_document(b"{}\n{bad\n", true).unwrap_err();
         assert!(err.starts_with("Ungültige JSON-Zeile 2"));
     }
 
     #[test]
     fn rejects_empty_input() {
-        assert!(parse_ndjson_bytes(b"\n  \n").is_err());
+        assert!(compact_document(b"\n  \n", true).is_err());
     }
 }

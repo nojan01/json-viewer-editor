@@ -353,7 +353,8 @@ Dim nRowCount, nColCount
 Sub Log(sMsg)
     Dim oDiv
     Set oDiv = document.getElementById("debugLog")
-    oDiv.innerHTML = oDiv.innerHTML & "<br>" & Now() & " - " & sMsg
+    Call oDiv.appendChild(document.createElement("br"))
+    Call oDiv.appendChild(document.createTextNode(Now() & " - " & sMsg))
     oDiv.scrollTop = oDiv.scrollHeight
 End Sub
 
@@ -396,6 +397,12 @@ Sub OpenFile1()
     
     ' Datei oeffnen
     Call Log("Oeffne Arbeitsmappe...")
+    Err.Clear
+    oExcel1.AutomationSecurity = 3
+    If Err.Number <> 0 Then
+        Call Log("Makroschutz konnte nicht aktiviert werden.")
+        Exit Sub
+    End If
     Set oWorkbook1 = oExcel1.Workbooks.Open(sPath, 0, True)
     
     If Err.Number <> 0 Then
@@ -412,7 +419,7 @@ Sub OpenFile1()
     sName = oFSO.GetFileName(sPath)
     Set oFSO = Nothing
     
-    document.getElementById("file1Status").innerHTML = sName
+    document.getElementById("file1Status").innerText = sName
     document.getElementById("file1Status").className = "file-info loaded"
     
     ' Sheet-Dropdown fuellen
@@ -458,7 +465,13 @@ Sub OpenFile2()
     
     ' Datei oeffnen (mit Schreibzugriff)
     Call Log("Oeffne Arbeitsmappe mit Schreibzugriff...")
-    Set oWorkbook2 = oExcel2.Workbooks.Open(sPath)
+    Err.Clear
+    oExcel2.AutomationSecurity = 3
+    If Err.Number <> 0 Then
+        Call Log("Makroschutz konnte nicht aktiviert werden.")
+        Exit Sub
+    End If
+    Set oWorkbook2 = oExcel2.Workbooks.Open(sPath, 0, False)
     
     If Err.Number <> 0 Then
         Call Log("FEHLER Datei oeffnen: " & Err.Description)
@@ -474,7 +487,7 @@ Sub OpenFile2()
     sName = oFSO.GetFileName(sPath)
     Set oFSO = Nothing
     
-    document.getElementById("file2Status").innerHTML = sName
+    document.getElementById("file2Status").innerText = sName
     document.getElementById("file2Status").className = "file-info loaded"
     
     ' Sheet-Dropdown fuellen
@@ -508,16 +521,18 @@ Function BrowseForFile()
 End Function
 
 Sub FillSheetDropdown1()
-    Dim oSelect, i, oSheet, sHTML
+    Dim oSelect, i, oSheet, opt
     Set oSelect = document.getElementById("sheet1Select")
     
-    sHTML = ""
+    oSelect.options.length = 0
     For i = 1 To oWorkbook1.Sheets.Count
         Set oSheet = oWorkbook1.Sheets(i)
-        sHTML = sHTML & "<option value=""" & oSheet.Name & """>" & oSheet.Name & "</option>"
+        Set opt = document.createElement("option")
+        opt.value = oSheet.Name
+        opt.text = oSheet.Name
+        Call oSelect.options.add(opt)
     Next
     
-    oSelect.innerHTML = sHTML
     oSelect.disabled = False
     document.getElementById("btnSheet1").disabled = False
     
@@ -525,16 +540,18 @@ Sub FillSheetDropdown1()
 End Sub
 
 Sub FillSheetDropdown2()
-    Dim oSelect, i, oSheet, sHTML
+    Dim oSelect, i, oSheet, opt
     Set oSelect = document.getElementById("sheet2Select")
     
-    sHTML = ""
+    oSelect.options.length = 0
     For i = 1 To oWorkbook2.Sheets.Count
         Set oSheet = oWorkbook2.Sheets(i)
-        sHTML = sHTML & "<option value=""" & oSheet.Name & """>" & oSheet.Name & "</option>"
+        Set opt = document.createElement("option")
+        opt.value = oSheet.Name
+        opt.text = oSheet.Name
+        Call oSelect.options.add(opt)
     Next
     
-    oSelect.innerHTML = sHTML
     oSelect.disabled = False
     document.getElementById("btnSheet2").disabled = False
     
@@ -589,7 +606,7 @@ Sub LoadSheet1()
     Call Log("Daten geladen!")
     
     ' UI aktualisieren
-    document.getElementById("file1Status").innerHTML = document.getElementById("file1Status").innerHTML & " - Blatt: " & sSheetName & " (" & nRowCount & " Zeilen)"
+    document.getElementById("file1Status").innerText = document.getElementById("file1Status").innerText & " - Blatt: " & sSheetName & " (" & nRowCount & " Zeilen)"
     document.getElementById("btnSearch").disabled = False
     document.getElementById("btnNewRow").disabled = False
     
@@ -615,7 +632,7 @@ Sub LoadSheet2()
         Exit Sub
     End If
     
-    document.getElementById("file2Status").innerHTML = document.getElementById("file2Status").innerHTML & " - Blatt: " & sSheetName
+    document.getElementById("file2Status").innerText = document.getElementById("file2Status").innerText & " - Blatt: " & sSheetName
     Call Log("Ziel-Blatt geladen!")
 End Sub
 
@@ -756,7 +773,8 @@ window.onload = function() {
 
 function log(msg) {
     var div = document.getElementById("debugLog");
-    div.innerHTML = div.innerHTML + "<br>" + new Date().toLocaleTimeString() + " [JS] " + msg;
+    div.appendChild(document.createElement("br"));
+    div.appendChild(document.createTextNode(new Date().toLocaleTimeString() + " [JS] " + msg));
     div.scrollTop = div.scrollHeight;
 }
 
@@ -1066,7 +1084,7 @@ function updateQueueDisplay() {
 
 function showStatus(msg, type) {
     var div = document.getElementById("transferStatus");
-    div.innerHTML = "<div class='status-box status-" + type + "'>" + msg + "</div>";
+    div.innerHTML = "<div class='status-box status-" + type + "'>" + escapeHtml(msg) + "</div>";
     log(type.toUpperCase() + ": " + msg);
 }
 </script>

@@ -54,10 +54,56 @@
         return data;
     }
 
+    // Compare decimal values without converting the input significand to floating point.
+    function decimalParts(token) {
+        const [mantissa, exponent = '0'] = token.toLowerCase().split('e');
+        const [whole, fraction = ''] = mantissa.replace(/^-/, '').split('.');
+        const digits = (whole + fraction).replace(/^0+/, '');
+        if (!digits) return '0';
+        const significant = digits.replace(/0+$/, '');
+        const power = Number(exponent) - fraction.length + digits.length - significant.length;
+        return significant + 'e' + power;
+    }
+
+    function checkedNumber(token) {
+        const number = Number(token);
+        if (!Number.isFinite(number) || Object.is(number, -0) ||
+                decimalParts(token) !== decimalParts(String(number))) {
+            throw new Error('Zahl kann nicht verlustfrei gespeichert werden: ' + token.slice(0, 80));
+        }
+        return number;
+    }
+
+    function checkNumbers(text) {
+        // Scanning quoted strings in pieces avoids regex backtracking on large string values.
+        const tokens = /"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+        const stringBoundary = /["\\]/g;
+        let match;
+        while ((match = tokens.exec(text))) {
+            if (match[0] === '"') {
+                stringBoundary.lastIndex = tokens.lastIndex;
+                let boundary;
+                while ((boundary = stringBoundary.exec(text)) && boundary[0] === '\\') {
+                    stringBoundary.lastIndex++;
+                }
+                if (!boundary) return; // JSON.parse reports the unterminated string.
+                tokens.lastIndex = stringBoundary.lastIndex;
+            } else if (!/^(?:0|-?[1-9]\d{0,14})$/.test(match[0])) {
+                checkedNumber(match[0]);
+            }
+        }
+    }
+
+    function parseValue(text) {
+        checkNumbers(text);
+        return JSON.parse(text);
+    }
+
     // Parse every input byte. Never salvage valid objects from malformed JSON.
     function parseDocument(input) {
         const text = String(input).replace(/^\uFEFF/, '').trim();
         if (!text) throw new Error('Die JSON-Datei ist leer');
+        checkNumbers(text);
         let data, concatenated = false;
         try { data = JSON.parse(text); }
         catch (originalError) {
@@ -112,7 +158,7 @@
         for (let n = 0; n < lines.length; n++) {
             const line = lines[n].trim();
             if (!line) continue;
-            try { values.push(JSON.parse(line)); }
+            try { checkNumbers(line); values.push(JSON.parse(line)); }
             catch (error) { throw new Error(`Ungültige JSON-Zeile ${n + 1}: ${error.message}`); }
         }
         if (!values.length) throw new Error('Die JSONL-Datei enthält keine Datensätze');
@@ -136,8 +182,8 @@
         if (!from) throw new Error('Bitte Key-Name eingeben');
         let replacement, expected;
         if (op === 'renameKey' && !to) throw new Error('Bitte neuen Key-Namen eingeben');
-        if (op === 'replaceValue' || op === 'addKey') replacement = JSON.parse(valueText || 'null');
-        if (op === 'replaceValue') expected = JSON.parse(to);
+        if (op === 'replaceValue' || op === 'addKey') replacement = parseValue(valueText || 'null');
+        if (op === 'replaceValue') expected = parseValue(to);
         const objects = [], stack = [data];
         while (stack.length) {
             const item = stack.pop();
@@ -174,7 +220,7 @@
     function seedKeys(value, keys) { keyCache.set(value, keys); }
     function invalidateKeys() { keyCache = new WeakMap(); }
 
-    const api = { seedKeys, sortedKeys, invalidateKeys, own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, parseNdjson, jsonToJsonl, jsonlToJson, bulkEdit };
+    const api = { parseValue, seedKeys, sortedKeys, invalidateKeys, own, define, appendPath, parsePath, pathFromParts, parentPath, getAtPath, parseDocument, parseNdjson, jsonToJsonl, jsonlToJson, bulkEdit };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.JsonCore = api;
 })(globalThis);

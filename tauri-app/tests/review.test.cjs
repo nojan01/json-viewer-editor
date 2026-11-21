@@ -107,7 +107,8 @@ test('saving edited JSON preserves user keys, concatenation, CRLF and current pa
             jsonData:parsed.data, isModified:true, currentFilePath:'old.json', fileName:'old.json',
             originalIndent:parsed.indent, originalCrlf:parsed.crlf, wasConcatenated:parsed.wasConcatenated,
             console, setTimeout(fn){fn()}, showNotification(){}, updateTitle(){},
-            window:{__TAURI__:{dialog:{async save(){return 'new.json'}},core:{async invoke(command,args){
+            window:{__TAURI__:{core:{async invoke(command,args){
+                if(command==='choose_save_path') return 'new.json';
                 if(command==='save_file_chunk') output += args.crlf ? args.content.replace(/\n/g,'\r\n') : args.content;
                 if(command==='save_file_finish') finished = true;
                 if(command==='get_file_size') return Buffer.byteLength(output);
@@ -252,4 +253,35 @@ test('pipeline undo and redo swap detached roots without serializing large docum
     const ctx=sandbox(['undo','redo'],{jsonData:result,undoStack:[{path:'root',snapshot:original,reference:true}],redoStack:[],resetPreparedPipelineTree(){},updateUndoButtons(){}});
     ctx.undo();assert.equal(ctx.jsonData,original);assert.equal(ctx.redoStack[0].snapshot,result);
     ctx.redo();assert.equal(ctx.jsonData,result);assert.equal(ctx.undoStack[0].snapshot,original);
+});
+
+test('saving NDJSON keeps one record per line, including edits to a reopened document', async () => {
+    let written = '';
+    const ctx = sandbox(['saveFile','getFileName'], {
+        jsonData: [{id:1},{id:2}], isModified: true, currentFilePath: 'records.ndjson',
+        fileName: 'records.ndjson', originalCrlf: false, originalIndent: '', wasConcatenated: false,
+        setTimeout(fn){fn()}, console, showNotification(){}, updateTitle(){},
+        window: {__TAURI__:{core:{async invoke(command, args) {
+            if (command === 'choose_save_path') return 'records.ndjson';
+            if (command === 'save_file_chunk') written += args.content;
+        }}}}
+    });
+    await ctx.saveFile();
+    assert.equal(written, '{"id":1}\n{"id":2}\n');
+    assert.equal(ctx.isModified, false);
+});
+
+test('REST requests with a custom API key reject automatic redirects', async () => {
+    let options;
+    const ctx = sandbox(['executeRestRequest'], {
+        restUrlInput:{value:'https://example.invalid/data'}, restMethod:{value:'GET'},
+        restAuthType:{value:'apikey'}, restApiKeyName:{value:'X-Service-Key'}, restApiKeyValue:{value:'placeholder'},
+        restHeaders:{value:''}, btnRestSend:{}, restStatus:{}, URL, Headers, AbortController,
+        abortActiveRestRequest(){}, activeRestController:null, REST_REQUEST_TIMEOUT_MS:1000,
+        setTimeout, clearTimeout, showNotification(){},
+        async fetch(url, opts){options = opts; throw new Error('simulated redirect');}
+    });
+    await ctx.executeRestRequest();
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers.get('X-Service-Key'), 'placeholder');
 });

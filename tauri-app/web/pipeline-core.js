@@ -109,6 +109,7 @@
         function* one(value) {
             if(value===null||typeof value!=='object'||Array.isArray(value))return value;
             const output={}, leaves=new WeakSet();
+            const arrays = [];
             for(const path in value)if(own(value,path)) {
                 yield;
                 const tokens=work.parseFlatPath(path,s.separator);
@@ -117,19 +118,23 @@
                 for(let i=0;i<tokens.length;i++) {
                     yield;
                     const token=tokens[i],key=token.value,last=i===tokens.length-1;
-                    if(token.type==='index'&&!Array.isArray(current))throw new Error('Pfadkonflikt: '+path);
+                    if((token.type==='index')!==Array.isArray(current))throw new Error('Pfadkonflikt: '+path);
                     if(last) {
                         if(own(current,key))throw new Error('Pfadkonflikt: '+path);
                         put(current,key,value[path]);
                         if(value[path] && typeof value[path]==='object')leaves.add(value[path]);
                     } else {
                         const array=tokens[i+1].type==='index';
-                        if(!own(current,key))put(current,key,array?[]:{});
+                        if(!own(current,key)) {
+                            put(current,key,array?[]:{});
+                            if(array) arrays.push(current[key]);
+                        }
                         else if(current[key]===null||typeof current[key]!=='object'||Array.isArray(current[key])!==array||leaves.has(current[key]))throw new Error('Pfadkonflikt: '+path);
                         current=current[key];
                     }
                 }
             }
+            work.validateDenseArrays(arrays);
             return output;
         }
         function* run() {

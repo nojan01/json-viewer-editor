@@ -29,3 +29,13 @@ test('profiles reject invalid steps and final key indexes reflect later edits',a
  const result=await pipeline.run({z:{x:1}},[{op:'flatten',separator:'.',arrays:'preserve'},{op:'rename',field:'z.x',target:'new'}],{indexKeys:json.seedKeys});
  assert.deepEqual(json.sortedKeys(result),['new']);
 });
+
+test('unflatten rejects sparse output and accepts dense indices in any order', async () => {
+    const work = require('../web/workspace-core.js');
+    const opts = {separator:'.', arrays:'indices'};
+    for (const run of [data => work.unflattenData(data, opts),
+                       data => pipeline.run(data, [{op:'unflatten', ...opts}])]) {
+        await assert.rejects(async () => run({'a[10]':1}), /Array-Indizes/);
+        assert.deepEqual(await run({'a[1]':'b','a[0]':'a'}), {a:['a','b']});
+    }
+});

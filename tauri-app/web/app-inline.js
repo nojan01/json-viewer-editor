@@ -869,7 +869,10 @@
             }
             try {
                 const start = performance.now();
-                const parsed = JsonCore.parseDocument(await file.text());
+                const text = await file.text();
+                const parsed = /\.(jsonl|ndjson)$/i.test(file.name)
+                    ? {data: JsonCore.parseNdjson(text), indent: '', crlf: text.includes('\r\n')}
+                    : JsonCore.parseDocument(text);
                 await finalizeLoad({ jsonData: parsed.data, name: file.name, fileSize: file.size,
                     nodeCount: 0, parseTime: performance.now() - start, ...parsed }, null, start);
                 return true;
@@ -1762,13 +1765,13 @@
             const content = JSON.stringify(exportData, null, 2);
             
             try {
-                if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.fs) {
-                    const filePath = await window.__TAURI__.dialog.save({
+                if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.core) {
+                    const filePath = await window.__TAURI__.core.invoke('choose_save_path', {
                         defaultPath: 'suchergebnisse.json',
                         filters: [{ name: 'JSON', extensions: ['json'] }]
                     });
                     if (filePath) {
-                        await window.__TAURI__.fs.writeTextFile(filePath, content);
+                        await window.__TAURI__.core.invoke('write_export_text', {path: filePath, content});
                         showNotification(`${searchMatches.length} Suchergebnisse exportiert nach: ${filePath}`);
                     }
                 } else {
@@ -1951,13 +1954,13 @@
             const rowCount = rows.length;
             
             try {
-                if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.fs) {
-                    const filePath = await window.__TAURI__.dialog.save({
+                if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.core) {
+                    const filePath = await window.__TAURI__.core.invoke('choose_save_path', {
                         defaultPath: exportName,
                         filters: [{ name: 'CSV', extensions: ['csv'] }]
                     });
                     if (filePath) {
-                        await window.__TAURI__.fs.writeTextFile(filePath, csv);
+                        await window.__TAURI__.core.invoke('write_export_text', {path: filePath, content: csv});
                         showNotification(`CSV exportiert: ${rowCount} Zeilen nach: ${filePath}`);
                     }
                 } else {
@@ -3163,20 +3166,20 @@
             if (window.__TAURI__) {
                 let chunkedSavePath = null;
                 try {
-                    const filePath = await window.__TAURI__.dialog.save({
+                    const filePath = await window.__TAURI__.core.invoke('choose_save_path', {
                         defaultPath: fileName || 'data.json',
                         filters: [{
                             name: 'JSON',
                             extensions: ['json']
                         }, {
                             name: 'JSON Lines',
-                            extensions: ['jsonl']
+                            extensions: ['jsonl', 'ndjson']
                         }]
                     });
                     
                     if (filePath) {
                         // The chosen extension selects the output format (.jsonl = one record per line).
-                        const wantJsonl = /\.jsonl$/i.test(filePath);
+                        const wantJsonl = /\.(jsonl|ndjson)$/i.test(filePath);
                         const sourceIsJsonl = !!currentFilePath && /\.(jsonl|ndjson)$/i.test(currentFilePath);
                         if (typeof documents !== 'undefined') {
                             const otherSources = documents.filter(d => d.id !== activeDocumentId).map(d => d.path).filter(Boolean);
@@ -3280,8 +3283,9 @@
                 }
             } else {
                 // Fallback for browser — use streaming for large data
-                const jsonString = JSON.stringify(jsonData, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
+                const jsonl = /\.(jsonl|ndjson)$/i.test(fileName || '');
+                const jsonString = jsonl ? JsonCore.jsonToJsonl(jsonData) : JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([jsonString], { type: jsonl ? 'application/x-ndjson' : 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -3396,9 +3400,12 @@
                 if (type === 'string') {
                     newValue = inputVal;
                 } else if (type === 'number') {
-                    const parsed = parseFloat(inputVal);
-                    if (isNaN(parsed)) {
-                        showNotification('Ungültige Zahl');
+                    let parsed;
+                    try {
+                        parsed = JsonCore.parseValue(inputVal);
+                        if (typeof parsed !== 'number') throw new Error();
+                    } catch {
+                        showNotification('Ungültige oder nicht verlustfrei darstellbare Zahl');
                         editingPath = null;
                         renderTree();
                         return;
@@ -3410,7 +3417,13 @@
                     if (inputVal === 'null' || inputVal === '') newValue = null;
                     else if (inputVal === 'true') newValue = true;
                     else if (inputVal === 'false') newValue = false;
-                    else if (!isNaN(parseFloat(inputVal))) newValue = parseFloat(inputVal);
+                    else if (/^-?\d/.test(inputVal)) {
+                        try { newValue = JsonCore.parseValue(inputVal); }
+                        catch (error) {
+                            if (error instanceof SyntaxError) newValue = inputVal;
+                            else { showNotification(error.message); editingPath = null; renderTree(); return; }
+                        }
+                    }
                     else newValue = inputVal;
                 }
                 
@@ -4535,7 +4548,7 @@
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     try {
-                        diffSecondData = JSON.parse(ev.target.result);
+                        diffSecondData = JsonCore.parseValue(ev.target.result);
                         renderDiffPanels();
                     } catch(err) {
                         showNotification('Fehler beim Parsen: ' + err.message);
@@ -5023,7 +5036,7 @@
 
             const hasCredentials = authType !== 'none' || [...fetchOpts.headers.keys()]
                 .some(name => ['authorization', 'proxy-authorization', 'x-api-key', 'api-key'].includes(name.toLowerCase()));
-            if (hasCredentials && parsedUrl.protocol === 'http:' && !isLocalApiHost(parsedUrl.hostname)) {
+            if ((hasCredentials || hdrText) && parsedUrl.protocol === 'http:' && !isLocalApiHost(parsedUrl.hostname)) {
                 restStatus.textContent = '⚠ Zugangsdaten dürfen nur über HTTPS gesendet werden';
                 return;
             }
@@ -5057,6 +5070,7 @@
             }, REST_REQUEST_TIMEOUT_MS);
 
             try {
+                if (hasCredentials || hdrText) fetchOpts.redirect = 'error';
                 const response = await fetch(url, fetchOpts);
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 const { text, size } = await readRestResponse(response, MAX_REST_RESPONSE_BYTES);

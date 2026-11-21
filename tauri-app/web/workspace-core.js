@@ -156,7 +156,13 @@
                 pushKey(); i += separator.length;
             } else if (path[i] === '[') {
                 const end = path.indexOf(']', i + 1), index = end < 0 ? '' : path.slice(i + 1, end);
-                if (end > i + 1 && /^(0|[1-9]\d*)$/.test(index)) { pushKey(); tokens.push({ type: 'index', value: Number(index) }); i = end + 1; }
+                if (end > i + 1 && /^(0|[1-9]\d*)$/.test(index)) {
+                    const value = Number(index);
+                    if (value >= 4294967295) throw new Error('Ungültiger Array-Index');
+                    pushKey();
+                    tokens.push({ type: 'index', value });
+                    i = end + 1;
+                }
                 else { key.push(path[i++]); }
             } else key.push(path[i++]);
         }
@@ -248,16 +254,22 @@
             await new Promise(resolve => setTimeout(resolve, 0));
         }
     }
+    function validateDenseArrays(arrays) {
+        for (const array of arrays) {
+            if (Object.keys(array).length !== array.length) throw new Error('Unvollständige Array-Indizes');
+        }
+    }
+
     function unflattenObject(value, options) {
         const { separator } = assertTransformOptions(options);
         if (value === null || typeof value !== 'object' || Array.isArray(value)) return clone(value);
-        const output = {};
+        const output = {}, arrays = [];
         for (const [path, sourceValue] of Object.entries(value)) {
             const tokens = splitFlatPath(path, separator);
             let current = output;
             for (let i = 0; i < tokens.length; i++) {
                 const token = tokens[i], last = i === tokens.length - 1, next = tokens[i + 1];
-                if (token.type === 'index' && !Array.isArray(current)) throw new Error(`Pfadkonflikt bei „${path}“`);
+                if ((token.type === 'index') !== Array.isArray(current)) throw new Error(`Pfadkonflikt bei „${path}“`);
                 const key = token.value;
                 if (last) {
                     if (Object.hasOwn(current, key)) throw new Error(`Doppelter oder widersprüchlicher Pfad „${path}“`);
@@ -265,13 +277,17 @@
                     continue;
                 }
                 const expectedArray = next.type === 'index';
-                if (!Object.hasOwn(current, key)) defineOwn(current, key, expectedArray ? [] : {});
+                if (!Object.hasOwn(current, key)) {
+                    defineOwn(current, key, expectedArray ? [] : {});
+                    if (expectedArray) arrays.push(current[key]);
+                }
                 else if (current[key] === null || typeof current[key] !== 'object' || Array.isArray(current[key]) !== expectedArray) {
                     throw new Error(`Pfadkonflikt bei „${path}“`);
                 }
                 current = current[key];
             }
         }
+        validateDenseArrays(arrays);
         return output;
     }
     function unflattenData(value, options = {}) {
@@ -429,7 +445,7 @@
         return '\uFEFF' + rows.map(row=>row.map(cell).join(';')).join('\r\n') + '\r\n';
     }
 
-    const api = { parseFlatPath: splitFlatPath, profileCsv, profileData, matchesFilter, filterRows, fieldNames, serializeMasked, safeView, safeSavedViews, applySavedView,
+    const api = { validateDenseArrays, parseFlatPath: splitFlatPath, profileCsv, profileData, matchesFilter, filterRows, fieldNames, serializeMasked, safeView, safeSavedViews, applySavedView,
         getField, comparisonFields, findRecordArray, keyedCompare, flattenData, flattenDataAsync, unflattenData };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.WorkspaceCore = api;

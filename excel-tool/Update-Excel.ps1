@@ -39,20 +39,41 @@ if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
 Import-Module ImportExcel
 
 # Pruefe ob Dateien existieren
-if (-not (Test-Path $JsonFile)) {
+if (-not (Test-Path -LiteralPath $JsonFile)) {
     Write-Host "FEHLER: JSON-Datei nicht gefunden: $JsonFile" -ForegroundColor Red
     exit 1
 }
 
-if (-not (Test-Path $ExcelFile)) {
+if (-not (Test-Path -LiteralPath $ExcelFile)) {
     Write-Host "FEHLER: Excel-Datei nicht gefunden: $ExcelFile" -ForegroundColor Red
     exit 1
 }
 
 # JSON laden
 Write-Host "Lade Transferdaten aus: $JsonFile" -ForegroundColor Cyan
-$jsonContent = Get-Content $JsonFile -Raw -Encoding UTF8
+$jsonContent = Get-Content -LiteralPath $JsonFile -Raw -Encoding UTF8
 $transferData = $jsonContent | ConvertFrom-Json
+
+$ErrorActionPreference = 'Stop'
+if ($transferData.rows -isnot [array]) { throw "rows muss ein Array sein." }
+$startCol = 3
+if ($null -ne $transferData.targetStartColumn) {
+    $startCol = $transferData.targetStartColumn
+    if (($startCol -isnot [int] -and $startCol -isnot [long]) -or $startCol -lt 1 -or $startCol -gt 16384) {
+        throw "Ungültige Startspalte."
+    }
+}
+foreach ($row in $transferData.rows) {
+    if ($row.data -isnot [array] -or $row.data.Count -gt (16385 - $startCol)) { throw "Ungültige Zeilenbreite." }
+    foreach ($field in @($row.flag, $row.comment)) {
+        if ($null -ne $field -and $field -isnot [string]) { throw "Flag und Kommentar müssen Text sein." }
+    }
+    foreach ($cell in $row.data) {
+        if ($cell -is [array] -or $cell -is [PSCustomObject] -or $cell -is [System.Collections.IDictionary]) {
+            throw "Zellwerte müssen Skalare sein."
+        }
+    }
+}
 
 if ($null -eq $transferData.rows -or $transferData.rows.Count -eq 0) {
     Write-Host "Keine Zeilen zum Uebertragen gefunden." -ForegroundColor Yellow
@@ -64,7 +85,7 @@ Write-Host "Gefunden: $rowCount Zeile(n) zum Uebertragen" -ForegroundColor Green
 
 # Excel-Datei laden
 Write-Host "Oeffne Excel-Datei: $ExcelFile" -ForegroundColor Cyan
-$excelPath = (Resolve-Path $ExcelFile).Path
+$excelPath = (Resolve-Path -LiteralPath $ExcelFile).Path
 
 # Excel-Paket oeffnen um letzte Zeile zu ermitteln
 $excel = Open-ExcelPackage -Path $excelPath
@@ -100,11 +121,6 @@ if ($null -ne $maxRow -and $maxRow -gt 0) {
 }
 Write-Host "Aktuelle letzte Zeile (nicht-leer): $lastRow" -ForegroundColor Gray
 
-# Startspalte
-$startCol = 3
-if ($transferData.targetStartColumn) {
-    $startCol = $transferData.targetStartColumn
-}
 Write-Host "Startspalte: $startCol" -ForegroundColor Gray
 
 # Debug: Zeige JSON-Daten
@@ -150,9 +166,9 @@ foreach ($row in $transferData.rows) {
     Write-Host "  Zeile $newRowNum eingefuegt: Flag=$($row.flag)" -ForegroundColor Gray
 }
 
-# Speichern - explizit mit -Save Parameter
+# Close-ExcelPackage speichert standardmäßig.
 Write-Host "DEBUG - Speichere Excel-Datei..." -ForegroundColor Magenta
-Close-ExcelPackage $excel -Save
+Close-ExcelPackage $excel
 
 Write-Host "" -ForegroundColor Green
 Write-Host "$insertedCount Zeile(n) erfolgreich eingefuegt!" -ForegroundColor Green

@@ -14,3 +14,13 @@ test('parseNdjson reports the failing line number',()=>{
 test('parseNdjson rejects input without records',()=>{
  assert.throws(()=>json.parseNdjson('\n  \n'),/keine Datensätze/);
 });
+
+test('document and line parsers reject silently rounded or overflowing numbers', () => {
+    for (const parse of [json.parseDocument, json.parseNdjson]) {
+        for (const number of ['9007199254740993', '1e400', '1.00000000000000001', '1e-400', '-0']) {
+            assert.throws(() => parse('{"id":' + number + '}'), /verlustfrei/);
+        }
+    }
+    const text = '{"id":"9007199254740993","value":1.2300e2}';
+    assert.deepEqual(json.parseDocument(text).data, {id: '9007199254740993', value: 123});
+});
