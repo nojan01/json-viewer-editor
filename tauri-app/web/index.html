@@ -2075,6 +2075,7 @@
         }
     </style>
     <link rel="stylesheet" href="workspace.css">
+    <link rel="stylesheet" href="diagnostic.css">
 </head>
 <body>
     <div class="toolbar">
@@ -3076,6 +3077,14 @@
         </div>
     </div>
 
+    <aside id="diagnosticPanel" aria-labelledby="diagnosticTitle" hidden>
+        <h2 id="diagnosticTitle">Diagnose</h2>
+        <pre id="diagnosticLog" tabindex="0"></pre>
+        <button type="button" id="saveDiagnostics">Protokoll speichern …</button>
+        <button type="button" id="closeDiagnostics">Schließen</button>
+        <p id="diagnosticSaveStatus" role="status" hidden></p>
+    </aside>
+    <script src="diagnostic.js"></script>
     <script src="json-core.js"></script>
     <script src="workspace-core.js"></script>
     <script src="pipeline-core.js"></script>
@@ -3083,5 +3092,6 @@
     <script src="xlsx.full.min.js"></script>
     <script src="app-inline.js"></script>
     <script src="workspace.js"></script>
+    <script src="diagnostic-hooks.js"></script>
 </body>
 </html>

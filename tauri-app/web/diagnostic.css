@@ -1,0 +1,25 @@
+#diagnosticPanel {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 100;
+    box-sizing: border-box;
+    width: min(32rem, calc(100vw - 2rem));
+    border: 1px solid #777;
+    border-radius: 8px;
+    background: #202124;
+    color: #f5f5f5;
+    padding: 1rem;
+}
+
+#diagnosticPanel[hidden] {
+    display: none;
+}
+
+#diagnosticLog {
+    max-height: min(11rem, 30vh);
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+}

@@ -1368,12 +1368,20 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
         Some("F1"),
     )?;
 
+    let diagnostics_item = MenuItem::with_id(
+        app_handle,
+        "show_diagnostics",
+        if is_en { "Diagnostics" } else { "Diagnose" },
+        true,
+        None::<&str>,
+    )?;
+
     #[cfg(target_os = "macos")]
     let help_menu = Submenu::with_items(
         app_handle,
         if is_en { "Help" } else { "Hilfe" },
         true,
-        &[&help_item, &check_updates],
+        &[&help_item, &diagnostics_item, &check_updates],
     )?;
 
     #[cfg(not(target_os = "macos"))]
@@ -1393,6 +1401,7 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
             true,
             &[
                 &help_item,
+                &diagnostics_item,
                 &check_updates,
                 &PredefinedMenuItem::separator(app_handle)?,
                 &about_item,
@@ -1425,8 +1434,42 @@ fn build_menu(app_handle: &AppHandle, lang: &str) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+fn configure_graphics() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        let release = std::fs::read_to_string("/etc/os-release")
+            .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+            .unwrap_or_default();
+        if linux_graphics::needs_compatible_graphics(&release) {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod linux_graphics;
+
+#[tauri::command]
+fn diagnostic_event(event: String) {
+    let line: String = event.chars().take(1500).collect();
+    eprintln!("JV-DIAG {line}");
+}
+
+#[tauri::command]
+fn graphics_mode() -> &'static str {
+    if cfg!(target_os = "linux")
+        && std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").as_deref() == Ok("1")
+    {
+        "compatible"
+    } else {
+        "standard"
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_graphics();
+
     // On Windows, increase WebView2's V8 heap limit for large JSON files
     // Default V8 heap is ~1.7GB which isn't enough for 500MB+ files
     #[cfg(target_os = "windows")]
@@ -1453,6 +1496,8 @@ pub fn run() {
             files: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
+            diagnostic_event,
+            graphics_mode,
             get_startup_file,
             choose_save_path,
             write_export_text,
@@ -1534,6 +1579,9 @@ pub fn run() {
                         }
                         "goto_line" => {
                             let _ = window.eval("showGotoLineDialog()");
+                        }
+                        "show_diagnostics" => {
+                            let _ = window.eval("window.showDiagnostics()");
                         }
                         "show_help" => {
                             let _ = window.eval("showHelp()");

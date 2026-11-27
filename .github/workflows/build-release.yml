@@ -360,7 +360,7 @@ jobs:
           else
             node tauri-app/scripts/create-updater-manifest.cjs --merge previous-latest.json "${RELEASE_TAG#v}" . latest.json
           fi
-          grep -q '"linux-x86_64"' latest.json
+          node -e 'const {platforms} = require("./latest.json"); for (const id of ["darwin-aarch64", "linux-x86_64", "windows-x86_64", "windows-aarch64"]) if (!platforms[id]) throw new Error("Missing updater platform: " + id)'
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -384,5 +384,5 @@ jobs:
             latest.json
           fail_on_unmatched_files: false
           generate_release_notes: false
-          draft: false
+          draft: true
           prerelease: false
